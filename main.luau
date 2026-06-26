@@ -4,9 +4,23 @@ local playerGui = player:WaitForChild("PlayerGui")
 local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 
--- Create ScreenGui
+--------------------------------------------------
+-- SETTINGS
+--------------------------------------------------
+
+local WINDOW_SIZE = UDim2.new(0, 400, 0, 250)
+local TOPBAR_HEIGHT = 35
+
+local ICON_SIZE = 60
+local HOVER_SIZE = 75
+
+--------------------------------------------------
+-- SCREEN GUI
+--------------------------------------------------
+
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "_Hub"
+screenGui.ResetOnSpawn = false
 screenGui.Parent = playerGui
 
 --------------------------------------------------
@@ -14,8 +28,13 @@ screenGui.Parent = playerGui
 --------------------------------------------------
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 300, 0, 200)
-frame.Position = UDim2.new(0.5, -150, 0.5, -100)
+frame.Size = WINDOW_SIZE
+frame.Position = UDim2.new(
+	0.5,
+	-WINDOW_SIZE.X.Offset / 2,
+	0.5,
+	-WINDOW_SIZE.Y.Offset / 2
+)
 frame.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
 frame.BorderSizePixel = 0
 frame.Parent = screenGui
@@ -29,7 +48,7 @@ frameCorner.Parent = frame
 --------------------------------------------------
 
 local topBar = Instance.new("Frame")
-topBar.Size = UDim2.new(1, 0, 0, 35)
+topBar.Size = UDim2.new(1, 0, 0, TOPBAR_HEIGHT)
 topBar.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
 topBar.BorderSizePixel = 0
 topBar.Parent = frame
@@ -47,7 +66,7 @@ title.Size = UDim2.new(1, -40, 1, 0)
 title.Position = UDim2.new(0, 10, 0, 0)
 title.BackgroundTransparency = 1
 title.Text = "_Hub"
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.TextColor3 = Color3.new(1,1,1)
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Font = Enum.Font.SourceSansBold
 title.TextSize = 22
@@ -61,7 +80,7 @@ local closeButton = Instance.new("TextButton")
 closeButton.Size = UDim2.new(0, 30, 0, 30)
 closeButton.Position = UDim2.new(1, -35, 0, 2)
 closeButton.Text = "X"
-closeButton.TextColor3 = Color3.new(1, 1, 1)
+closeButton.TextColor3 = Color3.new(1,1,1)
 closeButton.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
 closeButton.BorderSizePixel = 0
 closeButton.Parent = topBar
@@ -79,9 +98,8 @@ button.Size = UDim2.new(0.8, 0, 0, 50)
 button.Position = UDim2.new(0.1, 0, 0.5, 0)
 button.Text = "Click Me"
 button.TextScaled = true
-button.Font = Enum.Font.SourceSans
 button.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
-button.TextColor3 = Color3.fromRGB(255, 255, 255)
+button.TextColor3 = Color3.new(1,1,1)
 button.BorderSizePixel = 0
 button.Parent = frame
 
@@ -109,26 +127,109 @@ end)
 -- DRAG MAIN WINDOW
 --------------------------------------------------
 
-local dragging = false
+local draggingWindow = false
 local dragStart
 local startPos
 
 topBar.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
-		dragging = true
+		draggingWindow = true
 		dragStart = input.Position
 		startPos = frame.Position
-
-		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then
-				dragging = false
-			end
-		end)
 	end
 end)
 
+topBar.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		draggingWindow = false
+	end
+end)
+
+--------------------------------------------------
+-- ICON BUTTON
+--------------------------------------------------
+
+local iconButton = Instance.new("TextButton")
+iconButton.Size = UDim2.new(0, ICON_SIZE, 0, ICON_SIZE)
+iconButton.Position = UDim2.new(0, 20, 1, -90)
+iconButton.Text = "UI"
+iconButton.TextScaled = true
+iconButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+iconButton.TextColor3 = Color3.new(1,1,1)
+iconButton.BorderSizePixel = 0
+iconButton.Parent = screenGui
+
+local iconCorner = Instance.new("UICorner")
+iconCorner.CornerRadius = UDim.new(0, 8)
+iconCorner.Parent = iconButton
+
+--------------------------------------------------
+-- HOVER ANIMATION
+--------------------------------------------------
+
+local hoverIn = TweenService:Create(
+	iconButton,
+	TweenInfo.new(0.15),
+	{
+		Size = UDim2.new(0, HOVER_SIZE, 0, HOVER_SIZE)
+	}
+)
+
+local hoverOut = TweenService:Create(
+	iconButton,
+	TweenInfo.new(0.15),
+	{
+		Size = UDim2.new(0, ICON_SIZE, 0, ICON_SIZE)
+	}
+)
+
+iconButton.MouseEnter:Connect(function()
+	hoverIn:Play()
+end)
+
+iconButton.MouseLeave:Connect(function()
+	hoverOut:Play()
+end)
+
+--------------------------------------------------
+-- DRAG ICON
+--------------------------------------------------
+
+local draggingIcon = false
+local iconDragStart
+local iconStartPos
+local moved = false
+
+iconButton.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		draggingIcon = true
+		moved = false
+		iconDragStart = input.Position
+		iconStartPos = iconButton.Position
+	end
+end)
+
+iconButton.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		draggingIcon = false
+
+		if not moved then
+			frame.Visible = not frame.Visible
+		end
+	end
+end)
+
+--------------------------------------------------
+-- INPUT CHANGED
+--------------------------------------------------
+
 UIS.InputChanged:Connect(function(input)
-	if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+	if input.UserInputType ~= Enum.UserInputType.MouseMovement then
+		return
+	end
+
+	-- Drag window
+	if draggingWindow then
 		local delta = input.Position - dragStart
 
 		frame.Position = UDim2.new(
@@ -138,73 +239,14 @@ UIS.InputChanged:Connect(function(input)
 			startPos.Y.Offset + delta.Y
 		)
 	end
-end)
 
---------------------------------------------------
--- FLOATING ICON
---------------------------------------------------
-
-local iconButton = Instance.new("TextButton")
-iconButton.Size = UDim2.new(0, 60, 0, 60)
-iconButton.Position = UDim2.new(0, 20, 1, -80)
-iconButton.Text = "UI"
-iconButton.TextScaled = true
-iconButton.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
-iconButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-iconButton.BorderSizePixel = 0
-iconButton.Parent = screenGui
-
-local iconCorner = Instance.new("UICorner")
-iconCorner.CornerRadius = UDim.new(1, 0)
-iconCorner.Parent = iconButton
-
---------------------------------------------------
--- HOVER EFFECT
---------------------------------------------------
-
-local normalSize = UDim2.new(0, 60, 0, 60)
-local hoverSize = UDim2.new(0, 70, 0, 70)
-
-local hoverIn = TweenService:Create(
-	iconButton,
-	TweenInfo.new(0.15, Enum.EasingStyle.Quad),
-	{Size = hoverSize}
-)
-
-local hoverOut = TweenService:Create(
-	iconButton,
-	TweenInfo.new(0.15, Enum.EasingStyle.Quad),
-	{Size = normalSize}
-)
-
---------------------------------------------------
--- DRAG ICON
---------------------------------------------------
-
-local draggingIcon = false
-local iconDragStart
-local iconStartPos
-
-iconButton.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
-		draggingIcon = true
-
-		hoverOut:Play()
-
-		iconDragStart = input.Position
-		iconStartPos = iconButton.Position
-
-		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then
-				draggingIcon = false
-			end
-		end)
-	end
-end)
-
-UIS.InputChanged:Connect(function(input)
-	if draggingIcon and input.UserInputType == Enum.UserInputType.MouseMovement then
+	-- Drag icon
+	if draggingIcon then
 		local delta = input.Position - iconDragStart
+
+		if math.abs(delta.X) > 5 or math.abs(delta.Y) > 5 then
+			moved = true
+		end
 
 		iconButton.Position = UDim2.new(
 			iconStartPos.X.Scale,
@@ -216,28 +258,8 @@ UIS.InputChanged:Connect(function(input)
 end)
 
 --------------------------------------------------
--- ICON HOVER
+-- CLOSE BUTTON
 --------------------------------------------------
-
-iconButton.MouseEnter:Connect(function()
-	if not draggingIcon then
-		hoverIn:Play()
-	end
-end)
-
-iconButton.MouseLeave:Connect(function()
-	if not draggingIcon then
-		hoverOut:Play()
-	end
-end)
-
---------------------------------------------------
--- TOGGLE UI
---------------------------------------------------
-
-iconButton.MouseButton1Click:Connect(function()
-	frame.Visible = not frame.Visible
-end)
 
 closeButton.MouseButton1Click:Connect(function()
 	frame.Visible = false
