@@ -38,7 +38,7 @@ titleCorner.Parent = titleBar
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 1, 0)
 title.BackgroundTransparency = 1
-title.Text = "My Hub"
+title.Text = "_hub"
 title.TextColor3 = Color3.new(1, 1, 1)
 title.TextSize = 20
 title.Font = Enum.Font.GothamBold
@@ -75,32 +75,8 @@ button.MouseButton1Click:Connect(function()
 end)
 
 -- Dragging
-local dragging = false
-local dragStart
-local startPos
+local dragDetector = Instance.new("UIDragDetector")
+dragDetector.Parent = frame -- Change to frame if you want the whole UI draggable
 
-titleBar.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
-		dragging = true
-		dragStart = input.Position
-		startPos = frame.Position
-
-		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then
-				dragging = false
-			end
-		end)
-	end
-end)
-
-UIS.InputChanged:Connect(function(input)
-	if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-		local delta = input.Position - dragStart
-		frame.Position = UDim2.new(
-			startPos.X.Scale,
-			startPos.X.Offset + delta.X,
-			startPos.Y.Scale,
-			startPos.Y.Offset + delta.Y
-		)
-	end
-end)
+dragDetector.ResponseStyle = Enum.UIDragDetectorResponseStyle.Offset
+dragDetector.DragStyle = Enum.UIDragDetectorDragStyle.TranslatePlane
