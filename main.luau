@@ -314,8 +314,6 @@ local ScreenGui = Create("ScreenGui", {
 	ResetOnSpawn = false,
 	ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 })-- ScreenGui is the root container that holds everything.
-AddCorner(ScreenGui, 8)
-AddStroke(ScreenGui, Theme.Border, 2)
 
 local ToggleBtn = Create("TextButton", {
 	Name = "ToggleBtn",
