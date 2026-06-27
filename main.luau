@@ -1,67 +1,55 @@
---[[
-    ╔══════════════════════════════════════════════════════════════════════╗
-    ║           EXOTIC HUB PRO - v10.8 Draggable Toggle Button           ║
-    ║          Click to toggle UI, drag to move icon anywhere            ║
-    ╚══════════════════════════════════════════════════════════════════════╝
-    
-    MOBILE NOTES:
-    - This script is designed for BOTH mobile and PC
-    - Touch inputs are handled alongside mouse inputs
-    - UI auto-scales for mobile screens at the bottom of this script
-    - Drag threshold prevents accidental toggles when swiping
-]]
-
 -- ═══════════════════════════════════════════════════════════════════════
 -- SERVICES (Roblox built-in systems we need access to)
 -- ═══════════════════════════════════════════════════════════════════════
-local Players = game:GetService("Players")           -- Access to player data
+local Players = game:GetService("Players") -- Access to player data
 local TweenService = game:GetService("TweenService") -- Smooth animations
 local UserInputService = game:GetService("UserInputService") -- Detects clicks/touches/keyboard
-local RunService = game:GetService("RunService")       -- Runs code every frame (for smooth dragging)
+local RunService = game:GetService("RunService") -- Runs code every frame (for smooth dragging)
+local ReplicatedStorage = game:GetService("ReplicatedStorage") -- 🌱 NEW: Remote & module storage
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- PLAYER SETUP (Gets the local player who runs this script)
 -- ═══════════════════════════════════════════════════════════════════════
 local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")    -- Where UI elements are stored
+local playerGui = player:WaitForChild("PlayerGui") -- Where UI elements are stored
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- 🔧 CONFIG SECTION (Easy-to-change settings for the whole UI)
 -- ═══════════════════════════════════════════════════════════════════════
 local Config = {
-	WindowWidth = 700,          -- Default width of main window (pixels)
-	WindowHeight = 450,         -- Default height of main window (pixels)
-	MinWindowWidth = 400,       -- Minimum width when resizing (prevents too small)
-	MinWindowHeight = 300,      -- Minimum height when resizing
-	SidebarWidth = 160,         -- Width of left navigation panel
-	EnableSearch = true,        -- Enable the search bar feature
-	ToggleButtonText = "Exotic", -- Text shown on the floating toggle button
+	WindowWidth = 550, -- Default width of main window (pixels)
+	WindowHeight = 300, -- Default height of main window (pixels)
+	MinWindowWidth = 300, -- Minimum width when resizing (prevents too small)
+	MinWindowHeight = 200, -- Minimum height when resizing
+	SidebarWidth = 160, -- Width of left navigation panel
+	EnableSearch = true, -- Enable the search bar feature
+	ToggleButtonText = "_hub", -- Text shown on the floating toggle button
 }
-
 -- ═══════════════════════════════════════════════════════════════════════
 -- 🎨 THEME SECTION (Color palette - change these to retheme the whole UI)
 -- ═══════════════════════════════════════════════════════════════════════
+
 local Theme = {
-	Background = Color3.fromRGB(22, 22, 26),      -- Main window background
-	Sidebar = Color3.fromRGB(28, 28, 32),           -- Left panel background
-	Content = Color3.fromRGB(18, 18, 22),          -- Right content area background
-	Card = Color3.fromRGB(35, 35, 40),             -- Card/button background
-	CardHover = Color3.fromRGB(45, 45, 50),         -- Card color when mouse hovers
-	DropdownBg = Color3.fromRGB(32, 32, 38),        -- Dropdown menu background
-	TextPrimary = Color3.fromRGB(255, 255, 255),   -- Main text color (white)
+	Background = Color3.fromRGB(22, 22, 26), -- Main window background
+	Sidebar = Color3.fromRGB(28, 28, 32), -- Left panel background
+	Content = Color3.fromRGB(18, 18, 22), -- Right content area background
+	Card = Color3.fromRGB(35, 35, 40), -- Card/button background
+	CardHover = Color3.fromRGB(45, 45, 50), -- Card color when mouse hovers
+	DropdownBg = Color3.fromRGB(32, 32, 38), -- Dropdown menu background
+	TextPrimary = Color3.fromRGB(255, 255, 255), -- Main text color (white)
 	TextSecondary = Color3.fromRGB(160, 160, 160), -- Secondary text (gray)
-	TextMuted = Color3.fromRGB(100, 100, 100),      -- Dimmed text
-	Accent = Color3.fromRGB(147, 112, 219),         -- Purple accent color
-	AccentPink = Color3.fromRGB(255, 105, 180),     -- Pink accent
-	AccentCyan = Color3.fromRGB(0, 255, 255),       -- Cyan accent
-	AccentGreen = Color3.fromRGB(50, 205, 50),      -- Green accent
-	AccentRed = Color3.fromRGB(255, 80, 80),         -- Red accent (for warnings/errors)
-	AccentOrange = Color3.fromRGB(255, 165, 0),     -- Orange accent
-	AccentYellow = Color3.fromRGB(255, 215, 0),     -- Yellow accent
-	Border = Color3.fromRGB(50, 50, 55),            -- Border/stroke color
-	ToggleBg = Color3.fromRGB(60, 60, 65),          -- Toggle switch background (OFF)
-	ToggleOn = Color3.fromRGB(147, 112, 219),       -- Toggle switch background (ON)
-	ScrollBar = Color3.fromRGB(60, 60, 70),         -- Scrollbar color
+	TextMuted = Color3.fromRGB(100, 100, 100), -- Dimmed text
+	Accent = Color3.fromRGB(147, 112, 219), -- Purple accent color
+	AccentPink = Color3.fromRGB(255, 105, 180), -- Pink accent
+	AccentCyan = Color3.fromRGB(0, 255, 255), -- Cyan accent
+	AccentGreen = Color3.fromRGB(50, 205, 50), -- Green accent
+	AccentRed = Color3.fromRGB(255, 80, 80), -- Red accent (for warnings/errors)
+	AccentOrange = Color3.fromRGB(255, 165, 0), -- Orange accent
+	AccentYellow = Color3.fromRGB(255, 215, 0), -- Yellow accent
+	Border = Color3.fromRGB(50, 50, 55), -- Border/stroke color
+	ToggleBg = Color3.fromRGB(60, 60, 65), -- Toggle switch background (OFF)
+	ToggleOn = Color3.fromRGB(147, 112, 219), -- Toggle switch background (ON)
+	ScrollBar = Color3.fromRGB(60, 60, 70), -- Scrollbar color
 }
 
 -- ═══════════════════════════════════════════════════════════════════════
@@ -69,46 +57,17 @@ local Theme = {
 -- Higher number = appears in front of lower numbers
 -- ═══════════════════════════════════════════════════════════════════════
 local Z = {
-	Base        = 1,    -- Main window
-	Toggle      = 10,   -- Floating toggle button
-	MainUI      = 10,   -- Main UI elements
-	Card        = 20,   -- Cards inside content area
-	Dropdown    = 100,  -- Dropdown menus (must be above cards)
-	DropScroll  = 110,  -- Dropdown scroll area
-	DropControl = 120,  -- Dropdown buttons/controls
-	Modal       = 200,  -- Dark overlay behind popups
-	ModalFrame  = 210,  -- Popup window itself
-	ModalCtrl   = 220,  -- Buttons inside popup
-	Search      = 500,  -- Search suggestions (highest priority)
-}
-
--- ═══════════════════════════════════════════════════════════════════════
--- ⚙️ AUTO SCRIPTS (Placeholder automation scripts - replace with real ones)
--- Each script has: Name, IsRunning flag, Start/Stop/Toggle functions
--- ═══════════════════════════════════════════════════════════════════════
-local AutoHatchScript = {
-	Name = "AutoHatch", IsRunning = false,
-	Start = function(self) self.IsRunning = true while self.IsRunning do task.wait(0.1) end end,
-	Stop = function(self) self.IsRunning = false end,
-	Toggle = function(self) if self.IsRunning then self:Stop() else task.spawn(function() self:Start() end) end end
-}
-local AutoFarmScript = {
-	Name = "AutoFarm", IsRunning = false,
-	Start = function(self) self.IsRunning = true while self.IsRunning do task.wait(0.1) end end,
-	Stop = function(self) self.IsRunning = false end,
-	Toggle = function(self) if self.IsRunning then self:Stop() else task.spawn(function() self:Start() end) end end
-}
-local AutoFeedScript = {
-	Name = "AutoFeed", IsRunning = false,
-	Start = function(self) self.IsRunning = true while self.IsRunning do task.wait(0.1) end end,
-	Stop = function(self) self.IsRunning = false end,
-	Toggle = function(self) if self.IsRunning then self:Stop() else task.spawn(function() self:Start() end) end end
-}
-local AutoCraftScript = {
-	Name = "AutoCraft", IsRunning = false,
-	Start = function(self) self.IsRunning = true while self.IsRunning do task.wait(0.1) end end,
-	Stop = function(self) self.IsRunning = false end,
-	Toggle = function(self) if self.IsRunning then self:Stop() else task.spawn(function() self:Start() end) end end
+	Base = 1, -- Main window
+	Toggle = 10, -- Floating toggle button
+	MainUI = 10, -- Main UI elements
+	Card = 20, -- Cards inside content area
+	Dropdown = 100, -- Dropdown menus (must be above cards)
+	DropScroll = 110, -- Dropdown scroll area
+	DropControl = 120, -- Dropdown buttons/controls
+	Modal = 200, -- Dark overlay behind popups
+	ModalFrame = 210, -- Popup window itself
+	ModalCtrl = 220, -- Buttons inside popup
+	Search = 500, -- Search suggestions (highest priority)
 }
 
 -- ═══════════════════════════════════════════════════════════════════════
@@ -116,7 +75,6 @@ local AutoCraftScript = {
 -- ═══════════════════════════════════════════════════════════════════════
 
 -- Creates a new UI instance and applies properties to it
--- Usage: local frame = Create("Frame", {BackgroundColor3 = Color3.new(1,0,0), Size = UDim2.new(0,100,0,100)})
 local function Create(className, properties)
 	local instance = Instance.new(className)
 	for property, value in pairs(properties or {}) do
@@ -126,15 +84,17 @@ local function Create(className, properties)
 end
 
 -- Smoothly animates a property change (like color fade, position slide)
--- Usage: Tween(button, {BackgroundColor3 = Color3.new(1,0,0)}, 0.3)
 local function Tween(instance, properties, duration)
-	local tween = TweenService:Create(instance, TweenInfo.new(duration or 0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), properties)
+	local tween = TweenService:Create(
+		instance,
+		TweenInfo.new(duration or 0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		properties
+	)
 	tween:Play()
 	return tween
 end
 
 -- Adds rounded corners to any UI element
--- Usage: AddCorner(myButton, 8) -- 8 pixel radius
 local function AddCorner(instance, radius)
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, radius or 6)
@@ -142,7 +102,6 @@ local function AddCorner(instance, radius)
 end
 
 -- Adds a colored border around any UI element
--- Usage: AddStroke(myFrame, Color3.new(1,1,1), 2)
 local function AddStroke(instance, color, thickness)
 	local stroke = Instance.new("UIStroke")
 	stroke.Color = color or Theme.Border
@@ -151,36 +110,232 @@ local function AddStroke(instance, color, thickness)
 end
 
 -- Adds hover/press visual effects to buttons
--- Changes color on mouse enter, touch begin, and reverts on leave/end
--- Usage: AddButtonEffects(myButton, normalColor, hoverColor)
 local function AddButtonEffects(btn, normalColor, hoverColor)
 	normalColor = normalColor or btn.BackgroundColor3
 	hoverColor = hoverColor or Theme.CardHover
 	-- Mouse hover (PC)
-	btn.MouseEnter:Connect(function() Tween(btn, {BackgroundColor3 = hoverColor}, 0.15) end)
-	btn.MouseLeave:Connect(function() Tween(btn, {BackgroundColor3 = normalColor}, 0.15) end)
+	btn.MouseEnter:Connect(function()
+		Tween(btn, { BackgroundColor3 = hoverColor }, 0.15)
+	end)
+	btn.MouseLeave:Connect(function()
+		Tween(btn, { BackgroundColor3 = normalColor }, 0.15)
+	end)
 	-- Touch press (Mobile)
 	btn.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			Tween(btn, {BackgroundColor3 = hoverColor}, 0.1)
+		if
+			input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch
+		then
+			Tween(btn, { BackgroundColor3 = hoverColor }, 0.1)
 		end
 	end)
 	btn.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			Tween(btn, {BackgroundColor3 = normalColor}, 0.1)
+		if
+			input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch
+		then
+			Tween(btn, { BackgroundColor3 = normalColor }, 0.1)
 		end
 	end)
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
+-- SMART SCROLLBAR (Only shows scrollbar when content overflows)
+-- ═══════════════════════════════════════════════════════════════════════
+local function SetupSmartScrollbar(scrollingFrame)
+	local layout = scrollingFrame:FindFirstChildOfClass("UIListLayout")
+		or scrollingFrame:FindFirstChildOfClass("UIGridLayout")
+	if not layout then
+		return
+	end
+
+	-- Store original thickness so we can restore it
+	local originalThickness = scrollingFrame.ScrollBarThickness
+
+	local function Update()
+		-- Calculate total content height including padding
+		local contentHeight = layout.AbsoluteContentSize.Y
+		local padding = 0
+		local pad = scrollingFrame:FindFirstChildOfClass("UIPadding")
+		if pad then
+			padding = pad.PaddingTop.Offset + pad.PaddingBottom.Offset
+		end
+		contentHeight = contentHeight + padding
+
+		local frameHeight = scrollingFrame.AbsoluteSize.Y
+
+		if contentHeight <= frameHeight then
+			-- Content fits: hide scrollbar and disable scrolling
+			scrollingFrame.ScrollBarThickness = 0
+			scrollingFrame.ScrollingEnabled = false
+		else
+			-- Content overflows: show scrollbar and allow scrolling
+			scrollingFrame.ScrollBarThickness = originalThickness
+			scrollingFrame.ScrollingEnabled = true
+		end
+	end
+
+	layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(Update)
+	scrollingFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(Update)
+
+	-- Initial check after layout settles
+	task.defer(Update)
+end
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- ⚙️ AUTO SCRIPTS (Placeholder automation scripts - replace with real ones)
+-- Each script has: Name, IsRunning flag, Start/Stop/Toggle functions
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- 🌱 SEED SHOP AUTO-BUY SYSTEM  (NEW SECTION)
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Load seed data module from ReplicatedStorage
+local SeedData = nil
+local seedLoadSuccess, seedLoadResult = pcall(function()
+	return require(ReplicatedStorage:WaitForChild("SharedModules"):WaitForChild("SeedData"))
+end)
+if seedLoadSuccess then
+	SeedData = seedLoadResult
+else
+	warn("Failed to load SeedData:", seedLoadResult)
+end
+
+-- Locate the purchase remote: Networking.SeedShop.PurchaseSeed
+local PurchaseRemote = nil
+local remotePath = { "Networking", "SeedShop", "PurchaseSeed" }
+local remoteCurrent = ReplicatedStorage
+for _, part in ipairs(remotePath) do
+	remoteCurrent = remoteCurrent:FindFirstChild(part)
+	if not remoteCurrent then
+		warn("SeedShop remote missing:", part)
+		break
+	end
+end
+PurchaseRemote = remoteCurrent
+
+-- State for auto-buy
+local SelectedSeeds = {} -- {[seedName] = true}
+local IsAutoBuying = false
+
+-- Helper to extract seed name from data entry
+local function GetSeedName(key, data)
+	return data.SeedName or data.Name or tostring(key)
+end
+
+-- Helper to extract seed price from data entry
+local function GetSeedPrice(data)
+	return data.Price or data.PurchasePrice or 0
+end
+
+-- Fire the purchase remote for a single seed
+local function BuySeed(seedName)
+	if not PurchaseRemote then
+		warn("PurchaseRemote not available")
+		return false
+	end
+	local success, result = pcall(function()
+		if PurchaseRemote:IsA("RemoteFunction") then
+			return PurchaseRemote:InvokeServer(seedName)
+		else
+			PurchaseRemote:FireServer(seedName)
+			return true
+		end
+	end)
+	if success then
+		print("✅ Purchased seed:", seedName)
+		return true
+	else
+		warn("❌ Failed to buy", seedName, ":", result)
+		return false
+	end
+end
+
+-- Custom checkbox toggle for seeds (supports programmatic set via returned function)
+local function CreateSeedToggle(parent, seedName, price, onToggle)
+	local container = Create("Frame", {
+		Name = seedName .. "Toggle",
+		Parent = parent,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -8, 0, 30),
+		ZIndex = Z.DropControl,
+		Active = true,
+	})
+
+	local checkbox = Create("TextButton", {
+		Parent = container,
+		BackgroundColor3 = Theme.ToggleBg,
+		BorderSizePixel = 0,
+		Position = UDim2.new(0, 4, 0.5, -10),
+		Size = UDim2.new(0, 20, 0, 20),
+		ZIndex = Z.DropControl,
+		Active = true,
+		AutoButtonColor = false,
+		Text = "",
+	})
+	AddCorner(checkbox, 4)
+	AddStroke(checkbox, Theme.Border, 1)
+
+	local checkmark = Create("TextLabel", {
+		Parent = checkbox,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 1, 0),
+		Font = Enum.Font.GothamBold,
+		Text = "✓",
+		TextColor3 = Theme.TextPrimary,
+		TextSize = 14,
+		ZIndex = Z.DropControl + 1,
+		Visible = false,
+	})
+
+	local label = Create("TextLabel", {
+		Parent = container,
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 32, 0, 0),
+		Size = UDim2.new(1, -40, 1, 0),
+		Font = Enum.Font.Gotham,
+		Text = seedName .. "  ($" .. tostring(price) .. ")",
+		TextColor3 = Theme.TextPrimary,
+		TextSize = 12,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = Z.DropControl,
+	})
+
+	local state = false
+	checkbox.Activated:Connect(function()
+		state = not state
+		checkbox.BackgroundColor3 = state and Theme.ToggleOn or Theme.ToggleBg
+		checkmark.Visible = state
+		if onToggle then
+			onToggle(state)
+		end
+	end)
+
+	return container,
+		function(newState)
+			if newState ~= nil then
+				state = newState
+				checkbox.BackgroundColor3 = state and Theme.ToggleOn or Theme.ToggleBg
+				checkmark.Visible = state
+				if onToggle then
+					onToggle(state)
+				end
+			end
+			return state
+		end
+end
+
+-- ═══════════════════════════════════════════════════════════════════════
 -- MAIN UI CREATION (Building the screen that holds everything)
 -- ═══════════════════════════════════════════════════════════════════════
+
 local ScreenGui = Create("ScreenGui", {
 	Name = "ExoticHubPro",
 	Parent = playerGui,
 	ResetOnSpawn = false,
 	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-	DisplayOrder = 999,  -- ⬅️ ADD THIS: Renders above ALL other game UIs
+	DisplayOrder = 999, -- ⬅️ ADD THIS: Renders above ALL other game UIs
 })
 
 -- ═══════════════════════════════════════════════════════════════════════
@@ -193,12 +348,11 @@ local MainFrame = Create("Frame", {
 	BorderSizePixel = 0,
 	Position = UDim2.new(0.5, -Config.WindowWidth / 2, 0.5, -Config.WindowHeight / 2), -- Centered
 	Size = UDim2.new(0, Config.WindowWidth, 0, Config.WindowHeight),
-	ClipsDescendants = false,          -- Allows dropdowns to extend outside
-	Active = true,                     -- Enables interaction
+	ClipsDescendants = false, -- Allows dropdowns to extend outside
+	Active = true, -- Enables interaction
 	ZIndex = Z.Base,
 	Visible = true,
 })
-AddCorner(MainFrame, 12)
 AddStroke(MainFrame, Theme.Border, 2)
 
 -- ═══════════════════════════════════════════════════════════════════════
@@ -206,12 +360,12 @@ AddStroke(MainFrame, Theme.Border, 2)
 -- Click = toggle MainFrame visible/hidden
 -- Drag  = move button anywhere on screen (mobile friendly)
 -- ═══════════════════════════════════════════════════════════════════════
-local ToggleBtn = Create("TextButton", {
-	Name = "ToggleBtn",
+local MainIcon = Create("TextButton", {
+	Name = "MainIcon",
 	Parent = ScreenGui,
 	BackgroundColor3 = Color3.fromRGB(15, 15, 15),
 	BorderSizePixel = 0,
-	Position = UDim2.new(0, 8, 0, 8),  -- Top-left corner default
+	Position = UDim2.new(0, 8, 0, 8), -- Top-left corner default
 	Size = UDim2.new(0, 55, 0, 28),
 	Font = Enum.Font.GothamBold,
 	Text = Config.ToggleButtonText,
@@ -219,10 +373,10 @@ local ToggleBtn = Create("TextButton", {
 	TextSize = 13,
 	ZIndex = Z.Toggle,
 	Active = true,
-	AutoButtonColor = false,           -- We handle color manually
+	AutoButtonColor = false, -- We handle color manually
 })
-AddCorner(ToggleBtn, 6)
-AddStroke(ToggleBtn, Theme.Border, 1)
+AddCorner(MainIcon, 6)
+AddStroke(MainIcon, Theme.Border, 1)
 
 --[[
     DRAG & CLICK DETECTION FOR TOGGLE BUTTON (Mobile Compatible)
@@ -234,30 +388,31 @@ AddStroke(ToggleBtn, Theme.Border, 1)
     
     This prevents the UI from toggling when you just want to drag the button.
 ]]
-local toggleDragActive = false        -- Is user currently dragging?
-local toggleDragInputObj = nil      -- Stores which input is being tracked
-local toggleStartInputPos = nil     -- Where the touch/click started
-local toggleStartBtnPos = nil       -- Where the button was when touch started
-local toggleClickThreshold = 8      -- Pixels of movement to distinguish click vs drag
+local toggleDragActive = false -- Is user currently dragging?
+local toggleDragInputObj = nil -- Stores which input is being tracked
+local toggleStartInputPos = nil -- Where the touch/click started
+local toggleStartBtnPos = nil -- Where the button was when touch started
+local toggleClickThreshold = 8 -- Pixels of movement to distinguish click vs drag
 
 -- When user starts touching the button
-ToggleBtn.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 
-		or input.UserInputType == Enum.UserInputType.Touch then
+MainIcon.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 		toggleDragActive = true
 		toggleDragInputObj = input
 		toggleStartInputPos = input.Position
-		toggleStartBtnPos = ToggleBtn.Position
+		toggleStartBtnPos = MainIcon.Position
 	end
 end)
 
 -- While dragging, update button position to follow finger/mouse
 UserInputService.InputChanged:Connect(function(input)
 	if toggleDragActive then
-		if input.UserInputType == Enum.UserInputType.MouseMovement 
-			or input.UserInputType == Enum.UserInputType.Touch then
+		if
+			input.UserInputType == Enum.UserInputType.MouseMovement
+			or input.UserInputType == Enum.UserInputType.Touch
+		then
 			local delta = input.Position - toggleStartInputPos
-			ToggleBtn.Position = UDim2.new(
+			MainIcon.Position = UDim2.new(
 				toggleStartBtnPos.X.Scale,
 				toggleStartBtnPos.X.Offset + delta.X,
 				toggleStartBtnPos.Y.Scale,
@@ -277,8 +432,8 @@ UserInputService.InputEnded:Connect(function(input)
 		-- If barely moved, treat as a CLICK → toggle UI visibility
 		if math.abs(delta.X) <= toggleClickThreshold and math.abs(delta.Y) <= toggleClickThreshold then
 			MainFrame.Visible = not MainFrame.Visible
-			Tween(ToggleBtn, {
-				BackgroundColor3 = MainFrame.Visible and Color3.fromRGB(15, 15, 15) or Color3.fromRGB(30, 30, 30)
+			Tween(MainIcon, {
+				BackgroundColor3 = MainFrame.Visible and Color3.fromRGB(15, 15, 15) or Color3.fromRGB(30, 30, 30),
 			}, 0.2)
 		end
 	end
@@ -288,14 +443,14 @@ end)
 -- MAIN WINDOW DRAG (Drag the top bar to move the whole window)
 -- Same logic as toggle button but moves MainFrame instead
 -- ═══════════════════════════════════════════════════════════════════════
+
 local isDragging = false
 local dragInput = nil
 local dragStartPos = nil
 local frameStartPos = nil
 
 MainFrame.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 
-		or input.UserInputType == Enum.UserInputType.Touch then
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 		isDragging = true
 		dragInput = input
 		dragStartPos = input.Position
@@ -305,12 +460,16 @@ end)
 
 UserInputService.InputChanged:Connect(function(input)
 	if isDragging then
-		if input.UserInputType == Enum.UserInputType.MouseMovement 
-			or input.UserInputType == Enum.UserInputType.Touch then
+		if
+			input.UserInputType == Enum.UserInputType.MouseMovement
+			or input.UserInputType == Enum.UserInputType.Touch
+		then
 			local delta = input.Position - dragStartPos
 			MainFrame.Position = UDim2.new(
-				frameStartPos.X.Scale, frameStartPos.X.Offset + delta.X,
-				frameStartPos.Y.Scale, frameStartPos.Y.Offset + delta.Y
+				frameStartPos.X.Scale,
+				frameStartPos.X.Offset + delta.X,
+				frameStartPos.Y.Scale,
+				frameStartPos.Y.Offset + delta.Y
 			)
 		end
 	end
@@ -336,21 +495,20 @@ local ResizeHandle = Create("Frame", {
 	Parent = MainFrame,
 	BackgroundColor3 = Theme.Accent,
 	BorderSizePixel = 0,
-	Position = UDim2.new(1, -16, 1, -16),
+	Position = UDim2.new(1, -14, 1, -14),
 	Size = UDim2.new(0, 16, 0, 16),
-	BackgroundTransparency = 0.3,
+	BackgroundTransparency = 9999,
 	ZIndex = Z.MainUI + 2,
 })
-AddCorner(ResizeHandle, 4)
 
 Create("TextLabel", {
 	Parent = ResizeHandle,
 	BackgroundTransparency = 1,
 	Size = UDim2.new(1, 0, 1, 0),
 	Font = Enum.Font.GothamBold,
-	Text = "◢",
+	Text = "//",
 	TextColor3 = Color3.fromRGB(255, 255, 255),
-	TextSize = 10,
+	TextSize = 9,
 	TextTransparency = 0.4,
 	ZIndex = Z.MainUI + 3,
 })
@@ -371,7 +529,7 @@ local ResizeBtn = Create("TextButton", {
 local BottomResizeBar = Create("Frame", {
 	Name = "BottomResizeBar",
 	Parent = MainFrame,
-	BackgroundColor3 = Theme.Accent,
+	BackgroundColor3 = Color3.fromRGB(160, 160, 160),
 	BackgroundTransparency = 0.5,
 	BorderSizePixel = 0,
 	Position = UDim2.new(0, 40, 1, -6),
@@ -387,7 +545,7 @@ Create("TextLabel", {
 	Font = Enum.Font.GothamBold,
 	Text = "• • •",
 	TextColor3 = Color3.fromRGB(255, 255, 255),
-	TextSize = 8,
+	TextSize = 10,
 	TextTransparency = 0.5,
 	ZIndex = Z.MainUI + 3,
 })
@@ -407,26 +565,32 @@ local BottomResizeBtn = Create("TextButton", {
 -- Uses RenderStepped for smooth 60fps resizing while dragging
 local isResizingCorner = false
 ResizeBtn.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 
-		or input.UserInputType == Enum.UserInputType.Touch then
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 		isResizingCorner = true
 		local startSize = MainFrame.Size
 		local startMousePos = input.Position
 		local connection
 		-- Runs every frame while resizing for smooth updates
 		connection = RunService.RenderStepped:Connect(function()
-			if not isResizingCorner then connection:Disconnect() return end
+			if not isResizingCorner then
+				connection:Disconnect()
+				return
+			end
 			local currentMouse = UserInputService:GetMouseLocation()
 			local delta = currentMouse - Vector2.new(startMousePos.X, startMousePos.Y)
 			-- math.max prevents shrinking below minimum size
 			MainFrame.Size = UDim2.new(
-				0, math.max(Config.MinWindowWidth, startSize.X.Offset + delta.X),
-				0, math.max(Config.MinWindowHeight, startSize.Y.Offset + delta.Y)
+				0,
+				math.max(Config.MinWindowWidth, startSize.X.Offset + delta.X),
+				0,
+				math.max(Config.MinWindowHeight, startSize.Y.Offset + delta.Y)
 			)
 		end)
 		-- Detect when user releases touch/click
 		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then isResizingCorner = false end
+			if input.UserInputState == Enum.UserInputState.End then
+				isResizingCorner = false
+			end
 		end)
 	end
 end)
@@ -434,23 +598,25 @@ end)
 -- BOTTOM BAR RESIZE LOGIC (Changes height only)
 local isResizingBottom = false
 BottomResizeBtn.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 
-		or input.UserInputType == Enum.UserInputType.Touch then
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 		isResizingBottom = true
 		local startSize = MainFrame.Size
 		local startMousePos = input.Position
 		local connection
 		connection = RunService.RenderStepped:Connect(function()
-			if not isResizingBottom then connection:Disconnect() return end
+			if not isResizingBottom then
+				connection:Disconnect()
+				return
+			end
 			local currentMouse = UserInputService:GetMouseLocation()
 			local deltaY = currentMouse.Y - startMousePos.Y
-			MainFrame.Size = UDim2.new(
-				0, startSize.X.Offset,
-				0, math.max(Config.MinWindowHeight, startSize.Y.Offset + deltaY)
-			)
+			MainFrame.Size =
+				UDim2.new(0, startSize.X.Offset, 0, math.max(Config.MinWindowHeight, startSize.Y.Offset + deltaY))
 		end)
 		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then isResizingBottom = false end
+			if input.UserInputState == Enum.UserInputState.End then
+				isResizingBottom = false
+			end
 		end)
 	end
 end)
@@ -466,33 +632,47 @@ local TopBar = Create("Frame", {
 	Size = UDim2.new(1, 0, 0, 40),
 	ZIndex = Z.MainUI,
 })
-AddCorner(TopBar, 12)
 
 local TitleLabel = Create("TextLabel", {
 	Name = "Title",
 	Parent = TopBar,
 	BackgroundTransparency = 1,
-	Position = UDim2.new(0, 15, 0, 0),
-	Size = UDim2.new(0, 200, 1, 0),
+	Position = UDim2.new(0, 12, 0, 0),
+	Size = UDim2.new(0, 60, 1, 0),
 	Font = Enum.Font.GothamBold,
-	Text = "Exotic Hub ",
+	Text = " _hub",
 	TextColor3 = Theme.TextPrimary,
 	TextSize = 18,
 	TextXAlignment = Enum.TextXAlignment.Left,
 	ZIndex = Z.MainUI + 1,
 })
 
--- "PRO" suffix in pink
-Create("TextLabel", {
-	Name = "ProSuffix",
-	Parent = TitleLabel,
+-- NEW: Page title that appears to the right of "_hub"
+local PageTitle = Create("TextLabel", {
+	Name = "PageTitle",
+	Parent = TopBar,
 	BackgroundTransparency = 1,
-	Position = UDim2.new(1, 0, 0, 0),
-	Size = UDim2.new(0, 40, 1, 0),
+	Position = UDim2.new(0, 163, 0, 6),
+	Size = UDim2.new(0, 120, 0, 18),
 	Font = Enum.Font.GothamBold,
-	Text = "PRO",
-	TextColor3 = Theme.AccentPink,
-	TextSize = 18,
+	Text = "Home",
+	TextColor3 = Theme.TextPrimary,
+	TextSize = 15,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	ZIndex = Z.MainUI + 1,
+})
+
+-- NEW: Page subtitle under the page title
+local PageSubtitle = Create("TextLabel", {
+	Name = "PageSubtitle",
+	Parent = TopBar,
+	BackgroundTransparency = 1,
+	Position = UDim2.new(0, 163, 0, 24),
+	Size = UDim2.new(0, 120, 0, 14),
+	Font = Enum.Font.Gotham,
+	Text = "",
+	TextColor3 = Theme.TextMuted,
+	TextSize = 10,
 	TextXAlignment = Enum.TextXAlignment.Left,
 	ZIndex = Z.MainUI + 1,
 })
@@ -505,7 +685,7 @@ local SearchFrame = Create("Frame", {
 	Parent = TopBar,
 	BackgroundColor3 = Theme.Content,
 	BorderSizePixel = 0,
-	Position = UDim2.new(1, -220, 0.5, -13),
+	Position = UDim2.new(1, -197, 0.5, -13),
 	Size = UDim2.new(0, 190, 0, 26),
 	ZIndex = Z.MainUI + 2,
 })
@@ -538,14 +718,14 @@ local SearchBox = Create("TextBox", {
 	TextColor3 = Theme.TextMuted,
 	TextSize = 12,
 	ZIndex = Z.MainUI + 3,
-	ClearTextOnFocus = true,    -- Clears "Search" text when clicked
+	ClearTextOnFocus = true, -- Clears "Search" text when clicked
 	Active = true,
 })
 
 -- Dropdown suggestion box (appears below search bar when typing)
 local SuggestFrame = Create("Frame", {
 	Name = "Suggestions",
-	Parent = ScreenGui,         -- Parented to ScreenGui so it can float above everything
+	Parent = ScreenGui, -- Parented to ScreenGui so it can float above everything
 	BackgroundColor3 = Theme.DropdownBg,
 	BorderSizePixel = 0,
 	Position = UDim2.new(0, 0, 0, 0),
@@ -575,7 +755,7 @@ local SuggestScroll = Create("ScrollingFrame", {
 Create("UIListLayout", {
 	Parent = SuggestScroll,
 	Padding = UDim.new(0, 2),
-	SortOrder = Enum.SortOrder.LayoutOrder
+	SortOrder = Enum.SortOrder.LayoutOrder,
 })
 
 -- ═══════════════════════════════════════════════════════════════════════
@@ -593,37 +773,43 @@ local CloseBtn = Create("TextButton", {
 	TextSize = 20,
 	ZIndex = Z.MainUI + 1,
 	Active = true,
+	Visible = false,
 	AutoButtonColor = false,
 })
 
-CloseBtn.MouseEnter:Connect(function() Tween(CloseBtn, {TextColor3 = Theme.AccentRed}, 0.15) end)
-CloseBtn.MouseLeave:Connect(function() Tween(CloseBtn, {TextColor3 = Theme.TextSecondary}, 0.15) end)
-CloseBtn.Activated:Connect(function() MainFrame.Visible = false end)
+CloseBtn.MouseEnter:Connect(function()
+	Tween(CloseBtn, { TextColor3 = Theme.AccentRed }, 0.15)
+end)
+CloseBtn.MouseLeave:Connect(function()
+	Tween(CloseBtn, { TextColor3 = Theme.TextSecondary }, 0.15)
+end)
+CloseBtn.Activated:Connect(function()
+	MainFrame.Visible = false
+end)
 
 -- ═══════════════════════════════════════════════════════════════════════
--- LEFT SIDEBAR (Navigation menu with page buttons)
+-- LEFT SIDEBAR (Navigation menu with page buttons)Position = UDim2.new(0.5, -Config.WindowWidth / 2, 0.5, -Config.WindowHeight / 2),
 -- ═══════════════════════════════════════════════════════════════════════
 local Sidebar = Create("Frame", {
 	Name = "Sidebar",
 	Parent = MainFrame,
 	BackgroundColor3 = Theme.Sidebar,
 	BorderSizePixel = 0,
-	Position = UDim2.new(0, 0, 0, 40),
-	Size = UDim2.new(0, Config.SidebarWidth, 1, -40),
+	Position = UDim2.new(0, 2, 0, 42.5),
+	Size = UDim2.new(0, Config.SidebarWidth, 1, -42),
 	ZIndex = Z.MainUI,
 })
-AddCorner(Sidebar, 12)
 
 -- Scrollable container for sidebar buttons (in case there are many pages)
 local SidebarScroll = Create("ScrollingFrame", {
 	Name = "Scroll",
 	Parent = Sidebar,
 	BackgroundTransparency = 1,
-	Position = UDim2.new(0, 0, 0, 5),
+	Position = UDim2.new(0, 0, 0, 4),
 	Size = UDim2.new(1, 0, 1, -10),
-	ScrollBarThickness = 2,
+	ScrollBarThickness = 1,
 	ScrollBarImageColor3 = Theme.ScrollBar,
-	AutomaticCanvasSize = Enum.AutomaticSize.Y,  -- Auto-expands as buttons are added
+	AutomaticCanvasSize = Enum.AutomaticSize.Y, -- Auto-expands as buttons are added
 	ZIndex = Z.MainUI + 1,
 	ScrollingEnabled = true,
 	Active = true,
@@ -632,8 +818,11 @@ local SidebarScroll = Create("ScrollingFrame", {
 Create("UIListLayout", {
 	Parent = SidebarScroll,
 	Padding = UDim.new(0, 2),
-	SortOrder = Enum.SortOrder.LayoutOrder
+	SortOrder = Enum.SortOrder.LayoutOrder,
 })
+
+-- Apply smart scrollbar to sidebar
+SetupSmartScrollbar(SidebarScroll)
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- CONTENT AREA (Right side where cards and dropdowns appear)
@@ -643,41 +832,10 @@ local ContentFrame = Create("Frame", {
 	Parent = MainFrame,
 	BackgroundColor3 = Theme.Content,
 	BorderSizePixel = 0,
-	Position = UDim2.new(0, Config.SidebarWidth, 0, 40),
-	Size = UDim2.new(1, -Config.SidebarWidth, 1, -40),
+	Position = UDim2.new(0, Config.SidebarWidth, 0, 42.5),
+	Size = UDim2.new(1, -Config.SidebarWidth, 1, -42),
 	ZIndex = Z.MainUI,
-	ClipsDescendants = true,    -- Prevents content from spilling out
-})
-AddCorner(ContentFrame, 12)
-
--- Page title (e.g., "Home", "Premium")
-local ContentTitle = Create("TextLabel", {
-	Name = "Title",
-	Parent = ContentFrame,
-	BackgroundTransparency = 1,
-	Position = UDim2.new(0, 15, 0, 10),
-	Size = UDim2.new(1, -30, 0, 22),
-	Font = Enum.Font.GothamBold,
-	Text = "Home",
-	TextColor3 = Theme.TextPrimary,
-	TextSize = 16,
-	TextXAlignment = Enum.TextXAlignment.Left,
-	ZIndex = Z.MainUI + 1,
-})
-
--- Subtitle/description under the title
-local ContentSubtitle = Create("TextLabel", {
-	Name = "Subtitle",
-	Parent = ContentFrame,
-	BackgroundTransparency = 1,
-	Position = UDim2.new(0, 15, 0, 32),
-	Size = UDim2.new(1, -30, 0, 15),
-	Font = Enum.Font.Gotham,
-	Text = "Game Version: v2984 [US]",
-	TextColor3 = Theme.TextMuted,
-	TextSize = 11,
-	TextXAlignment = Enum.TextXAlignment.Left,
-	ZIndex = Z.MainUI + 1,
+	ClipsDescendants = true, -- Prevents content from spilling out
 })
 
 -- Scrollable grid that holds all the cards
@@ -685,9 +843,9 @@ local ContentScroll = Create("ScrollingFrame", {
 	Name = "ContentScroll",
 	Parent = ContentFrame,
 	BackgroundTransparency = 1,
-	Position = UDim2.new(0, 10, 0, 52),
-	Size = UDim2.new(1, -20, 1, -62),
-	ScrollBarThickness = 3,
+	Position = UDim2.new(0, 11, 0, 10),
+	Size = UDim2.new(1, -20, 1, -20),
+	ScrollBarThickness = 2,
 	ScrollBarImageColor3 = Theme.ScrollBar,
 	AutomaticCanvasSize = Enum.AutomaticSize.Y,
 	ZIndex = Z.MainUI + 1,
@@ -701,8 +859,11 @@ Create("UIGridLayout", {
 	Parent = ContentScroll,
 	CellSize = UDim2.new(0.5, -5, 0, 36),
 	CellPadding = UDim2.new(0, 5, 0, 5),
-	SortOrder = Enum.SortOrder.LayoutOrder
+	SortOrder = Enum.SortOrder.LayoutOrder,
 })
+
+-- Apply smart scrollbar to content area
+SetupSmartScrollbar(ContentScroll)
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- DROPDOWN LAYER (Invisible container that holds dropdown menus)
@@ -727,7 +888,7 @@ local ModalOverlay = Create("Frame", {
 	Name = "ModalOverlay",
 	Parent = ScreenGui,
 	BackgroundColor3 = Color3.fromRGB(0, 0, 0),
-	BackgroundTransparency = 0.5,     -- Semi-transparent black background
+	BackgroundTransparency = 0.5, -- Semi-transparent black background
 	BorderSizePixel = 0,
 	Size = UDim2.new(1, 0, 1, 0),
 	Visible = false,
@@ -744,8 +905,6 @@ local ModalFrame = Create("Frame", {
 	Size = UDim2.new(0, 300, 0, 150),
 	ZIndex = Z.ModalFrame,
 })
-AddCorner(ModalFrame, 8)
-AddStroke(ModalFrame, Theme.Border, 2)
 
 local ModalTitle = Create("TextLabel", {
 	Name = "Title",
@@ -794,57 +953,50 @@ local ModalScroll = Create("ScrollingFrame", {
 Create("UIListLayout", {
 	Parent = ModalScroll,
 	Padding = UDim.new(0, 3),
-	SortOrder = Enum.SortOrder.LayoutOrder
+	SortOrder = Enum.SortOrder.LayoutOrder,
 })
+
+-- Apply smart scrollbar to modal
+SetupSmartScrollbar(ModalScroll)
 
 -- Close modal and clear its contents
 ModalDone.Activated:Connect(function()
 	ModalOverlay.Visible = false
 	for _, child in pairs(ModalScroll:GetChildren()) do
-		if child:IsA("TextButton") then child:Destroy() end
+		if child:IsA("TextButton") then
+			child:Destroy()
+		end
 	end
 end)
 
 -- ═══════════════════════════════════════════════════════════════════════
--- FOOTER (Small text at bottom of content area)
--- ═══════════════════════════════════════════════════════════════════════
-Create("TextLabel", {
-	Name = "Footer",
-	Parent = MainFrame,
-	BackgroundTransparency = 1,
-	Position = UDim2.new(0, Config.SidebarWidth, 1, -20),
-	Size = UDim2.new(1, -Config.SidebarWidth, 0, 20),
-	Font = Enum.Font.Gotham,
-	Text = "exotichub.app/join",
-	TextColor3 = Theme.TextMuted,
-	TextSize = 10,
-	TextXAlignment = Enum.TextXAlignment.Center,
-	ZIndex = Z.MainUI + 1,
-})
-
--- ═══════════════════════════════════════════════════════════════════════
 -- STATE VARIABLES (Track what's currently happening in the UI)
 -- ═══════════════════════════════════════════════════════════════════════
-local CurrentPage = "Home"              -- Which page is currently shown
-local ActiveDropdownCard = nil        -- Which card opened the current dropdown
-local ActiveDropdownFrame = nil       -- The currently open dropdown frame
-local IsClosingDropdown = false       -- Prevents double-closing animation
-local DropdownDebounce = false        -- Prevents rapid clicking while animating
-local SidebarButtons = {}             -- Table storing all sidebar button functions
-local SearchableItems = {}            -- Table of items that can be searched
-local CardLayoutOrder = 0             -- Counter for card ordering (auto-increments)
-local StickyHeartbeat = nil           -- Connection that updates dropdown position every frame
+local CurrentPage = "Home" -- Which page is currently shown
+local ActiveDropdownCard = nil -- Which card opened the current dropdown
+local ActiveDropdownFrame = nil -- The currently open dropdown frame
+local IsClosingDropdown = false -- Prevents double-closing animation
+local DropdownDebounce = false -- Prevents rapid clicking while animating
+local SidebarButtons = {} -- Table storing all sidebar button functions
+local SearchableItems = {} -- Table of items that can be searched
+local CardLayoutOrder = 0 -- Counter for card ordering (auto-increments)
+local StickyHeartbeat = nil -- Connection that updates dropdown position every frame
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- STICKY DROPDOWN (Keeps dropdown attached to its card when scrolling)
 -- ═══════════════════════════════════════════════════════════════════════
-local CloseDropdown  -- Forward declaration (defined later)
+local CloseDropdown -- Forward declaration (defined later)
 
 -- Updates dropdown position to stay attached to its parent card
 -- Called every frame via RunService.Heartbeat while dropdown is open
 local function UpdateDropdownPosition()
-	if not ActiveDropdownFrame or not ActiveDropdownCard then return end
-	if not ActiveDropdownCard.Parent then CloseDropdown() return end
+	if not ActiveDropdownFrame or not ActiveDropdownCard then
+		return
+	end
+	if not ActiveDropdownCard.Parent then
+		CloseDropdown()
+		return
+	end
 	local cardAbs = ActiveDropdownCard.AbsolutePosition
 	local layerAbs = DropdownLayer.AbsolutePosition
 	local relX = cardAbs.X - layerAbs.X
@@ -854,13 +1006,19 @@ end
 
 -- Starts the "sticky" behavior - dropdown follows card as you scroll
 local function StartStickyDropdown()
-	if StickyHeartbeat then StickyHeartbeat:Disconnect() StickyHeartbeat = nil end
+	if StickyHeartbeat then
+		StickyHeartbeat:Disconnect()
+		StickyHeartbeat = nil
+	end
 	StickyHeartbeat = RunService.Heartbeat:Connect(UpdateDropdownPosition)
 end
 
 -- Stops the sticky behavior when dropdown closes
 local function StopStickyDropdown()
-	if StickyHeartbeat then StickyHeartbeat:Disconnect() StickyHeartbeat = nil end
+	if StickyHeartbeat then
+		StickyHeartbeat:Disconnect()
+		StickyHeartbeat = nil
+	end
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
@@ -869,32 +1027,40 @@ end
 
 -- Closes the currently open dropdown with an animation
 function CloseDropdown()
-	if IsClosingDropdown or not ActiveDropdownFrame then return end
+	if IsClosingDropdown or not ActiveDropdownFrame then
+		return
+	end
 	IsClosingDropdown = true
 	DropdownDebounce = false
 	StopStickyDropdown()
 
 	if ActiveDropdownCard then
 		local arrow = ActiveDropdownCard:FindFirstChild("Arrow")
-		if arrow then arrow.Text = ">" end
-		Tween(ActiveDropdownCard, {BackgroundColor3 = Theme.Card}, 0.15)
+		if arrow then
+			arrow.Text = ">"
+		end
+		Tween(ActiveDropdownCard, { BackgroundColor3 = Theme.Card }, 0.15)
 		ActiveDropdownCard = nil
 	end
 
 	local frame = ActiveDropdownFrame
 	ActiveDropdownFrame = nil
-	Tween(frame, {Size = UDim2.new(0, frame.Size.X.Offset, 0, 0)}, 0.15)
+	Tween(frame, { Size = UDim2.new(0, frame.Size.X.Offset, 0, 0) }, 0.15)
 	task.wait(0.15)
-	if frame and frame.Parent then frame:Destroy() end
+	if frame and frame.Parent then
+		frame:Destroy()
+	end
 	IsClosingDropdown = false
 end
 
 -- Clears all cards from the content area (called when switching pages)
 local function ClearContent()
-	ContentScroll.CanvasPosition = Vector2.new(0, 0)  -- Reset scroll to top
+	ContentScroll.CanvasPosition = Vector2.new(0, 0) -- Reset scroll to top
 	CloseDropdown()
 	for _, child in pairs(ContentScroll:GetChildren()) do
-		if child:IsA("Frame") or child:IsA("TextButton") then child:Destroy() end
+		if child:IsA("Frame") or child:IsA("TextButton") then
+			child:Destroy()
+		end
 	end
 	CardLayoutOrder = 0
 end
@@ -969,10 +1135,14 @@ local function CreateCard(title, icon, iconColor)
 
 	-- Hover effects (only if not the active dropdown card)
 	card.MouseEnter:Connect(function()
-		if ActiveDropdownCard ~= card then Tween(card, {BackgroundColor3 = Theme.CardHover}, 0.15) end
+		if ActiveDropdownCard ~= card then
+			Tween(card, { BackgroundColor3 = Theme.CardHover }, 0.15)
+		end
 	end)
 	card.MouseLeave:Connect(function()
-		if ActiveDropdownCard ~= card then Tween(card, {BackgroundColor3 = Theme.Card}, 0.15) end
+		if ActiveDropdownCard ~= card then
+			Tween(card, { BackgroundColor3 = Theme.Card }, 0.15)
+		end
 	end)
 
 	return card
@@ -982,16 +1152,25 @@ end
 -- card: The card button that was clicked
 -- buildContentFunction: A function that receives a scroll frame and adds content to it
 local function ToggleDropdown(card, buildContentFunction)
-	if IsClosingDropdown then return end
-	if ActiveDropdownCard == card and ActiveDropdownFrame then CloseDropdown() return end
-	if DropdownDebounce then return end
+	if IsClosingDropdown then
+		return
+	end
+	if ActiveDropdownCard == card and ActiveDropdownFrame then
+		CloseDropdown()
+		return
+	end
+	if DropdownDebounce then
+		return
+	end
 	DropdownDebounce = true
 
 	CloseDropdown()
 	ActiveDropdownCard = card
-	Tween(card, {BackgroundColor3 = Theme.CardHover}, 0.15)
+	Tween(card, { BackgroundColor3 = Theme.CardHover }, 0.15)
 	local arrow = card:FindFirstChild("Arrow")
-	if arrow then arrow.Text = "v" end
+	if arrow then
+		arrow.Text = "v"
+	end
 
 	-- Calculate position relative to DropdownLayer so it sticks to the card
 	local cardAbs = card.AbsolutePosition
@@ -1006,7 +1185,7 @@ local function ToggleDropdown(card, buildContentFunction)
 		BackgroundColor3 = Theme.DropdownBg,
 		BorderSizePixel = 0,
 		Position = UDim2.new(0, relX, 0, relY),
-		Size = UDim2.new(0, card.AbsoluteSize.X, 0, 0),  -- Starts at height 0, expands with animation
+		Size = UDim2.new(0, card.AbsoluteSize.X, 0, 0), -- Starts at height 0, expands with animation
 		ZIndex = Z.Dropdown,
 		ClipsDescendants = true,
 		Active = true,
@@ -1016,32 +1195,13 @@ local function ToggleDropdown(card, buildContentFunction)
 	AddCorner(drop, 6)
 	AddStroke(drop, Theme.Border, 1)
 
-	-- Close button (X) inside dropdown
-	local closeDropBtn = Create("TextButton", {
-		Name = "CloseBtn",
-		Parent = drop,
-		BackgroundTransparency = 1,
-		Position = UDim2.new(1, -24, 0, 4),
-		Size = UDim2.new(0, 20, 0, 20),
-		Font = Enum.Font.GothamBold,
-		Text = "×",
-		TextColor3 = Theme.TextSecondary,
-		TextSize = 16,
-		ZIndex = Z.DropControl,
-		Active = true,
-		AutoButtonColor = false,
-	})
-	closeDropBtn.Activated:Connect(CloseDropdown)
-	closeDropBtn.MouseEnter:Connect(function() Tween(closeDropBtn, {TextColor3 = Theme.AccentRed}, 0.15) end)
-	closeDropBtn.MouseLeave:Connect(function() Tween(closeDropBtn, {TextColor3 = Theme.TextSecondary}, 0.15) end)
-
 	-- Scrollable area inside dropdown (holds toggles, labels, buttons)
 	local scroll = Create("ScrollingFrame", {
 		Name = "Scroll",
 		Parent = drop,
 		BackgroundTransparency = 1,
-		Position = UDim2.new(0, 0, 0, 26),
-		Size = UDim2.new(1, 0, 1, -26),
+		Position = UDim2.new(0, 0, 0, 0),
+		Size = UDim2.new(1, 0, 1, 0),
 		ScrollBarThickness = 3,
 		ScrollBarImageColor3 = Theme.ScrollBar,
 		CanvasSize = UDim2.new(0, 0, 0, 0),
@@ -1078,10 +1238,32 @@ local function ToggleDropdown(card, buildContentFunction)
 
 	scroll.CanvasSize = UDim2.new(0, 0, 0, contentHeight)
 	ActiveDropdownFrame = drop
-	Tween(drop, {Size = UDim2.new(0, width, 0, maxHeight)}, 0.2)
+	Tween(drop, { Size = UDim2.new(0, width, 0, maxHeight) }, 0.2)
 	StartStickyDropdown()
 
-	task.delay(0.25, function() DropdownDebounce = false end)
+	-- Apply smart scrollbar to dropdown scroll (checks if content overflows dropdown height)
+	local dropScrollOriginalThickness = scroll.ScrollBarThickness
+	local function UpdateDropScroll()
+		local pad = scroll:FindFirstChildOfClass("UIPadding")
+		local padding = pad and (pad.PaddingTop.Offset + pad.PaddingBottom.Offset) or 0
+		local contentH = listLayout.AbsoluteContentSize.Y + padding
+		local frameH = scroll.AbsoluteSize.Y
+
+		if contentH <= frameH then
+			scroll.ScrollBarThickness = 0
+			scroll.ScrollingEnabled = false
+		else
+			scroll.ScrollBarThickness = dropScrollOriginalThickness
+			scroll.ScrollingEnabled = true
+		end
+	end
+	listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(UpdateDropScroll)
+	scroll:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateDropScroll)
+	task.defer(UpdateDropScroll)
+
+	task.delay(0.25, function()
+		DropdownDebounce = false
+	end)
 end
 
 -- Creates a toggle switch (ON/OFF slider) inside a dropdown
@@ -1138,12 +1320,16 @@ local function CreateToggle(parent, text, defaultState, onToggleCallback)
 	local state = defaultState or false
 	toggleBg.Activated:Connect(function()
 		state = not state
-		Tween(toggleBg, {BackgroundColor3 = state and Theme.ToggleOn or Theme.ToggleBg}, 0.2)
-		Tween(knob, {Position = state and UDim2.new(1, -18, 0, 2) or UDim2.new(0, 2, 0, 2)}, 0.2)
-		if onToggleCallback then onToggleCallback(state) end
+		Tween(toggleBg, { BackgroundColor3 = state and Theme.ToggleOn or Theme.ToggleBg }, 0.2)
+		Tween(knob, { Position = state and UDim2.new(1, -18, 0, 2) or UDim2.new(0, 2, 0, 2) }, 0.2)
+		if onToggleCallback then
+			onToggleCallback(state)
+		end
 	end)
 
-	return container, function() return state end
+	return container, function()
+		return state
+	end
 end
 
 -- Creates a text label inside dropdown content
@@ -1187,6 +1373,11 @@ end
 -- Usage: ShowModal("Select Pet", {"Dog", "Cat"}, function(selected) print(selected) end)
 local function ShowModal(titleText, items, onSelectCallback)
 	ModalFrame.Title.Text = titleText
+	for _, child in pairs(ModalScroll:GetChildren()) do
+		if child:IsA("TextButton") then
+			child:Destroy()
+		end
+	end
 	for _, item in pairs(items) do
 		local btn = Create("TextButton", {
 			Parent = ModalScroll,
@@ -1204,7 +1395,9 @@ local function ShowModal(titleText, items, onSelectCallback)
 		AddCorner(btn, 4)
 		AddButtonEffects(btn, Theme.Card)
 		btn.Activated:Connect(function()
-			if onSelectCallback then onSelectCallback(item) end
+			if onSelectCallback then
+				onSelectCallback(item)
+			end
 			-- Flash accent color when selected
 			btn.BackgroundColor3 = Theme.Accent
 			task.wait(0.1)
@@ -1222,26 +1415,36 @@ end
 -- Adds an item to the searchable database
 -- Usage: RegisterSearch("Auto Hatch", "Home", "🥚", function() ... end)
 local function RegisterSearch(name, pageName, icon, action)
-	table.insert(SearchableItems, {Name = name, Page = pageName, Icon = icon, Action = action})
+	table.insert(SearchableItems, { Name = name, Page = pageName, Icon = icon, Action = action })
 end
 
 -- Updates the suggestion dropdown based on search text
 local function UpdateSuggestions()
 	-- Clear previous suggestions
 	for _, child in pairs(SuggestScroll:GetChildren()) do
-		if child:IsA("TextButton") then child:Destroy() end
+		if child:IsA("TextButton") then
+			child:Destroy()
+		end
 	end
 
 	local text = SearchBox.Text:lower()
-	if text == "" or text == "search" then SuggestFrame.Visible = false return end
+	if text == "" or text == "search" then
+		SuggestFrame.Visible = false
+		return
+	end
 
 	-- Find matching items
 	local matches = {}
 	for _, item in pairs(SearchableItems) do
-		if item.Name:lower():find(text, 1, true) then table.insert(matches, item) end
+		if item.Name:lower():find(text, 1, true) then
+			table.insert(matches, item)
+		end
 	end
 
-	if #matches == 0 then SuggestFrame.Visible = false return end
+	if #matches == 0 then
+		SuggestFrame.Visible = false
+		return
+	end
 
 	-- Position suggestion box directly below search bar
 	local absPos = SearchFrame.AbsolutePosition
@@ -1271,7 +1474,9 @@ local function UpdateSuggestions()
 		btn.Activated:Connect(function()
 			SuggestFrame.Visible = false
 			SearchBox.Text = "Search"
-			if item.Action then item.Action() end
+			if item.Action then
+				item.Action()
+			end
 		end)
 	end
 
@@ -1283,14 +1488,21 @@ end
 SearchBox:GetPropertyChangedSignal("Text"):Connect(UpdateSuggestions)
 -- Hide suggestions when focus is lost
 SearchBox.FocusLost:Connect(function()
-	if SearchBox.Text == "" then SearchBox.Text = "Search" end
+	if SearchBox.Text == "" then
+		SearchBox.Text = "Search"
+	end
 	task.wait(0.2)
 	SuggestFrame.Visible = false
 end)
 -- Show suggestions again if text exists when focused
 SearchBox.Focused:Connect(function()
-	if SearchBox.Text ~= "Search" and SearchBox.Text ~= "" then UpdateSuggestions() end
+	if SearchBox.Text ~= "Search" and SearchBox.Text ~= "" then
+		UpdateSuggestions()
+	end
 end)
+
+-- Apply smart scrollbar to search suggestions (after UpdateSuggestions is defined)
+SetupSmartScrollbar(SuggestScroll)
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- GLOBAL CLICK HANDLER (Closes dropdowns/suggestions when clicking outside)
@@ -1298,16 +1510,21 @@ end)
 -- ═══════════════════════════════════════════════════════════════════════
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	-- Only handle mouse clicks and touches
-	if input.UserInputType ~= Enum.UserInputType.MouseButton1 
-		and input.UserInputType ~= Enum.UserInputType.Touch then return end
+	if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
+		return
+	end
 	-- Ignore if game processed it (like clicking a TextBox)
-	if gameProcessed then return end
+	if gameProcessed then
+		return
+	end
 
 	local pos = input.Position
 
 	-- Helper: Check if click is inside a GUI element
 	local function isInside(gui)
-		if not gui or not gui.Parent then return false end
+		if not gui or not gui.Parent then
+			return false
+		end
 		local ap = gui.AbsolutePosition
 		local as = gui.AbsoluteSize
 		return pos.X >= ap.X and pos.X <= ap.X + as.X and pos.Y >= ap.Y and pos.Y <= ap.Y + as.Y
@@ -1322,8 +1539,12 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 
 	-- Close dropdown if clicking outside of it AND outside its parent card
 	if ActiveDropdownFrame and ActiveDropdownFrame.Parent then
-		if isInside(ActiveDropdownFrame) then return end
-		if ActiveDropdownCard and isInside(ActiveDropdownCard) then return end
+		if isInside(ActiveDropdownFrame) then
+			return
+		end
+		if ActiveDropdownCard and isInside(ActiveDropdownCard) then
+			return
+		end
 		CloseDropdown()
 	end
 end)
@@ -1335,8 +1556,8 @@ end)
 -- Switches to a new page with title, subtitle, and custom content
 local function SwitchPage(pageName, title, subtitle, contentBuilder)
 	CurrentPage = pageName
-	ContentTitle.Text = title
-	ContentSubtitle.Text = subtitle or ""
+	PageTitle.Text = title
+	PageSubtitle.Text = subtitle or ""
 	ClearContent()
 	contentBuilder()
 end
@@ -1350,294 +1571,189 @@ local Pages = {}
 
 -- ACCOUNT PAGE (User account info, logout)
 function Pages.Account()
-	SwitchPage("Account", "Account", "Exotic Hub account", function()
+	SwitchPage("Account", "Account", "", function()
 		local accountCard = CreateCard("Account", "👤", Theme.Accent)
 		accountCard.Activated:Connect(function()
-			ToggleDropdown(accountCard, function(scroll)
-				CreateLabel(scroll, "Key expires in 5 days 15\nhours 32 min", Theme.TextSecondary, 12)
-				local discordBtn = CreateBtn(scroll, "Join Discord", Theme.Card, 120)
-				discordBtn.Size = UDim2.new(1, -8, 0, 30)
-			end)
-		end)
-
-		local logoutCard = CreateCard("Logout", "🔒", Theme.AccentRed)
-		logoutCard.Activated:Connect(function()
-			ToggleDropdown(logoutCard, function(scroll)
-				local logoutBtn = CreateBtn(scroll, "Logout", Theme.AccentRed, 120)
-				logoutBtn.Size = UDim2.new(1, -8, 0, 30)
-				logoutBtn.Activated:Connect(function() print("Logout clicked!") end)
-			end)
+			ToggleDropdown(accountCard, function(scroll) end)
 		end)
 	end)
 end
-RegisterSearch("Account", "Account", "👤", function() SidebarButtons["Account"]() end)
-RegisterSearch("Logout", "Account", "🔒", function() SidebarButtons["Account"]() end)
+RegisterSearch("Account", "Account", "👤", function()
+	SidebarButtons["Account"]()
+end)
 
 -- HOME PAGE (Main features: Auto Hatch, System, Farm)
 function Pages.Home()
-	SwitchPage("Home", "Home", "Game Version: v2984 [US]", function()
-		local hatchCard = CreateCard("Auto Hatch", "🥚", Theme.Accent)
-		hatchCard.Activated:Connect(function()
-			ToggleDropdown(hatchCard, function(scroll)
-				CreateLabel(scroll, "🟢 Hatching Complete.\n\nPets In Inventory: 235 / 235\nMax Eggs Allowed: 13\nMax Pets Equip Allowed: 8\nEggs Planted: 13", Theme.TextSecondary, 11)
-				CreateLabel(scroll, "⚠️ [Warning] Do not trade,\nunfavourite or gift while\nthe hatching system is\nactive!", Theme.AccentRed, 11)
-				CreateToggle(scroll, "Enable Auto Hatch", false, function(isEnabled)
-					if isEnabled then AutoHatchScript:Toggle() else AutoHatchScript:Toggle() end
-				end)
-			end)
-		end)
-		RegisterSearch("Auto Hatch", "Home", "🥚", function() SidebarButtons["Home"]() end)
-
-		local systemCard = CreateCard("System", "⚙", Theme.Accent)
-		systemCard.Activated:Connect(function()
-			ToggleDropdown(systemCard, function(scroll)
-				CreateLabel(scroll, "⏸️ Pause all systems.\nThis does NOT pause\nhatching or mutation.", Theme.AccentOrange, 11)
-				CreateToggle(scroll, "Pause All Systems", false, function(isEnabled) print("Pause All:", isEnabled) end)
-			end)
-		end)
-		RegisterSearch("System", "Home", "⚙", function() SidebarButtons["Home"]() end)
-
-		local farmCard = CreateCard("Farm Details", "🌾", Theme.AccentGreen)
-		farmCard.Activated:Connect(function()
-			ToggleDropdown(farmCard, function(scroll)
-				CreateLabel(scroll, "Plants In Farm x0", Theme.AccentGreen, 12)
-				CreateToggle(scroll, "Enable Auto Farm", false, function(isEnabled)
-					if isEnabled then AutoFarmScript:Toggle() else AutoFarmScript:Toggle() end
-				end)
-			end)
-		end)
-	end)
+	SwitchPage("Home", "Home", "Game Version: ---- ", function() end)
 end
-RegisterSearch("Home", "Home", "🏠", function() SidebarButtons["Home"]() end)
+RegisterSearch("Home", "Home", "🏠", function()
+	SidebarButtons["Home"]()
+end)
 
 -- PREMIUM PAGE (Paid features, gifting, trading)
 function Pages.Premium()
-	SwitchPage("Premium", "Premium", "Premium Features", function()
-		local giftCard = CreateCard("🎁 Gifting / Trade 💎", "🎁", Theme.Accent)
-		giftCard.Activated:Connect(function()
-			ToggleDropdown(giftCard, function(scroll)
-				CreateToggle(scroll, "Auto Accept Gift", false, function(state) print("Auto Accept Gift:", state) end)
-				CreateToggle(scroll, "Auto Accept Trade", false, function(state) print("Auto Accept Trade:", state) end)
-				CreateLabel(scroll, "🐾 Pets", Theme.TextSecondary, 12)
+	SwitchPage("Premium", "Premium", "Premium Features", function() end)
+end
+RegisterSearch("Premium", "Premium", "💎", function()
+	SidebarButtons["Premium"]()
+end)
 
-				-- Pet selection button that opens a modal
-				local petSelBtn = Create("TextButton", {
+-- ═══════════════════════════════════════════════════════════════════════
+-- 🌱 SHOP PAGE (Seed auto-buy & single purchase)  (NEW SECTION)
+-- ═══════════════════════════════════════════════════════════════════════
+function Pages.Shop()
+	SwitchPage("Shop", "Shop", "Seed Auto-Buy", function()
+		-- Card 1: Auto Buy Seeds (dropdown with checkboxes + buy button)
+		local autoBuyCard = CreateCard("Auto Buy Seeds", "🌱", Theme.AccentGreen)
+		autoBuyCard.Activated:Connect(function()
+			ToggleDropdown(autoBuyCard, function(scroll)
+				CreateLabel(scroll, "Select seeds to auto-buy:", Theme.TextSecondary, 14)
+
+				local seedControls = {}
+				local seedCount = 0
+
+				if SeedData then
+					for key, data in pairs(SeedData) do
+						if typeof(data) == "table" then
+							local name = GetSeedName(key, data)
+							local price = GetSeedPrice(data)
+							local toggle, setState = CreateSeedToggle(scroll, name, price, function(state)
+								SelectedSeeds[name] = state and true or nil
+							end)
+							-- Restore previous selection state
+							if SelectedSeeds[name] then
+								setState(true)
+							end
+							seedControls[name] = setState
+							seedCount += 1
+						end
+					end
+				end
+
+				if seedCount == 0 then
+					CreateLabel(scroll, "No seed data loaded", Theme.AccentRed, 12)
+				end
+
+				CreateLabel(scroll, "", nil, 6)
+
+				-- Button row: Select All | Deselect All | Auto Buy
+				local btnRow = Create("Frame", {
 					Parent = scroll,
-					BackgroundColor3 = Theme.Card,
-					BorderSizePixel = 0,
-					Size = UDim2.new(1, -8, 0, 26),
-					Font = Enum.Font.Gotham,
-					Text = "Mimic Octopus    ^",
-					TextColor3 = Theme.TextPrimary,
-					TextSize = 12,
+					BackgroundTransparency = 1,
+					Size = UDim2.new(1, -8, 0, 30),
 					ZIndex = Z.DropControl,
-					Active = true,
-					AutoButtonColor = false,
 				})
-				AddCorner(petSelBtn, 4)
-				AddStroke(petSelBtn, Theme.Border, 1)
-				AddButtonEffects(petSelBtn, Theme.Card)
-				petSelBtn.Activated:Connect(function()
-					ShowModal("Select Pet", {"Mimic Octopus", "Rainbow Bird", "Bacon Pig", "Parasaurolophus", "Goose", "Seal"}, function(selected)
-						petSelBtn.Text = selected .. "    ^"
+
+				local selectAllBtn = CreateBtn(btnRow, "Select All", Theme.Card, 80)
+				selectAllBtn.Position = UDim2.new(0, 0, 0, 0)
+				selectAllBtn.Activated:Connect(function()
+					for _, setState in pairs(seedControls) do
+						setState(true)
+					end
+				end)
+
+				local deselectAllBtn = CreateBtn(btnRow, "Deselect All", Theme.Card, 90)
+				deselectAllBtn.Position = UDim2.new(0, 86, 0, 0)
+				deselectAllBtn.Activated:Connect(function()
+					for _, setState in pairs(seedControls) do
+						setState(false)
+					end
+				end)
+
+				local autoBuyBtn = CreateBtn(btnRow, "🛒 Buy", Theme.AccentGreen, 70)
+				autoBuyBtn.Position = UDim2.new(1, -70, 0, 0)
+
+				-- Status label (updated during buying)
+				local statusLabel = CreateLabel(scroll, "0 seeds selected", Theme.TextMuted, 12)
+
+				local function updateStatus()
+					local count = 0
+					for _ in pairs(SelectedSeeds) do
+						count += 1
+					end
+					statusLabel.Text = count .. " seed(s) selected"
+				end
+
+				autoBuyBtn.Activated:Connect(function()
+					if IsAutoBuying then
+						return
+					end
+					IsAutoBuying = true
+
+					local toBuy = {}
+					for name in pairs(SelectedSeeds) do
+						table.insert(toBuy, name)
+					end
+
+					if #toBuy == 0 then
+						statusLabel.Text = "⚠️ No seeds selected!"
+						statusLabel.TextColor3 = Theme.AccentRed
+						task.delay(1.5, function()
+							statusLabel.TextColor3 = Theme.TextMuted
+							updateStatus()
+						end)
+						IsAutoBuying = false
+						return
+					end
+
+					autoBuyBtn.Text = "..."
+					autoBuyBtn.BackgroundColor3 = Theme.TextMuted
+
+					for i, seedName in ipairs(toBuy) do
+						statusLabel.Text = "Buying " .. seedName .. " (" .. i .. "/" .. #toBuy .. ")..."
+						BuySeed(seedName)
+						task.wait(0.3)
+					end
+
+					statusLabel.Text = "✅ Bought " .. #toBuy .. " seed(s)!"
+					statusLabel.TextColor3 = Theme.AccentGreen
+					task.delay(2, function()
+						statusLabel.TextColor3 = Theme.TextMuted
+						updateStatus()
 					end)
-				end)
 
-				local btnRow = Create("Frame", {Parent = scroll, BackgroundTransparency = 1, Size = UDim2.new(1, -8, 0, 26), ZIndex = Z.DropControl})
-				local selAllBtn = CreateBtn(btnRow, "Select All", Theme.Accent, 70)
-				selAllBtn.Position = UDim2.new(0, 0, 0, 0)
-				local remAllBtn = CreateBtn(btnRow, "Remove All", Theme.AccentRed, 70)
-				remAllBtn.Position = UDim2.new(0, 75, 0, 0)
-
-				CreateLabel(scroll, "🧬 Mutations\n---", Theme.TextSecondary, 11)
-				CreateLabel(scroll, "Min Level 1\n1", Theme.TextSecondary, 11)
-				CreateLabel(scroll, "Max Level 99\n99", Theme.TextSecondary, 11)
-			end)
-		end)
-
-		-- Array of premium feature cards
-		local premiumItems = {
-			{"Pick Place", "🎯", Theme.AccentCyan},
-			{"PickPlace Override", "⚡", Theme.AccentYellow},
-			{"Enhancer Pro", "🔥", Theme.AccentOrange},
-			{"Test Options", "🧪", Theme.AccentGreen},
-			{"Horseman & Elephant", "🐴", Theme.Accent},
-			{"Premium Market", "🛒", Theme.Accent},
-			{"Matching Options", "🔥", Theme.AccentRed},
-			{"Experiments", "🧪", Theme.AccentGreen},
-			{"Trade World", "🌐", Theme.Accent}
-		}
-
-		for _, item in pairs(premiumItems) do
-			local card = CreateCard(item[1], item[2], item[3])
-			card.Activated:Connect(function()
-				ToggleDropdown(card, function(scroll)
-					CreateLabel(scroll, "Options for " .. item[1], Theme.TextSecondary, 12)
-				end)
-			end)
-			RegisterSearch(item[1], "Premium", item[2], function() SidebarButtons["Premium"]() end)
-		end
-	end)
-end
-RegisterSearch("Premium", "Premium", "💎", function() SidebarButtons["Premium"]() end)
-RegisterSearch("Gifting", "Premium", "🎁", function() SidebarButtons["Premium"]() end)
-RegisterSearch("Trade", "Premium", "💎", function() SidebarButtons["Premium"]() end)
-
--- HATCHING TEAMS PAGE (Egg reduction, team management)
-function Pages.HatchingTeams()
-	SwitchPage("Hatching Teams", "Hatching Teams", "Manage teams used for\nhatching pets efficiently.", function()
-		local eggCard = CreateCard("Egg Reduction [Peacock]", "🥚", Theme.Accent)
-		eggCard.Activated:Connect(function()
-			ToggleDropdown(eggCard, function(scroll)
-				CreateLabel(scroll, "⭐ Speeds up egg timer.\nPets: Mimics, Peacock,\nBald Eagles", Theme.AccentYellow, 11)
-				CreateLabel(scroll, "Selected: 8/8", Theme.TextSecondary, 11)
-
-				local btnRow = Create("Frame", {Parent = scroll, BackgroundTransparency = 1, Size = UDim2.new(1, -8, 0, 26), ZIndex = Z.DropControl})
-				local equipBtn = CreateBtn(btnRow, "Equip", Theme.Accent, 55)
-				equipBtn.Position = UDim2.new(0, 0, 0, 0)
-				local unequipBtn = CreateBtn(btnRow, "UnEquip", Theme.AccentRed, 55)
-				unequipBtn.Position = UDim2.new(0, 60, 0, 0)
-				local reloadBtn = CreateBtn(btnRow, "Reload", Theme.AccentGreen, 55)
-				reloadBtn.Position = UDim2.new(0, 120, 0, 0)
-
-				CreateLabel(scroll, "🍬 Pet Boosts\n---", Theme.TextSecondary, 11)
-				CreateToggle(scroll, "Enable Boosts", false, function(state) end)
-
-				local teamBtn = CreateBtn(scroll, "🥚 Egg Reduction Team", Theme.Card, 180)
-				teamBtn.Size = UDim2.new(1, -8, 0, 26)
-				teamBtn.Activated:Connect(function()
-					ShowModal("Reduction Team", {
-						"⭐61.05kg [UF]Rainbow Birb",
-						"⭐283.57kg [VE]Mimic Octopus",
-						"⭐284.98kg [UF]Mimic Octopus",
-						"⭐329.58kg [UF]Mimic Octopus",
-						"⭐355.93kg [UF]Mimic Octopus"
-					}, nil)
+					autoBuyBtn.Text = "🛒 Buy"
+					autoBuyBtn.BackgroundColor3 = Theme.AccentGreen
+					IsAutoBuying = false
 				end)
 			end)
 		end)
 
-		local teamItems = {
-			{"Hatch Egg [Koi]", "🐟", Theme.Accent},
-			{"Pet Size [Bronto]", "📏", Theme.Accent},
-			{"Sell Egg [Seal]", "💰", Theme.Accent},
-			{"Options", "⚙", Theme.Accent},
-			{"Auto Rejoin", "🔄", Theme.Accent},
-			{"Sticky Pets", "🧪", Theme.AccentGreen},
-			{"Pet Overrides", "🐾", Theme.Accent},
-			{"Egg Overrides", "🥚", Theme.Accent},
-			{"Pet Mutations", "🧬", Theme.Accent}
-		}
-
-		for _, item in pairs(teamItems) do
-			local card = CreateCard(item[1], item[2], item[3])
-			card.Activated:Connect(function()
-				ToggleDropdown(card, function(scroll)
-					CreateLabel(scroll, "Options for " .. item[1], Theme.TextSecondary, 12)
-				end)
-			end)
-		end
-	end)
-end
-RegisterSearch("Hatching Teams", "Hatching Teams", "🥚", function() SidebarButtons["Hatching Teams"]() end)
-
--- PET MANAGER PAGE (Feeding, toys, leveling)
-function Pages.PetManager()
-	SwitchPage("Pet Manager", "Pet Manager", "Feed, grow, and manage\nyour pets with ease.", function()
-		local feedCard = CreateCard("Pet Feeding System", "🍼", Theme.Accent)
-		feedCard.Activated:Connect(function()
-			ToggleDropdown(feedCard, function(scroll)
-				CreateLabel(scroll, "🔴 Not running", Theme.AccentRed, 11)
-				CreateLabel(scroll, "🐾 Exclude Pets\nSeal, Brontosaurus, Koi", Theme.TextSecondary, 11)
-				CreateLabel(scroll, "🌱 Exclude Plants\nFour Leaf Clover", Theme.TextSecondary, 11)
-				CreateLabel(scroll, "⚠️ Feeds all active pets\nwith hunger under 60%.", Theme.AccentYellow, 10)
-				CreateToggle(scroll, "Auto Feed Pet", false, function(isEnabled)
-					if isEnabled then AutoFeedScript:Toggle() else AutoFeedScript:Toggle() end
-				end)
-			end)
-		end)
-
-		local petItems = {
-			{"Auto Toys", "🧸", Theme.AccentOrange},
-			{"Pet Marmot", "🐿", Theme.Accent},
-			{"Pet Level-Up", "⬆", Theme.AccentCyan},
-			{"Red Panda", "🐼", Theme.AccentRed},
-			{"Chubby Chipmunk", "🐿", Theme.Accent},
-			{"Favorite Pets", "⭐", Theme.Accent},
-			{"Magpie Rewards", "🎁", Theme.AccentPink},
-			{"Easter Bunny", "🐰", Theme.Accent},
-			{"Bearded Dragon", "🐉", Theme.AccentGreen}
-		}
-
-		for _, item in pairs(petItems) do
-			local card = CreateCard(item[1], item[2], item[3])
-			card.Activated:Connect(function()
-				ToggleDropdown(card, function(scroll)
-					CreateLabel(scroll, "Options for " .. item[1], Theme.TextSecondary, 12)
-				end)
-			end)
-		end
-	end)
-end
-RegisterSearch("Pet Manager", "Pet Manager", "🐾", function() SidebarButtons["Pet Manager"]() end)
-
--- CRAFT AND COOK PAGE (Workbench, cooking, crafting)
-function Pages.CraftAndCook()
-	SwitchPage("Craft and Cook", "Craft and Cook", "Automatically craft items\nand manage your workbench", function()
-		local benchCard = CreateCard("🔥 Work Bench(s) 🔥", "🔥", Theme.AccentOrange)
-		benchCard.Activated:Connect(function()
-			ToggleDropdown(benchCard, function(scroll)
-				CreateLabel(scroll, "🔴 Not running", Theme.AccentRed, 11)
-				CreateLabel(scroll, "ℹ️ Select recipes and\n[Enable] to craft.", Theme.AccentCyan, 11)
-				CreateLabel(scroll, "⚠️ Auto-Craft your items\nautomatically.", Theme.AccentYellow, 10)
-				CreateToggle(scroll, "Auto-Craft", false, function(isEnabled)
-					if isEnabled then AutoCraftScript:Toggle() else AutoCraftScript:Toggle() end
-				end)
-			end)
-		end)
-
-		local cookCard = CreateCard("Cooking Pots", "🍳", Theme.AccentGreen)
-		cookCard.Activated:Connect(function()
-			ToggleDropdown(cookCard, function(scroll)
-				CreateLabel(scroll, "Cooking options...", Theme.TextSecondary, 12)
-			end)
-		end)
-
-		local teamCard = CreateCard("Craft Teams", "⚔", Theme.AccentCyan)
-		teamCard.Activated:Connect(function()
-			ToggleDropdown(teamCard, function(scroll)
-				CreateLabel(scroll, "Team options...", Theme.TextSecondary, 12)
+		-- Card 2: Buy Single Seed (opens modal picker)
+		local singleBuyCard = CreateCard("Buy Single Seed", "🛒", Theme.Accent)
+		singleBuyCard.Activated:Connect(function()
+			local seedNames = {}
+			if SeedData then
+				for key, data in pairs(SeedData) do
+					if typeof(data) == "table" then
+						table.insert(seedNames, GetSeedName(key, data))
+					end
+				end
+			end
+			table.sort(seedNames)
+			if #seedNames == 0 then
+				table.insert(seedNames, "No seeds available")
+			end
+			ShowModal("Select Seed to Buy", seedNames, function(selected)
+				if selected ~= "No seeds available" then
+					BuySeed(selected)
+				end
 			end)
 		end)
 	end)
 end
-RegisterSearch("Craft and Cook", "Craft and Cook", "🔥", function() SidebarButtons["Craft and Cook"]() end)
-
--- Placeholder for pages that aren't built yet
-function Pages.Placeholder(title, subtitle, icon)
-	return function()
-		SwitchPage(title, title, subtitle or "", function()
-			CreateCard("Coming Soon", icon or "📦", Theme.TextMuted)
-			CreateLabel(ContentScroll, "This feature is not yet available.", Theme.TextMuted, 16)
-		end)
-	end
-end
+RegisterSearch("Shop", "Shop", "🌱", function()
+	SidebarButtons["Shop"]()
+end)
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- SIDEBAR SETUP (Creates the left navigation buttons)
 -- ═══════════════════════════════════════════════════════════════════════
 local SidebarItems = {
-	{ Name = "Account",      Icon = "👤", Color = Theme.Accent,       Page = Pages.Account },
-	{ Name = "Home",         Icon = "🏠", Color = Theme.Accent,       Page = Pages.Home },
-	{ Name = "Premium",      Icon = "💎", Color = Theme.AccentPink,   Page = Pages.Premium },
-	{ Name = "Hatching Teams", Icon = "🥚", Color = Theme.AccentOrange, Page = Pages.HatchingTeams },
-	{ Name = "Eggs Priority", Icon = "🥚", Color = Theme.Accent, Page = Pages.Placeholder("Eggs Priority", "Manage egg priorities", "🥚") },
-	{ Name = "Pet Sell Settings", Icon = "💰", Color = Theme.Accent, Page = Pages.Placeholder("Pet Sell Settings", "Configure auto-sell", "💰") },
-	{ Name = "Plants & Packs", Icon = "🌱", Color = Theme.AccentGreen, Page = Pages.Placeholder("Plants & Packs", "Manage plants", "🌱") },
-	{ Name = "Event & Mutation", Icon = "🧬", Color = Theme.AccentCyan, Page = Pages.Placeholder("Event & Mutation", "Event settings", "🧬") },
-	{ Name = "Pet Manager",  Icon = "🐾", Color = Theme.AccentYellow, Page = Pages.PetManager },
-	{ Name = "Craft and Cook", Icon = "🔥", Color = Theme.AccentOrange, Page = Pages.CraftAndCook },
-	{ Name = "Fruit Collection", Icon = "🍎", Color = Theme.Accent, Page = Pages.Placeholder("Fruit Collection", "Collect fruits", "🍎") }
+	{ Name = "Account", Icon = "👤", Color = Theme.Accent, Page = Pages.Account },
+	{ Name = "Home", Icon = "🏠", Color = Theme.Accent, Page = Pages.Home },
+	{ Name = "Premium", Icon = "💎", Color = Theme.AccentPink, Page = Pages.Premium },
+	{ Name = "Shop", Icon = "🌱", Color = Theme.AccentGreen, Page = Pages.Shop }, -- 🌱 NEW
 }
 
 -- Create each sidebar button from the list above
@@ -1645,7 +1761,7 @@ for index, item in ipairs(SidebarItems) do
 	local btn = Create("TextButton", {
 		Name = item.Name,
 		Parent = SidebarScroll,
-		BackgroundColor3 = (index == 2) and Theme.Card or Theme.Sidebar,  -- Home is selected by default
+		BackgroundColor3 = (index == 2) and Theme.Card or Theme.Sidebar, -- Home is selected by default
 		BorderSizePixel = 0,
 		Size = UDim2.new(1, -10, 0, 32),
 		Position = UDim2.new(0, 5, 0, 0),
@@ -1667,18 +1783,22 @@ for index, item in ipairs(SidebarItems) do
 		for _, child in pairs(SidebarScroll:GetChildren()) do
 			if child:IsA("TextButton") then
 				local isSelected = (child.Name == item.Name)
-				Tween(child, {BackgroundColor3 = isSelected and Theme.Card or Theme.Sidebar}, 0.2)
+				Tween(child, { BackgroundColor3 = isSelected and Theme.Card or Theme.Sidebar }, 0.2)
 			end
 		end
-		item.Page()  -- Load the page content
+		item.Page() -- Load the page content
 	end
 
 	-- Hover effects (only if not currently selected)
 	btn.MouseEnter:Connect(function()
-		if CurrentPage ~= item.Name then Tween(btn, {BackgroundColor3 = Theme.CardHover}, 0.15) end
+		if CurrentPage ~= item.Name then
+			Tween(btn, { BackgroundColor3 = Theme.CardHover }, 0.15)
+		end
 	end)
 	btn.MouseLeave:Connect(function()
-		if CurrentPage ~= item.Name then Tween(btn, {BackgroundColor3 = Theme.Sidebar}, 0.15) end
+		if CurrentPage ~= item.Name then
+			Tween(btn, { BackgroundColor3 = Theme.Sidebar }, 0.15)
+		end
 	end)
 	btn.Activated:Connect(SidebarButtons[item.Name])
 	RegisterSearch(item.Name, item.Name, item.Icon, SidebarButtons[item.Name])
@@ -1691,7 +1811,8 @@ end
 if UserInputService.TouchEnabled then
 	local viewport = workspace.CurrentCamera.ViewportSize
 	-- Shrink window to fit within screen with 20px padding on sides, 40px on top/bottom
-	MainFrame.Size = UDim2.new(0, math.min(Config.WindowWidth, viewport.X - 20), 0, math.min(Config.WindowHeight, viewport.Y - 40))
+	MainFrame.Size =
+		UDim2.new(0, math.min(Config.WindowWidth, viewport.X - 20), 0, math.min(Config.WindowHeight, viewport.Y - 40))
 	-- Re-center the window
 	MainFrame.Position = UDim2.new(0.5, -MainFrame.Size.X.Offset / 2, 0.5, -MainFrame.Size.Y.Offset / 2)
 end
@@ -1699,7 +1820,3 @@ end
 -- ═══════════════════════════════════════════════════════════════════════
 -- STARTUP (Runs when the script first loads)
 -- ═══════════════════════════════════════════════════════════════════════
-Pages.Home()  -- Load the Home page by default
-print("✅ Exotic Hub PRO v10.8 loaded successfully!")
-print("📁 Click the 'Exotic' toggle button to show/hide the UI.")
-print("📁 Drag the toggle button to move it anywhere on screen.")
