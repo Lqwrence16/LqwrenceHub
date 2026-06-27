@@ -31,13 +31,13 @@ local playerGui = player:WaitForChild("PlayerGui")
 -- Edit these values to change the window size, sidebar width, and text.
 -- ═══════════════════════════════════════════════════════════════════════
 local Config = {
-	WindowWidth = 700,           -- How wide the UI window is (pixels)
-	WindowHeight = 450,          -- How tall the UI window is (pixels)
-	MinWindowWidth = 400,        -- Minimum width when resizing
-	MinWindowHeight = 300,       -- Minimum height when resizing
+	WindowWidth = 500,           -- How wide the UI window is (pixels)
+	WindowHeight = 300,          -- How tall the UI window is (pixels)
+	MinWindowWidth = 300,        -- Minimum width when resizing
+	MinWindowHeight = 200,       -- Minimum height when resizing
 	SidebarWidth = 160,          -- Width of the left sidebar (pixels)
 	EnableSearch = true,         -- Turn search on/off
-	ToggleButtonText = "Exotic", -- Text on the top-left toggle button
+	ToggleButtonText = "_Hub", -- Text on the top-left toggle button
 }
 -- ═══════════════════════════════════════════════════════════════════════
 -- 🎨 THEME SECTION
@@ -314,6 +314,8 @@ local ScreenGui = Create("ScreenGui", {
 	ResetOnSpawn = false,
 	ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 })-- ScreenGui is the root container that holds everything.
+AddCorner(ScreenGui, 8)
+AddStroke(ScreenGui, Theme.Border, 2)
 
 local ToggleBtn = Create("TextButton", {
 	Name = "ToggleBtn",
