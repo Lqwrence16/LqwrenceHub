@@ -95,9 +95,7 @@ local Z = {
 -- This is where you paste your actual game automation scripts.
 -- Each script has Start/Stop/Toggle functions.
 -- ═══════════════════════════════════════════════════════════════════════
-
--- Keep track of running scripts so we can stop them safely
-local RunningScripts = {}
+local RunningScripts = {}-- Keep track of running scripts so we can stop them safely
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- ⚙️ AUTO SCRIPT #1: Auto Hatch Example
@@ -242,17 +240,11 @@ local AutoCraftScript = {
 		end
 	end
 }
-
 -- ═══════════════════════════════════════════════════════════════════════
 -- HELPER FUNCTIONS
 -- Reusable utilities that make building UI faster and cleaner.
 -- ═══════════════════════════════════════════════════════════════════════
 
---[[
-    Create is a factory that makes a new Roblox UI instance.
-    Instead of writing 5 lines for every button, we write 1.
-    Example: Create("TextButton", {Text = "Click", Size = UDim2.new(...)})
-]]
 local function Create(className, properties)
 	local instance = Instance.new(className)
 	for property, value in pairs(properties or {}) do
@@ -261,10 +253,6 @@ local function Create(className, properties)
 	return instance
 end
 
---[[
-    Tween smoothly animates a property over time.
-    We use Quad Easing with Out direction for a natural feel.
-]]
 local function Tween(instance, properties, duration)
 	local tween = TweenService:Create(
 		instance,
@@ -275,19 +263,12 @@ local function Tween(instance, properties, duration)
 	return tween
 end
 
---[[
-    AddCorner gives a frame rounded corners.
-    radius = corner radius in pixels.
-]]
 local function AddCorner(instance, radius)
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, radius or 6)
 	corner.Parent = instance
 end
 
---[[
-    AddStroke draws a border outline around a frame.
-]]
 local function AddStroke(instance, color, thickness)
 	local stroke = Instance.new("UIStroke")
 	stroke.Color = color or Theme.Border
@@ -295,12 +276,6 @@ local function AddStroke(instance, color, thickness)
 	stroke.Parent = instance
 end
 
---[[
-    AddButtonEffects adds visual feedback to a button.
-    - PC: hover brightens the button
-    - Mobile / PC: press darkens briefly on click/touch
-    This makes the UI feel responsive on all devices.
-]]
 local function AddButtonEffects(btn, normalColor, hoverColor)
 	normalColor = normalColor or btn.BackgroundColor3
 	hoverColor = hoverColor or Theme.CardHover
@@ -333,16 +308,13 @@ end
 -- We build the ScreenGui and all permanent UI elements here.
 -- ═══════════════════════════════════════════════════════════════════════
 
--- ScreenGui is the root container that holds everything.
 local ScreenGui = Create("ScreenGui", {
 	Name = "ExoticHubPro",
 	Parent = playerGui,
 	ResetOnSpawn = false,
 	ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-})
+})-- ScreenGui is the root container that holds everything.
 
--- Toggle Button sits in the top-left corner of the screen.
--- It shows/hides the main window.
 local ToggleBtn = Create("TextButton", {
 	Name = "ToggleBtn",
 	Parent = ScreenGui,
@@ -357,11 +329,11 @@ local ToggleBtn = Create("TextButton", {
 	ZIndex = Z.Toggle,
 	Active = true,
 	AutoButtonColor = false,
-})
+})-- Toggle Button sits in the top-left corner of the screen, It shows/hides the main window.
 AddCorner(ToggleBtn, 4)
 AddStroke(ToggleBtn, Theme.Border, 1)
 
--- Main Window Frame is the big central panel.
+
 local MainFrame = Create("Frame", {
 	Name = "MainFrame",
 	Parent = ScreenGui,
@@ -372,12 +344,10 @@ local MainFrame = Create("Frame", {
 	ClipsDescendants = false,
 	Active = true,
 	ZIndex = Z.Base
-})
+})-- Main Window Frame is the big central panel.
 AddCorner(MainFrame, 8)
 AddStroke(MainFrame, Theme.Border, 2)
 
--- Toggle button click handler.
--- Uses Activated so it works on both PC and mobile.
 ToggleBtn.Activated:Connect(function()
 	MainFrame.Visible = not MainFrame.Visible
 	Tween(ToggleBtn, {
@@ -385,12 +355,10 @@ ToggleBtn.Activated:Connect(function()
 			and Color3.fromRGB(15, 15, 15) 
 			or Color3.fromRGB(30, 30, 30)
 	}, 0.2)
-end)
+end)-- Toggle button click handler, Uses Activated so it works on both PC and mobile.
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- DRAGGING SYSTEM
--- Lets the user drag the window by pressing anywhere on the main frame.
--- Works with mouse and touch.
 -- ═══════════════════════════════════════════════════════════════════════
 local isDragging = false
 local dragInput = nil
@@ -407,8 +375,6 @@ MainFrame.InputBegan:Connect(function(input)
 	end
 end)
 
--- We listen on UserInputService so dragging continues even if the
--- cursor/touch leaves the window area.
 UserInputService.InputChanged:Connect(function(input)
 	if input == dragInput and isDragging then
 		if input.UserInputType == Enum.UserInputType.MouseMovement 
@@ -420,7 +386,7 @@ UserInputService.InputChanged:Connect(function(input)
 			)
 		end
 	end
-end)
+end)-- We listen on UserInputService so dragging continues even if the, cursor/touch leaves the window area.
 
 UserInputService.InputEnded:Connect(function(input)
 	if input == dragInput then
@@ -450,7 +416,7 @@ local ResizeBtn = Create("TextButton", {
 	Parent = ResizeHandle,
 	BackgroundTransparency = 1,
 	Size = UDim2.new(1, 0, 1, 0),
-	Text = "",
+	Text = "//",
 	ZIndex = Z.MainUI + 1,
 	Active = true,
 	AutoButtonColor = false,
@@ -491,7 +457,6 @@ end)
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- TOP BAR
--- Contains the title and the search box.
 -- ═══════════════════════════════════════════════════════════════════════
 local TopBar = Create("Frame", {
 	Name = "TopBar",
@@ -502,7 +467,6 @@ local TopBar = Create("Frame", {
 	ZIndex = Z.MainUI,
 })
 
--- Title: "Exotic Hub PRO"
 local TitleLabel = Create("TextLabel", {
 	Name = "Title",
 	Parent = TopBar,
@@ -510,27 +474,12 @@ local TitleLabel = Create("TextLabel", {
 	Position = UDim2.new(0, 15, 0, 0),
 	Size = UDim2.new(0, 200, 1, 0),
 	Font = Enum.Font.GothamBold,
-	Text = "Exotic Hub ",
+	Text = "_Hub",
 	TextColor3 = Theme.TextPrimary,
 	TextSize = 18,
 	TextXAlignment = Enum.TextXAlignment.Left,
 	ZIndex = Z.MainUI + 1,
-})
-
--- "PRO" suffix in pink
-Create("TextLabel", {
-	Name = "ProSuffix",
-	Parent = TitleLabel,
-	BackgroundTransparency = 1,
-	Position = UDim2.new(1, 0, 0, 0),
-	Size = UDim2.new(0, 40, 1, 0),
-	Font = Enum.Font.GothamBold,
-	Text = "PRO",
-	TextColor3 = Theme.AccentPink,
-	TextSize = 18,
-	TextXAlignment = Enum.TextXAlignment.Left,
-	ZIndex = Z.MainUI + 1,
-})
+})-- Title
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- SEARCH BAR
@@ -547,7 +496,6 @@ local SearchFrame = Create("Frame", {
 AddCorner(SearchFrame, 12)
 AddStroke(SearchFrame, Theme.Border, 1)
 
--- Search icon (magnifying glass)
 Create("TextLabel", {
 	Name = "SearchIcon",
 	Parent = SearchFrame,
@@ -559,9 +507,8 @@ Create("TextLabel", {
 	TextColor3 = Theme.TextMuted,
 	TextSize = 12,
 	ZIndex = Z.MainUI + 3,
-})
+})-- Search icon
 
--- Search text input
 local SearchBox = Create("TextBox", {
 	Name = "SearchBox",
 	Parent = SearchFrame,
@@ -575,9 +522,8 @@ local SearchBox = Create("TextBox", {
 	ZIndex = Z.MainUI + 3,
 	ClearTextOnFocus = true,
 	Active = true,
-})
+})-- Search text input
 
--- Search suggestions dropdown (parented to ScreenGui so it floats above everything)
 local SuggestFrame = Create("Frame", {
 	Name = "Suggestions",
 	Parent = ScreenGui,
@@ -589,7 +535,7 @@ local SuggestFrame = Create("Frame", {
 	ZIndex = Z.Search,
 	ClipsDescendants = true,
 	Active = true,
-})
+})-- Search suggestions dropdown (parented to ScreenGui so it floats above everything)
 AddCorner(SuggestFrame, 6)
 AddStroke(SuggestFrame, Theme.Border, 1)
 
