@@ -3,80 +3,88 @@
     ║           EXOTIC HUB PRO - v10.8 Draggable Toggle Button           ║
     ║          Click to toggle UI, drag to move icon anywhere            ║
     ╚══════════════════════════════════════════════════════════════════════╝
+    
+    MOBILE NOTES:
+    - This script is designed for BOTH mobile and PC
+    - Touch inputs are handled alongside mouse inputs
+    - UI auto-scales for mobile screens at the bottom of this script
+    - Drag threshold prevents accidental toggles when swiping
 ]]
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SERVICES
+-- SERVICES (Roblox built-in systems we need access to)
 -- ═══════════════════════════════════════════════════════════════════════
-local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")           -- Access to player data
+local TweenService = game:GetService("TweenService") -- Smooth animations
+local UserInputService = game:GetService("UserInputService") -- Detects clicks/touches/keyboard
+local RunService = game:GetService("RunService")       -- Runs code every frame (for smooth dragging)
 
 -- ═══════════════════════════════════════════════════════════════════════
--- PLAYER SETUP
+-- PLAYER SETUP (Gets the local player who runs this script)
 -- ═══════════════════════════════════════════════════════════════════════
 local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+local playerGui = player:WaitForChild("PlayerGui")    -- Where UI elements are stored
 
 -- ═══════════════════════════════════════════════════════════════════════
--- 🔧 CONFIG SECTION
+-- 🔧 CONFIG SECTION (Easy-to-change settings for the whole UI)
 -- ═══════════════════════════════════════════════════════════════════════
 local Config = {
-	WindowWidth = 700,
-	WindowHeight = 450,
-	MinWindowWidth = 400,
-	MinWindowHeight = 300,
-	SidebarWidth = 160,
-	EnableSearch = true,
-	ToggleButtonText = "Exotic",
+	WindowWidth = 700,          -- Default width of main window (pixels)
+	WindowHeight = 450,         -- Default height of main window (pixels)
+	MinWindowWidth = 400,       -- Minimum width when resizing (prevents too small)
+	MinWindowHeight = 300,      -- Minimum height when resizing
+	SidebarWidth = 160,         -- Width of left navigation panel
+	EnableSearch = true,        -- Enable the search bar feature
+	ToggleButtonText = "Exotic", -- Text shown on the floating toggle button
 }
 
 -- ═══════════════════════════════════════════════════════════════════════
--- 🎨 THEME SECTION
+-- 🎨 THEME SECTION (Color palette - change these to retheme the whole UI)
 -- ═══════════════════════════════════════════════════════════════════════
 local Theme = {
-	Background = Color3.fromRGB(22, 22, 26),
-	Sidebar = Color3.fromRGB(28, 28, 32),
-	Content = Color3.fromRGB(18, 18, 22),
-	Card = Color3.fromRGB(35, 35, 40),
-	CardHover = Color3.fromRGB(45, 45, 50),
-	DropdownBg = Color3.fromRGB(32, 32, 38),
-	TextPrimary = Color3.fromRGB(255, 255, 255),
-	TextSecondary = Color3.fromRGB(160, 160, 160),
-	TextMuted = Color3.fromRGB(100, 100, 100),
-	Accent = Color3.fromRGB(147, 112, 219),
-	AccentPink = Color3.fromRGB(255, 105, 180),
-	AccentCyan = Color3.fromRGB(0, 255, 255),
-	AccentGreen = Color3.fromRGB(50, 205, 50),
-	AccentRed = Color3.fromRGB(255, 80, 80),
-	AccentOrange = Color3.fromRGB(255, 165, 0),
-	AccentYellow = Color3.fromRGB(255, 215, 0),
-	Border = Color3.fromRGB(50, 50, 55),
-	ToggleBg = Color3.fromRGB(60, 60, 65),
-	ToggleOn = Color3.fromRGB(147, 112, 219),
-	ScrollBar = Color3.fromRGB(60, 60, 70),
+	Background = Color3.fromRGB(22, 22, 26),      -- Main window background
+	Sidebar = Color3.fromRGB(28, 28, 32),           -- Left panel background
+	Content = Color3.fromRGB(18, 18, 22),          -- Right content area background
+	Card = Color3.fromRGB(35, 35, 40),             -- Card/button background
+	CardHover = Color3.fromRGB(45, 45, 50),         -- Card color when mouse hovers
+	DropdownBg = Color3.fromRGB(32, 32, 38),        -- Dropdown menu background
+	TextPrimary = Color3.fromRGB(255, 255, 255),   -- Main text color (white)
+	TextSecondary = Color3.fromRGB(160, 160, 160), -- Secondary text (gray)
+	TextMuted = Color3.fromRGB(100, 100, 100),      -- Dimmed text
+	Accent = Color3.fromRGB(147, 112, 219),         -- Purple accent color
+	AccentPink = Color3.fromRGB(255, 105, 180),     -- Pink accent
+	AccentCyan = Color3.fromRGB(0, 255, 255),       -- Cyan accent
+	AccentGreen = Color3.fromRGB(50, 205, 50),      -- Green accent
+	AccentRed = Color3.fromRGB(255, 80, 80),         -- Red accent (for warnings/errors)
+	AccentOrange = Color3.fromRGB(255, 165, 0),     -- Orange accent
+	AccentYellow = Color3.fromRGB(255, 215, 0),     -- Yellow accent
+	Border = Color3.fromRGB(50, 50, 55),            -- Border/stroke color
+	ToggleBg = Color3.fromRGB(60, 60, 65),          -- Toggle switch background (OFF)
+	ToggleOn = Color3.fromRGB(147, 112, 219),       -- Toggle switch background (ON)
+	ScrollBar = Color3.fromRGB(60, 60, 70),         -- Scrollbar color
 }
 
 -- ═══════════════════════════════════════════════════════════════════════
--- ZINDEX HIERARCHY
+-- ZINDEX HIERARCHY (Controls which elements appear on top of others)
+-- Higher number = appears in front of lower numbers
 -- ═══════════════════════════════════════════════════════════════════════
 local Z = {
-	Base        = 1,
-	Toggle      = 10,
-	MainUI      = 10,
-	Card        = 20,
-	Dropdown    = 100,
-	DropScroll  = 110,
-	DropControl = 120,
-	Modal       = 200,
-	ModalFrame  = 210,
-	ModalCtrl   = 220,
-	Search      = 500,
+	Base        = 1,    -- Main window
+	Toggle      = 10,   -- Floating toggle button
+	MainUI      = 10,   -- Main UI elements
+	Card        = 20,   -- Cards inside content area
+	Dropdown    = 100,  -- Dropdown menus (must be above cards)
+	DropScroll  = 110,  -- Dropdown scroll area
+	DropControl = 120,  -- Dropdown buttons/controls
+	Modal       = 200,  -- Dark overlay behind popups
+	ModalFrame  = 210,  -- Popup window itself
+	ModalCtrl   = 220,  -- Buttons inside popup
+	Search      = 500,  -- Search suggestions (highest priority)
 }
 
 -- ═══════════════════════════════════════════════════════════════════════
--- ⚙️ AUTO SCRIPTS
+-- ⚙️ AUTO SCRIPTS (Placeholder automation scripts - replace with real ones)
+-- Each script has: Name, IsRunning flag, Start/Stop/Toggle functions
 -- ═══════════════════════════════════════════════════════════════════════
 local AutoHatchScript = {
 	Name = "AutoHatch", IsRunning = false,
@@ -104,8 +112,11 @@ local AutoCraftScript = {
 }
 
 -- ═══════════════════════════════════════════════════════════════════════
--- HELPER FUNCTIONS
+-- HELPER FUNCTIONS (Reusable tools to create UI elements faster)
 -- ═══════════════════════════════════════════════════════════════════════
+
+-- Creates a new UI instance and applies properties to it
+-- Usage: local frame = Create("Frame", {BackgroundColor3 = Color3.new(1,0,0), Size = UDim2.new(0,100,0,100)})
 local function Create(className, properties)
 	local instance = Instance.new(className)
 	for property, value in pairs(properties or {}) do
@@ -114,18 +125,24 @@ local function Create(className, properties)
 	return instance
 end
 
+-- Smoothly animates a property change (like color fade, position slide)
+-- Usage: Tween(button, {BackgroundColor3 = Color3.new(1,0,0)}, 0.3)
 local function Tween(instance, properties, duration)
 	local tween = TweenService:Create(instance, TweenInfo.new(duration or 0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), properties)
 	tween:Play()
 	return tween
 end
 
+-- Adds rounded corners to any UI element
+-- Usage: AddCorner(myButton, 8) -- 8 pixel radius
 local function AddCorner(instance, radius)
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, radius or 6)
 	corner.Parent = instance
 end
 
+-- Adds a colored border around any UI element
+-- Usage: AddStroke(myFrame, Color3.new(1,1,1), 2)
 local function AddStroke(instance, color, thickness)
 	local stroke = Instance.new("UIStroke")
 	stroke.Color = color or Theme.Border
@@ -133,11 +150,16 @@ local function AddStroke(instance, color, thickness)
 	stroke.Parent = instance
 end
 
+-- Adds hover/press visual effects to buttons
+-- Changes color on mouse enter, touch begin, and reverts on leave/end
+-- Usage: AddButtonEffects(myButton, normalColor, hoverColor)
 local function AddButtonEffects(btn, normalColor, hoverColor)
 	normalColor = normalColor or btn.BackgroundColor3
 	hoverColor = hoverColor or Theme.CardHover
+	-- Mouse hover (PC)
 	btn.MouseEnter:Connect(function() Tween(btn, {BackgroundColor3 = hoverColor}, 0.15) end)
 	btn.MouseLeave:Connect(function() Tween(btn, {BackgroundColor3 = normalColor}, 0.15) end)
+	-- Touch press (Mobile)
 	btn.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 			Tween(btn, {BackgroundColor3 = hoverColor}, 0.1)
@@ -151,27 +173,28 @@ local function AddButtonEffects(btn, normalColor, hoverColor)
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- MAIN UI CREATION
+-- MAIN UI CREATION (Building the screen that holds everything)
 -- ═══════════════════════════════════════════════════════════════════════
 local ScreenGui = Create("ScreenGui", {
 	Name = "ExoticHubPro",
 	Parent = playerGui,
 	ResetOnSpawn = false,
-	ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+	DisplayOrder = 999,  -- ⬅️ ADD THIS: Renders above ALL other game UIs
 })
 
 -- ═══════════════════════════════════════════════════════════════════════
--- MAIN WINDOW FRAME
+-- MAIN WINDOW FRAME (The big draggable window)
 -- ═══════════════════════════════════════════════════════════════════════
 local MainFrame = Create("Frame", {
 	Name = "MainFrame",
 	Parent = ScreenGui,
 	BackgroundColor3 = Theme.Background,
 	BorderSizePixel = 0,
-	Position = UDim2.new(0.5, -Config.WindowWidth / 2, 0.5, -Config.WindowHeight / 2),
+	Position = UDim2.new(0.5, -Config.WindowWidth / 2, 0.5, -Config.WindowHeight / 2), -- Centered
 	Size = UDim2.new(0, Config.WindowWidth, 0, Config.WindowHeight),
-	ClipsDescendants = false,
-	Active = true,
+	ClipsDescendants = false,          -- Allows dropdowns to extend outside
+	Active = true,                     -- Enables interaction
 	ZIndex = Z.Base,
 	Visible = true,
 })
@@ -179,16 +202,16 @@ AddCorner(MainFrame, 12)
 AddStroke(MainFrame, Theme.Border, 2)
 
 -- ═══════════════════════════════════════════════════════════════════════
--- TOGGLE BUTTON (ICON)
+-- TOGGLE BUTTON (ICON) - Floating button to show/hide the UI
 -- Click = toggle MainFrame visible/hidden
--- Drag  = move button anywhere on screen
+-- Drag  = move button anywhere on screen (mobile friendly)
 -- ═══════════════════════════════════════════════════════════════════════
 local ToggleBtn = Create("TextButton", {
 	Name = "ToggleBtn",
 	Parent = ScreenGui,
 	BackgroundColor3 = Color3.fromRGB(15, 15, 15),
 	BorderSizePixel = 0,
-	Position = UDim2.new(0, 8, 0, 8),
+	Position = UDim2.new(0, 8, 0, 8),  -- Top-left corner default
 	Size = UDim2.new(0, 55, 0, 28),
 	Font = Enum.Font.GothamBold,
 	Text = Config.ToggleButtonText,
@@ -196,23 +219,28 @@ local ToggleBtn = Create("TextButton", {
 	TextSize = 13,
 	ZIndex = Z.Toggle,
 	Active = true,
-	AutoButtonColor = false,
+	AutoButtonColor = false,           -- We handle color manually
 })
 AddCorner(ToggleBtn, 6)
 AddStroke(ToggleBtn, Theme.Border, 1)
 
 --[[
-    DRAG & CLICK DETECTION FOR TOGGLE BUTTON
-    We track the starting input position and the button's starting position.
-    On InputChanged, we move the button by the delta.
-    On InputEnded, if total movement was small, we treat it as a click.
+    DRAG & CLICK DETECTION FOR TOGGLE BUTTON (Mobile Compatible)
+    
+    HOW IT WORKS:
+    1. When you press down (touch or click), we record the starting position
+    2. While holding, if you move more than 8 pixels, we treat it as a DRAG
+    3. If you release and moved less than 8 pixels, we treat it as a CLICK (toggle UI)
+    
+    This prevents the UI from toggling when you just want to drag the button.
 ]]
-local toggleDragActive = false
-local toggleDragInputObj = nil
-local toggleStartInputPos = nil
-local toggleStartBtnPos = nil
-local toggleClickThreshold = 8  -- pixels
+local toggleDragActive = false        -- Is user currently dragging?
+local toggleDragInputObj = nil      -- Stores which input is being tracked
+local toggleStartInputPos = nil     -- Where the touch/click started
+local toggleStartBtnPos = nil       -- Where the button was when touch started
+local toggleClickThreshold = 8      -- Pixels of movement to distinguish click vs drag
 
+-- When user starts touching the button
 ToggleBtn.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 
 		or input.UserInputType == Enum.UserInputType.Touch then
@@ -223,6 +251,7 @@ ToggleBtn.InputBegan:Connect(function(input)
 	end
 end)
 
+-- While dragging, update button position to follow finger/mouse
 UserInputService.InputChanged:Connect(function(input)
 	if toggleDragActive then
 		if input.UserInputType == Enum.UserInputType.MouseMovement 
@@ -238,13 +267,14 @@ UserInputService.InputChanged:Connect(function(input)
 	end
 end)
 
+-- When user releases touch/click
 UserInputService.InputEnded:Connect(function(input)
 	if toggleDragActive and input == toggleDragInputObj then
 		local delta = input.Position - toggleStartInputPos
 		toggleDragActive = false
 		toggleDragInputObj = nil
 
-		-- If barely moved, treat as a click → toggle UI
+		-- If barely moved, treat as a CLICK → toggle UI visibility
 		if math.abs(delta.X) <= toggleClickThreshold and math.abs(delta.Y) <= toggleClickThreshold then
 			MainFrame.Visible = not MainFrame.Visible
 			Tween(ToggleBtn, {
@@ -255,7 +285,8 @@ UserInputService.InputEnded:Connect(function(input)
 end)
 
 -- ═══════════════════════════════════════════════════════════════════════
--- MAIN WINDOW DRAG
+-- MAIN WINDOW DRAG (Drag the top bar to move the whole window)
+-- Same logic as toggle button but moves MainFrame instead
 -- ═══════════════════════════════════════════════════════════════════════
 local isDragging = false
 local dragInput = nil
@@ -293,9 +324,13 @@ UserInputService.InputEnded:Connect(function(input)
 end)
 
 -- ═══════════════════════════════════════════════════════════════════════
--- RESIZING SYSTEM
--- Corner = both axes. Bottom bar = height only. Position never changes.
+-- RESIZING SYSTEM (Make window bigger/smaller)
+-- Corner handle = resize both width and height
+-- Bottom bar = resize height only
+-- Position never changes (window stays anchored at top-left while resizing)
 -- ═══════════════════════════════════════════════════════════════════════
+
+-- CORNER RESIZE HANDLE (Bottom-right corner triangle)
 local ResizeHandle = Create("Frame", {
 	Name = "ResizeHandle",
 	Parent = MainFrame,
@@ -320,6 +355,7 @@ Create("TextLabel", {
 	ZIndex = Z.MainUI + 3,
 })
 
+-- Invisible button on top of corner handle for easier touch targeting
 local ResizeBtn = Create("TextButton", {
 	Name = "ResizeBtn",
 	Parent = ResizeHandle,
@@ -331,6 +367,7 @@ local ResizeBtn = Create("TextButton", {
 	AutoButtonColor = false,
 })
 
+-- BOTTOM RESIZE BAR (Drag bottom edge to change height only)
 local BottomResizeBar = Create("Frame", {
 	Name = "BottomResizeBar",
 	Parent = MainFrame,
@@ -366,7 +403,8 @@ local BottomResizeBtn = Create("TextButton", {
 	AutoButtonColor = false,
 })
 
--- Corner resize
+-- CORNER RESIZE LOGIC (Changes both width and height)
+-- Uses RenderStepped for smooth 60fps resizing while dragging
 local isResizingCorner = false
 ResizeBtn.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 
@@ -375,22 +413,25 @@ ResizeBtn.InputBegan:Connect(function(input)
 		local startSize = MainFrame.Size
 		local startMousePos = input.Position
 		local connection
+		-- Runs every frame while resizing for smooth updates
 		connection = RunService.RenderStepped:Connect(function()
 			if not isResizingCorner then connection:Disconnect() return end
 			local currentMouse = UserInputService:GetMouseLocation()
 			local delta = currentMouse - Vector2.new(startMousePos.X, startMousePos.Y)
+			-- math.max prevents shrinking below minimum size
 			MainFrame.Size = UDim2.new(
 				0, math.max(Config.MinWindowWidth, startSize.X.Offset + delta.X),
 				0, math.max(Config.MinWindowHeight, startSize.Y.Offset + delta.Y)
 			)
 		end)
+		-- Detect when user releases touch/click
 		input.Changed:Connect(function()
 			if input.UserInputState == Enum.UserInputState.End then isResizingCorner = false end
 		end)
 	end
 end)
 
--- Bottom bar resize
+-- BOTTOM BAR RESIZE LOGIC (Changes height only)
 local isResizingBottom = false
 BottomResizeBtn.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 
@@ -415,7 +456,7 @@ BottomResizeBtn.InputBegan:Connect(function(input)
 end)
 
 -- ═══════════════════════════════════════════════════════════════════════
--- TOP BAR
+-- TOP BAR (Title area + search bar + close button)
 -- ═══════════════════════════════════════════════════════════════════════
 local TopBar = Create("Frame", {
 	Name = "TopBar",
@@ -441,6 +482,7 @@ local TitleLabel = Create("TextLabel", {
 	ZIndex = Z.MainUI + 1,
 })
 
+-- "PRO" suffix in pink
 Create("TextLabel", {
 	Name = "ProSuffix",
 	Parent = TitleLabel,
@@ -456,7 +498,7 @@ Create("TextLabel", {
 })
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SEARCH BAR
+-- SEARCH BAR (Find features quickly by typing)
 -- ═══════════════════════════════════════════════════════════════════════
 local SearchFrame = Create("Frame", {
 	Name = "SearchFrame",
@@ -470,6 +512,7 @@ local SearchFrame = Create("Frame", {
 AddCorner(SearchFrame, 12)
 AddStroke(SearchFrame, Theme.Border, 1)
 
+-- Magnifying glass icon
 Create("TextLabel", {
 	Name = "SearchIcon",
 	Parent = SearchFrame,
@@ -483,6 +526,7 @@ Create("TextLabel", {
 	ZIndex = Z.MainUI + 3,
 })
 
+-- Text input field
 local SearchBox = Create("TextBox", {
 	Name = "SearchBox",
 	Parent = SearchFrame,
@@ -494,13 +538,14 @@ local SearchBox = Create("TextBox", {
 	TextColor3 = Theme.TextMuted,
 	TextSize = 12,
 	ZIndex = Z.MainUI + 3,
-	ClearTextOnFocus = true,
+	ClearTextOnFocus = true,    -- Clears "Search" text when clicked
 	Active = true,
 })
 
+-- Dropdown suggestion box (appears below search bar when typing)
 local SuggestFrame = Create("Frame", {
 	Name = "Suggestions",
-	Parent = ScreenGui,
+	Parent = ScreenGui,         -- Parented to ScreenGui so it can float above everything
 	BackgroundColor3 = Theme.DropdownBg,
 	BorderSizePixel = 0,
 	Position = UDim2.new(0, 0, 0, 0),
@@ -534,7 +579,7 @@ Create("UIListLayout", {
 })
 
 -- ═══════════════════════════════════════════════════════════════════════
--- CLOSE BUTTON
+-- CLOSE BUTTON (Hides the main window, doesn't destroy it)
 -- ═══════════════════════════════════════════════════════════════════════
 local CloseBtn = Create("TextButton", {
 	Name = "CloseBtn",
@@ -556,7 +601,7 @@ CloseBtn.MouseLeave:Connect(function() Tween(CloseBtn, {TextColor3 = Theme.TextS
 CloseBtn.Activated:Connect(function() MainFrame.Visible = false end)
 
 -- ═══════════════════════════════════════════════════════════════════════
--- LEFT SIDEBAR
+-- LEFT SIDEBAR (Navigation menu with page buttons)
 -- ═══════════════════════════════════════════════════════════════════════
 local Sidebar = Create("Frame", {
 	Name = "Sidebar",
@@ -569,6 +614,7 @@ local Sidebar = Create("Frame", {
 })
 AddCorner(Sidebar, 12)
 
+-- Scrollable container for sidebar buttons (in case there are many pages)
 local SidebarScroll = Create("ScrollingFrame", {
 	Name = "Scroll",
 	Parent = Sidebar,
@@ -577,7 +623,7 @@ local SidebarScroll = Create("ScrollingFrame", {
 	Size = UDim2.new(1, 0, 1, -10),
 	ScrollBarThickness = 2,
 	ScrollBarImageColor3 = Theme.ScrollBar,
-	AutomaticCanvasSize = Enum.AutomaticSize.Y,
+	AutomaticCanvasSize = Enum.AutomaticSize.Y,  -- Auto-expands as buttons are added
 	ZIndex = Z.MainUI + 1,
 	ScrollingEnabled = true,
 	Active = true,
@@ -590,7 +636,7 @@ Create("UIListLayout", {
 })
 
 -- ═══════════════════════════════════════════════════════════════════════
--- CONTENT AREA
+-- CONTENT AREA (Right side where cards and dropdowns appear)
 -- ═══════════════════════════════════════════════════════════════════════
 local ContentFrame = Create("Frame", {
 	Name = "ContentFrame",
@@ -600,10 +646,11 @@ local ContentFrame = Create("Frame", {
 	Position = UDim2.new(0, Config.SidebarWidth, 0, 40),
 	Size = UDim2.new(1, -Config.SidebarWidth, 1, -40),
 	ZIndex = Z.MainUI,
-	ClipsDescendants = true,
+	ClipsDescendants = true,    -- Prevents content from spilling out
 })
 AddCorner(ContentFrame, 12)
 
+-- Page title (e.g., "Home", "Premium")
 local ContentTitle = Create("TextLabel", {
 	Name = "Title",
 	Parent = ContentFrame,
@@ -618,6 +665,7 @@ local ContentTitle = Create("TextLabel", {
 	ZIndex = Z.MainUI + 1,
 })
 
+-- Subtitle/description under the title
 local ContentSubtitle = Create("TextLabel", {
 	Name = "Subtitle",
 	Parent = ContentFrame,
@@ -632,6 +680,7 @@ local ContentSubtitle = Create("TextLabel", {
 	ZIndex = Z.MainUI + 1,
 })
 
+-- Scrollable grid that holds all the cards
 local ContentScroll = Create("ScrollingFrame", {
 	Name = "ContentScroll",
 	Parent = ContentFrame,
@@ -647,6 +696,7 @@ local ContentScroll = Create("ScrollingFrame", {
 	ClipsDescendants = true,
 })
 
+-- Grid layout: 2 columns, each cell is 36 pixels tall
 Create("UIGridLayout", {
 	Parent = ContentScroll,
 	CellSize = UDim2.new(0.5, -5, 0, 36),
@@ -655,7 +705,8 @@ Create("UIGridLayout", {
 })
 
 -- ═══════════════════════════════════════════════════════════════════════
--- DROPDOWN LAYER
+-- DROPDOWN LAYER (Invisible container that holds dropdown menus)
+-- This sits on top of content but is invisible - dropdowns are placed inside it
 -- ═══════════════════════════════════════════════════════════════════════
 local DropdownLayer = Create("Frame", {
 	Name = "DropdownLayer",
@@ -670,13 +721,13 @@ local DropdownLayer = Create("Frame", {
 })
 
 -- ═══════════════════════════════════════════════════════════════════════
--- MODAL POPUP
+-- MODAL POPUP (Centered popup window for selections like "Select Pet")
 -- ═══════════════════════════════════════════════════════════════════════
 local ModalOverlay = Create("Frame", {
 	Name = "ModalOverlay",
 	Parent = ScreenGui,
 	BackgroundColor3 = Color3.fromRGB(0, 0, 0),
-	BackgroundTransparency = 0.5,
+	BackgroundTransparency = 0.5,     -- Semi-transparent black background
 	BorderSizePixel = 0,
 	Size = UDim2.new(1, 0, 1, 0),
 	Visible = false,
@@ -746,6 +797,7 @@ Create("UIListLayout", {
 	SortOrder = Enum.SortOrder.LayoutOrder
 })
 
+-- Close modal and clear its contents
 ModalDone.Activated:Connect(function()
 	ModalOverlay.Visible = false
 	for _, child in pairs(ModalScroll:GetChildren()) do
@@ -754,7 +806,7 @@ ModalDone.Activated:Connect(function()
 end)
 
 -- ═══════════════════════════════════════════════════════════════════════
--- FOOTER
+-- FOOTER (Small text at bottom of content area)
 -- ═══════════════════════════════════════════════════════════════════════
 Create("TextLabel", {
 	Name = "Footer",
@@ -771,23 +823,25 @@ Create("TextLabel", {
 })
 
 -- ═══════════════════════════════════════════════════════════════════════
--- STATE VARIABLES
+-- STATE VARIABLES (Track what's currently happening in the UI)
 -- ═══════════════════════════════════════════════════════════════════════
-local CurrentPage = "Home"
-local ActiveDropdownCard = nil
-local ActiveDropdownFrame = nil
-local IsClosingDropdown = false
-local DropdownDebounce = false
-local SidebarButtons = {}
-local SearchableItems = {}
-local CardLayoutOrder = 0
-local StickyHeartbeat = nil
+local CurrentPage = "Home"              -- Which page is currently shown
+local ActiveDropdownCard = nil        -- Which card opened the current dropdown
+local ActiveDropdownFrame = nil       -- The currently open dropdown frame
+local IsClosingDropdown = false       -- Prevents double-closing animation
+local DropdownDebounce = false        -- Prevents rapid clicking while animating
+local SidebarButtons = {}             -- Table storing all sidebar button functions
+local SearchableItems = {}            -- Table of items that can be searched
+local CardLayoutOrder = 0             -- Counter for card ordering (auto-increments)
+local StickyHeartbeat = nil           -- Connection that updates dropdown position every frame
 
 -- ═══════════════════════════════════════════════════════════════════════
--- STICKY DROPDOWN
+-- STICKY DROPDOWN (Keeps dropdown attached to its card when scrolling)
 -- ═══════════════════════════════════════════════════════════════════════
-local CloseDropdown  -- forward declaration so UpdateDropdownPosition can call it
+local CloseDropdown  -- Forward declaration (defined later)
 
+-- Updates dropdown position to stay attached to its parent card
+-- Called every frame via RunService.Heartbeat while dropdown is open
 local function UpdateDropdownPosition()
 	if not ActiveDropdownFrame or not ActiveDropdownCard then return end
 	if not ActiveDropdownCard.Parent then CloseDropdown() return end
@@ -798,18 +852,22 @@ local function UpdateDropdownPosition()
 	ActiveDropdownFrame.Position = UDim2.new(0, relX, 0, relY)
 end
 
+-- Starts the "sticky" behavior - dropdown follows card as you scroll
 local function StartStickyDropdown()
 	if StickyHeartbeat then StickyHeartbeat:Disconnect() StickyHeartbeat = nil end
 	StickyHeartbeat = RunService.Heartbeat:Connect(UpdateDropdownPosition)
 end
 
+-- Stops the sticky behavior when dropdown closes
 local function StopStickyDropdown()
 	if StickyHeartbeat then StickyHeartbeat:Disconnect() StickyHeartbeat = nil end
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- DROPDOWN SYSTEM
+-- DROPDOWN SYSTEM (Opens/closes dropdown menus under cards)
 -- ═══════════════════════════════════════════════════════════════════════
+
+-- Closes the currently open dropdown with an animation
 function CloseDropdown()
 	if IsClosingDropdown or not ActiveDropdownFrame then return end
 	IsClosingDropdown = true
@@ -831,8 +889,9 @@ function CloseDropdown()
 	IsClosingDropdown = false
 end
 
+-- Clears all cards from the content area (called when switching pages)
 local function ClearContent()
-	ContentScroll.CanvasPosition = Vector2.new(0, 0)
+	ContentScroll.CanvasPosition = Vector2.new(0, 0)  -- Reset scroll to top
 	CloseDropdown()
 	for _, child in pairs(ContentScroll:GetChildren()) do
 		if child:IsA("Frame") or child:IsA("TextButton") then child:Destroy() end
@@ -841,8 +900,12 @@ local function ClearContent()
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- UI BUILDERS
+-- UI BUILDERS (Functions that create reusable UI components)
 -- ═══════════════════════════════════════════════════════════════════════
+
+-- Creates a card button in the content grid
+-- Usage: CreateCard("Auto Hatch", "🥚", Theme.Accent)
+-- Returns: The card button instance (so you can connect click events)
 local function CreateCard(title, icon, iconColor)
 	local card = Create("TextButton", {
 		Name = title,
@@ -861,6 +924,7 @@ local function CreateCard(title, icon, iconColor)
 	AddCorner(card, 6)
 	AddStroke(card, Theme.Border, 1)
 
+	-- Icon label (emoji)
 	Create("TextLabel", {
 		Name = "Icon",
 		Parent = card,
@@ -874,6 +938,7 @@ local function CreateCard(title, icon, iconColor)
 		ZIndex = Z.Card + 1,
 	})
 
+	-- Title text
 	Create("TextLabel", {
 		Name = "Title",
 		Parent = card,
@@ -888,6 +953,7 @@ local function CreateCard(title, icon, iconColor)
 		ZIndex = Z.Card + 1,
 	})
 
+	-- Arrow indicator (">" when closed, "v" when open)
 	Create("TextLabel", {
 		Name = "Arrow",
 		Parent = card,
@@ -901,6 +967,7 @@ local function CreateCard(title, icon, iconColor)
 		ZIndex = Z.Card + 1,
 	})
 
+	-- Hover effects (only if not the active dropdown card)
 	card.MouseEnter:Connect(function()
 		if ActiveDropdownCard ~= card then Tween(card, {BackgroundColor3 = Theme.CardHover}, 0.15) end
 	end)
@@ -911,6 +978,9 @@ local function CreateCard(title, icon, iconColor)
 	return card
 end
 
+-- Opens a dropdown menu under a card
+-- card: The card button that was clicked
+-- buildContentFunction: A function that receives a scroll frame and adds content to it
 local function ToggleDropdown(card, buildContentFunction)
 	if IsClosingDropdown then return end
 	if ActiveDropdownCard == card and ActiveDropdownFrame then CloseDropdown() return end
@@ -923,18 +993,20 @@ local function ToggleDropdown(card, buildContentFunction)
 	local arrow = card:FindFirstChild("Arrow")
 	if arrow then arrow.Text = "v" end
 
+	-- Calculate position relative to DropdownLayer so it sticks to the card
 	local cardAbs = card.AbsolutePosition
 	local layerAbs = DropdownLayer.AbsolutePosition
 	local relX = cardAbs.X - layerAbs.X
 	local relY = cardAbs.Y - layerAbs.Y + card.AbsoluteSize.Y + 2
 
+	-- Create the dropdown container
 	local drop = Create("TextButton", {
 		Name = "Dropdown",
 		Parent = DropdownLayer,
 		BackgroundColor3 = Theme.DropdownBg,
 		BorderSizePixel = 0,
 		Position = UDim2.new(0, relX, 0, relY),
-		Size = UDim2.new(0, card.AbsoluteSize.X, 0, 0),
+		Size = UDim2.new(0, card.AbsoluteSize.X, 0, 0),  -- Starts at height 0, expands with animation
 		ZIndex = Z.Dropdown,
 		ClipsDescendants = true,
 		Active = true,
@@ -944,6 +1016,7 @@ local function ToggleDropdown(card, buildContentFunction)
 	AddCorner(drop, 6)
 	AddStroke(drop, Theme.Border, 1)
 
+	-- Close button (X) inside dropdown
 	local closeDropBtn = Create("TextButton", {
 		Name = "CloseBtn",
 		Parent = drop,
@@ -962,6 +1035,7 @@ local function ToggleDropdown(card, buildContentFunction)
 	closeDropBtn.MouseEnter:Connect(function() Tween(closeDropBtn, {TextColor3 = Theme.AccentRed}, 0.15) end)
 	closeDropBtn.MouseLeave:Connect(function() Tween(closeDropBtn, {TextColor3 = Theme.TextSecondary}, 0.15) end)
 
+	-- Scrollable area inside dropdown (holds toggles, labels, buttons)
 	local scroll = Create("ScrollingFrame", {
 		Name = "Scroll",
 		Parent = drop,
@@ -993,9 +1067,11 @@ local function ToggleDropdown(card, buildContentFunction)
 		PaddingRight = UDim.new(0, 8),
 	})
 
+	-- Call the provided function to fill the dropdown with content
 	buildContentFunction(scroll)
 	task.wait()
 
+	-- Calculate height based on content, cap at 260 pixels max
 	local contentHeight = listLayout.AbsoluteContentSize.Y + 16
 	local maxHeight = math.min(contentHeight, 260)
 	local width = card.AbsoluteSize.X
@@ -1008,6 +1084,8 @@ local function ToggleDropdown(card, buildContentFunction)
 	task.delay(0.25, function() DropdownDebounce = false end)
 end
 
+-- Creates a toggle switch (ON/OFF slider) inside a dropdown
+-- Returns: The container frame, and a function to get current state
 local function CreateToggle(parent, text, defaultState, onToggleCallback)
 	local container = Create("Frame", {
 		Name = text .. "Toggle",
@@ -1018,6 +1096,7 @@ local function CreateToggle(parent, text, defaultState, onToggleCallback)
 		Active = true,
 	})
 
+	-- Label text
 	Create("TextLabel", {
 		Parent = container,
 		BackgroundTransparency = 1,
@@ -1031,6 +1110,7 @@ local function CreateToggle(parent, text, defaultState, onToggleCallback)
 		ZIndex = Z.DropControl,
 	})
 
+	-- Toggle background (changes color based on state)
 	local toggleBg = Create("TextButton", {
 		Parent = container,
 		BackgroundColor3 = defaultState and Theme.ToggleOn or Theme.ToggleBg,
@@ -1044,6 +1124,7 @@ local function CreateToggle(parent, text, defaultState, onToggleCallback)
 	})
 	AddCorner(toggleBg, 10)
 
+	-- The sliding knob
 	local knob = Create("Frame", {
 		Parent = toggleBg,
 		BackgroundColor3 = Color3.fromRGB(255, 255, 255),
@@ -1065,6 +1146,7 @@ local function CreateToggle(parent, text, defaultState, onToggleCallback)
 	return container, function() return state end
 end
 
+-- Creates a text label inside dropdown content
 local function CreateLabel(parent, text, textColor, fontSize)
 	return Create("TextLabel", {
 		Parent = parent,
@@ -1080,6 +1162,7 @@ local function CreateLabel(parent, text, textColor, fontSize)
 	})
 end
 
+-- Creates a standard button inside dropdown content
 local function CreateBtn(parent, text, bgColor, width)
 	local btn = Create("TextButton", {
 		Parent = parent,
@@ -1100,6 +1183,8 @@ local function CreateBtn(parent, text, bgColor, width)
 	return btn
 end
 
+-- Shows a centered modal popup with a list of selectable items
+-- Usage: ShowModal("Select Pet", {"Dog", "Cat"}, function(selected) print(selected) end)
 local function ShowModal(titleText, items, onSelectCallback)
 	ModalFrame.Title.Text = titleText
 	for _, item in pairs(items) do
@@ -1120,6 +1205,7 @@ local function ShowModal(titleText, items, onSelectCallback)
 		AddButtonEffects(btn, Theme.Card)
 		btn.Activated:Connect(function()
 			if onSelectCallback then onSelectCallback(item) end
+			-- Flash accent color when selected
 			btn.BackgroundColor3 = Theme.Accent
 			task.wait(0.1)
 			btn.BackgroundColor3 = Theme.Card
@@ -1130,13 +1216,18 @@ local function ShowModal(titleText, items, onSelectCallback)
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SEARCH SYSTEM
+-- SEARCH SYSTEM (Register items and filter them when typing)
 -- ═══════════════════════════════════════════════════════════════════════
+
+-- Adds an item to the searchable database
+-- Usage: RegisterSearch("Auto Hatch", "Home", "🥚", function() ... end)
 local function RegisterSearch(name, pageName, icon, action)
 	table.insert(SearchableItems, {Name = name, Page = pageName, Icon = icon, Action = action})
 end
 
+-- Updates the suggestion dropdown based on search text
 local function UpdateSuggestions()
+	-- Clear previous suggestions
 	for _, child in pairs(SuggestScroll:GetChildren()) do
 		if child:IsA("TextButton") then child:Destroy() end
 	end
@@ -1144,6 +1235,7 @@ local function UpdateSuggestions()
 	local text = SearchBox.Text:lower()
 	if text == "" or text == "search" then SuggestFrame.Visible = false return end
 
+	-- Find matching items
 	local matches = {}
 	for _, item in pairs(SearchableItems) do
 		if item.Name:lower():find(text, 1, true) then table.insert(matches, item) end
@@ -1151,11 +1243,13 @@ local function UpdateSuggestions()
 
 	if #matches == 0 then SuggestFrame.Visible = false return end
 
+	-- Position suggestion box directly below search bar
 	local absPos = SearchFrame.AbsolutePosition
 	local absSize = SearchFrame.AbsoluteSize
 	SuggestFrame.Position = UDim2.new(0, absPos.X, 0, absPos.Y + absSize.Y + 4)
 	SuggestFrame.Size = UDim2.new(0, absSize.X, 0, math.min(#matches * 32 + 10, 200))
 
+	-- Create suggestion buttons
 	for _, item in pairs(matches) do
 		local btn = Create("TextButton", {
 			Parent = SuggestScroll,
@@ -1185,25 +1279,33 @@ local function UpdateSuggestions()
 	SuggestFrame.Visible = true
 end
 
+-- Update suggestions as user types
 SearchBox:GetPropertyChangedSignal("Text"):Connect(UpdateSuggestions)
+-- Hide suggestions when focus is lost
 SearchBox.FocusLost:Connect(function()
 	if SearchBox.Text == "" then SearchBox.Text = "Search" end
 	task.wait(0.2)
 	SuggestFrame.Visible = false
 end)
+-- Show suggestions again if text exists when focused
 SearchBox.Focused:Connect(function()
 	if SearchBox.Text ~= "Search" and SearchBox.Text ~= "" then UpdateSuggestions() end
 end)
 
 -- ═══════════════════════════════════════════════════════════════════════
--- GLOBAL CLICK HANDLER
+-- GLOBAL CLICK HANDLER (Closes dropdowns/suggestions when clicking outside)
+-- This runs for EVERY click/touch on screen
 -- ═══════════════════════════════════════════════════════════════════════
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	-- Only handle mouse clicks and touches
 	if input.UserInputType ~= Enum.UserInputType.MouseButton1 
 		and input.UserInputType ~= Enum.UserInputType.Touch then return end
+	-- Ignore if game processed it (like clicking a TextBox)
 	if gameProcessed then return end
 
 	local pos = input.Position
+
+	-- Helper: Check if click is inside a GUI element
 	local function isInside(gui)
 		if not gui or not gui.Parent then return false end
 		local ap = gui.AbsolutePosition
@@ -1211,12 +1313,14 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		return pos.X >= ap.X and pos.X <= ap.X + as.X and pos.Y >= ap.Y and pos.Y <= ap.Y + as.Y
 	end
 
+	-- Close search suggestions if clicking outside
 	if SuggestFrame and SuggestFrame.Visible then
 		if not isInside(SearchFrame) and not isInside(SuggestFrame) then
 			SuggestFrame.Visible = false
 		end
 	end
 
+	-- Close dropdown if clicking outside of it AND outside its parent card
 	if ActiveDropdownFrame and ActiveDropdownFrame.Parent then
 		if isInside(ActiveDropdownFrame) then return end
 		if ActiveDropdownCard and isInside(ActiveDropdownCard) then return end
@@ -1225,8 +1329,10 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 -- ═══════════════════════════════════════════════════════════════════════
--- PAGE SYSTEM
+-- PAGE SYSTEM (Switches between different sections of the hub)
 -- ═══════════════════════════════════════════════════════════════════════
+
+-- Switches to a new page with title, subtitle, and custom content
 local function SwitchPage(pageName, title, subtitle, contentBuilder)
 	CurrentPage = pageName
 	ContentTitle.Text = title
@@ -1235,11 +1341,14 @@ local function SwitchPage(pageName, title, subtitle, contentBuilder)
 	contentBuilder()
 end
 
+-- Table that holds all page functions
 local Pages = {}
 
 -- ═══════════════════════════════════════════════════════════════════════
--- PAGES
+-- PAGES (Each function defines the content of a sidebar section)
 -- ═══════════════════════════════════════════════════════════════════════
+
+-- ACCOUNT PAGE (User account info, logout)
 function Pages.Account()
 	SwitchPage("Account", "Account", "Exotic Hub account", function()
 		local accountCard = CreateCard("Account", "👤", Theme.Accent)
@@ -1264,6 +1373,7 @@ end
 RegisterSearch("Account", "Account", "👤", function() SidebarButtons["Account"]() end)
 RegisterSearch("Logout", "Account", "🔒", function() SidebarButtons["Account"]() end)
 
+-- HOME PAGE (Main features: Auto Hatch, System, Farm)
 function Pages.Home()
 	SwitchPage("Home", "Home", "Game Version: v2984 [US]", function()
 		local hatchCard = CreateCard("Auto Hatch", "🥚", Theme.Accent)
@@ -1300,6 +1410,7 @@ function Pages.Home()
 end
 RegisterSearch("Home", "Home", "🏠", function() SidebarButtons["Home"]() end)
 
+-- PREMIUM PAGE (Paid features, gifting, trading)
 function Pages.Premium()
 	SwitchPage("Premium", "Premium", "Premium Features", function()
 		local giftCard = CreateCard("🎁 Gifting / Trade 💎", "🎁", Theme.Accent)
@@ -1309,6 +1420,7 @@ function Pages.Premium()
 				CreateToggle(scroll, "Auto Accept Trade", false, function(state) print("Auto Accept Trade:", state) end)
 				CreateLabel(scroll, "🐾 Pets", Theme.TextSecondary, 12)
 
+				-- Pet selection button that opens a modal
 				local petSelBtn = Create("TextButton", {
 					Parent = scroll,
 					BackgroundColor3 = Theme.Card,
@@ -1343,6 +1455,7 @@ function Pages.Premium()
 			end)
 		end)
 
+		-- Array of premium feature cards
 		local premiumItems = {
 			{"Pick Place", "🎯", Theme.AccentCyan},
 			{"PickPlace Override", "⚡", Theme.AccentYellow},
@@ -1370,6 +1483,7 @@ RegisterSearch("Premium", "Premium", "💎", function() SidebarButtons["Premium"
 RegisterSearch("Gifting", "Premium", "🎁", function() SidebarButtons["Premium"]() end)
 RegisterSearch("Trade", "Premium", "💎", function() SidebarButtons["Premium"]() end)
 
+-- HATCHING TEAMS PAGE (Egg reduction, team management)
 function Pages.HatchingTeams()
 	SwitchPage("Hatching Teams", "Hatching Teams", "Manage teams used for\nhatching pets efficiently.", function()
 		local eggCard = CreateCard("Egg Reduction [Peacock]", "🥚", Theme.Accent)
@@ -1427,6 +1541,7 @@ function Pages.HatchingTeams()
 end
 RegisterSearch("Hatching Teams", "Hatching Teams", "🥚", function() SidebarButtons["Hatching Teams"]() end)
 
+-- PET MANAGER PAGE (Feeding, toys, leveling)
 function Pages.PetManager()
 	SwitchPage("Pet Manager", "Pet Manager", "Feed, grow, and manage\nyour pets with ease.", function()
 		local feedCard = CreateCard("Pet Feeding System", "🍼", Theme.Accent)
@@ -1466,6 +1581,7 @@ function Pages.PetManager()
 end
 RegisterSearch("Pet Manager", "Pet Manager", "🐾", function() SidebarButtons["Pet Manager"]() end)
 
+-- CRAFT AND COOK PAGE (Workbench, cooking, crafting)
 function Pages.CraftAndCook()
 	SwitchPage("Craft and Cook", "Craft and Cook", "Automatically craft items\nand manage your workbench", function()
 		local benchCard = CreateCard("🔥 Work Bench(s) 🔥", "🔥", Theme.AccentOrange)
@@ -1497,6 +1613,7 @@ function Pages.CraftAndCook()
 end
 RegisterSearch("Craft and Cook", "Craft and Cook", "🔥", function() SidebarButtons["Craft and Cook"]() end)
 
+-- Placeholder for pages that aren't built yet
 function Pages.Placeholder(title, subtitle, icon)
 	return function()
 		SwitchPage(title, title, subtitle or "", function()
@@ -1507,7 +1624,7 @@ function Pages.Placeholder(title, subtitle, icon)
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SIDEBAR SETUP
+-- SIDEBAR SETUP (Creates the left navigation buttons)
 -- ═══════════════════════════════════════════════════════════════════════
 local SidebarItems = {
 	{ Name = "Account",      Icon = "👤", Color = Theme.Accent,       Page = Pages.Account },
@@ -1523,11 +1640,12 @@ local SidebarItems = {
 	{ Name = "Fruit Collection", Icon = "🍎", Color = Theme.Accent, Page = Pages.Placeholder("Fruit Collection", "Collect fruits", "🍎") }
 }
 
+-- Create each sidebar button from the list above
 for index, item in ipairs(SidebarItems) do
 	local btn = Create("TextButton", {
 		Name = item.Name,
 		Parent = SidebarScroll,
-		BackgroundColor3 = (index == 2) and Theme.Card or Theme.Sidebar,
+		BackgroundColor3 = (index == 2) and Theme.Card or Theme.Sidebar,  -- Home is selected by default
 		BorderSizePixel = 0,
 		Size = UDim2.new(1, -10, 0, 32),
 		Position = UDim2.new(0, 5, 0, 0),
@@ -1542,17 +1660,20 @@ for index, item in ipairs(SidebarItems) do
 	})
 	AddCorner(btn, 4)
 
+	-- Store the button's click function so we can call it from search
 	SidebarButtons[item.Name] = function()
 		CurrentPage = item.Name
+		-- Highlight the selected button, dim others
 		for _, child in pairs(SidebarScroll:GetChildren()) do
 			if child:IsA("TextButton") then
 				local isSelected = (child.Name == item.Name)
 				Tween(child, {BackgroundColor3 = isSelected and Theme.Card or Theme.Sidebar}, 0.2)
 			end
 		end
-		item.Page()
+		item.Page()  -- Load the page content
 	end
 
+	-- Hover effects (only if not currently selected)
 	btn.MouseEnter:Connect(function()
 		if CurrentPage ~= item.Name then Tween(btn, {BackgroundColor3 = Theme.CardHover}, 0.15) end
 	end)
@@ -1564,18 +1685,21 @@ for index, item in ipairs(SidebarItems) do
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- MOBILE SUPPORT
+-- MOBILE SUPPORT (Auto-adjusts UI size for smaller screens)
+-- If the device has a touchscreen, we shrink the window to fit the screen
 -- ═══════════════════════════════════════════════════════════════════════
 if UserInputService.TouchEnabled then
 	local viewport = workspace.CurrentCamera.ViewportSize
+	-- Shrink window to fit within screen with 20px padding on sides, 40px on top/bottom
 	MainFrame.Size = UDim2.new(0, math.min(Config.WindowWidth, viewport.X - 20), 0, math.min(Config.WindowHeight, viewport.Y - 40))
+	-- Re-center the window
 	MainFrame.Position = UDim2.new(0.5, -MainFrame.Size.X.Offset / 2, 0.5, -MainFrame.Size.Y.Offset / 2)
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- STARTUP
+-- STARTUP (Runs when the script first loads)
 -- ═══════════════════════════════════════════════════════════════════════
-Pages.Home()
+Pages.Home()  -- Load the Home page by default
 print("✅ Exotic Hub PRO v10.8 loaded successfully!")
 print("📁 Click the 'Exotic' toggle button to show/hide the UI.")
 print("📁 Drag the toggle button to move it anywhere on screen.")
