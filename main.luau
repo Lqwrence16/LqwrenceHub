@@ -1,7 +1,7 @@
 --[[
     ╔══════════════════════════════════════════════════════════════════════╗
-    ║           EXOTIC HUB PRO - v10.5 Draggable Toggle & Resize         ║
-    ║          Rounded corners, draggable icon, bottom resize grip       ║
+    ║           EXOTIC HUB PRO - v10.6 Rounded Corners Fix               ║
+    ║          All window corners now smoothly rounded                   ║
     ╚══════════════════════════════════════════════════════════════════════╝
 
     📁 WHERE TO PUT YOUR AUTOMATION CODE:
@@ -648,6 +648,7 @@ end)
 -- ═══════════════════════════════════════════════════════════════════════
 -- TOP BAR
 -- Contains the title and the search box.
+-- Rounded top corners so it matches MainFrame's rounded corners.
 -- ═══════════════════════════════════════════════════════════════════════
 local TopBar = Create("Frame", {
     Name = "TopBar",
@@ -657,6 +658,7 @@ local TopBar = Create("Frame", {
     Size = UDim2.new(1, 0, 0, 40),
     ZIndex = Z.MainUI,
 })
+AddCorner(TopBar, 12)  -- <-- Rounded top corners to match MainFrame
 
 -- Title: "Exotic Hub PRO"
 local TitleLabel = Create("TextLabel", {
@@ -799,6 +801,7 @@ end)
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- LEFT SIDEBAR
+-- Rounded corners so the bottom-left matches MainFrame's rounded corner.
 -- ═══════════════════════════════════════════════════════════════════════
 local Sidebar = Create("Frame", {
     Name = "Sidebar",
@@ -809,6 +812,7 @@ local Sidebar = Create("Frame", {
     Size = UDim2.new(0, Config.SidebarWidth, 1, -40),
     ZIndex = Z.MainUI,
 })
+AddCorner(Sidebar, 12)  -- <-- Rounded corners to match MainFrame
 
 local SidebarScroll = Create("ScrollingFrame", {
     Name = "Scroll",
@@ -833,6 +837,7 @@ Create("UIListLayout", {
 -- ═══════════════════════════════════════════════════════════════════════
 -- CONTENT AREA
 -- Right panel where feature cards and dropdowns appear.
+-- Rounded corners so the bottom-right matches MainFrame's rounded corner.
 -- ═══════════════════════════════════════════════════════════════════════
 local ContentFrame = Create("Frame", {
     Name = "ContentFrame",
@@ -844,6 +849,7 @@ local ContentFrame = Create("Frame", {
     ZIndex = Z.MainUI,
     ClipsDescendants = true,
 })
+AddCorner(ContentFrame, 12)  -- <-- Rounded corners to match MainFrame
 
 -- Page title
 local ContentTitle = Create("TextLabel", {
@@ -2277,5 +2283,5 @@ end
 -- Open the Home page by default and print a success message.
 -- ═══════════════════════════════════════════════════════════════════════
 Pages.Home()
-print("✅ Exotic Hub PRO v10.5 loaded successfully!")
+print("✅ Exotic Hub PRO v10.6 loaded successfully!")
 print("📁 Look for ⚙️ markers to insert your automation scripts")
