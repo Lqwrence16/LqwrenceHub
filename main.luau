@@ -345,7 +345,7 @@ local MainFrame = Create("Frame", {
 	Active = true,
 	ZIndex = Z.Base
 })-- Main Window Frame is the big central panel.
-AddCorner(MainFrame, 0)
+AddCorner(MainFrame, 8)
 AddStroke(MainFrame, Theme.Border, 2)
 
 ToggleBtn.Activated:Connect(function()
@@ -374,6 +374,15 @@ MainFrame.InputBegan:Connect(function(input)
 		frameStartPos = MainFrame.Position
 	end
 end)
+ToggleBtn.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 
+		or input.UserInputType == Enum.UserInputType.Touch then
+		isDragging = true
+		dragInput = input
+		dragStartPos = input.Position
+		frameStartPos = ToggleBtn.Position
+	end
+end)
 
 UserInputService.InputChanged:Connect(function(input)
 	if input == dragInput and isDragging then
@@ -381,6 +390,10 @@ UserInputService.InputChanged:Connect(function(input)
 			or input.UserInputType == Enum.UserInputType.Touch then
 			local delta = input.Position - dragStartPos
 			MainFrame.Position = UDim2.new(
+				frameStartPos.X.Scale, frameStartPos.X.Offset + delta.X,
+				frameStartPos.Y.Scale, frameStartPos.Y.Offset + delta.Y
+			)
+			ToggleBtn.Position = UDim2.new(
 				frameStartPos.X.Scale, frameStartPos.X.Offset + delta.X,
 				frameStartPos.Y.Scale, frameStartPos.Y.Offset + delta.Y
 			)
