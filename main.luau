@@ -345,7 +345,7 @@ local MainFrame = Create("Frame", {
 	Active = true,
 	ZIndex = Z.Base
 })-- Main Window Frame is the big central panel.
-AddCorner(MainFrame, 8)
+AddCorner(MainFrame, 0)
 AddStroke(MainFrame, Theme.Border, 2)
 
 ToggleBtn.Activated:Connect(function()
