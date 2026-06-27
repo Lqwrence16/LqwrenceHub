@@ -1,7 +1,7 @@
 --[[
     ╔══════════════════════════════════════════════════════════════════════╗
-    ║           EXOTIC HUB PRO - v10.4 Dropdown Layer Fix                ║
-    ║          Dropdown scrolls with card, renders in front              ║
+    ║           EXOTIC HUB PRO - v10.5 Draggable Toggle & Resize         ║
+    ║          Rounded corners, draggable icon, bottom resize grip       ║
     ╚══════════════════════════════════════════════════════════════════════╝
 
     📁 WHERE TO PUT YOUR AUTOMATION CODE:
@@ -352,8 +352,11 @@ local ScreenGui = Create("ScreenGui", {
     ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 })
 
--- Toggle Button sits in the top-left corner of the screen.
--- It shows/hides the main window.
+-- ═══════════════════════════════════════════════════════════════════════
+-- TOGGLE BUTTON
+-- Small button in the top-left corner. Shows/hides the main window.
+-- NOW DRAGGABLE: you can drag it anywhere on screen.
+-- ═══════════════════════════════════════════════════════════════════════
 local ToggleBtn = Create("TextButton", {
     Name = "ToggleBtn",
     Parent = ScreenGui,
@@ -369,10 +372,66 @@ local ToggleBtn = Create("TextButton", {
     Active = true,
     AutoButtonColor = false,
 })
-AddCorner(ToggleBtn, 4)
+AddCorner(ToggleBtn, 6)
 AddStroke(ToggleBtn, Theme.Border, 1)
 
--- Main Window Frame is the big central panel.
+--[[
+    ToggleBtn drag system.
+    We detect whether the user dragged or clicked by measuring how far
+    the mouse/touch moved. If it moved less than 5 pixels, it's a click.
+    If more, it's a drag and we move the button.
+]]
+local toggleDragging = false
+local toggleDragInput = nil
+local toggleDragStart = nil
+local toggleBtnStartPos = nil
+local toggleDragThreshold = 5  -- pixels of movement to count as a drag
+
+ToggleBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 
+       or input.UserInputType == Enum.UserInputType.Touch then
+        toggleDragging = true
+        toggleDragInput = input
+        toggleDragStart = input.Position
+        toggleBtnStartPos = ToggleBtn.Position
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == toggleDragInput and toggleDragging then
+        if input.UserInputType == Enum.UserInputType.MouseMovement 
+           or input.UserInputType == Enum.UserInputType.Touch then
+            local delta = input.Position - toggleDragStart
+            ToggleBtn.Position = UDim2.new(
+                toggleBtnStartPos.X.Scale, toggleBtnStartPos.X.Offset + delta.X,
+                toggleBtnStartPos.Y.Scale, toggleBtnStartPos.Y.Offset + delta.Y
+            )
+        end
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input == toggleDragInput then
+        local delta = input.Position - toggleDragStart
+        toggleDragging = false
+        toggleDragInput = nil
+        
+        -- If the mouse barely moved, treat it as a click (toggle visibility)
+        if math.abs(delta.X) <= toggleDragThreshold and math.abs(delta.Y) <= toggleDragThreshold then
+            MainFrame.Visible = not MainFrame.Visible
+            Tween(ToggleBtn, {
+                BackgroundColor3 = MainFrame.Visible 
+                    and Color3.fromRGB(15, 15, 15) 
+                    or Color3.fromRGB(30, 30, 30)
+            }, 0.2)
+        end
+    end
+end)
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- MAIN WINDOW FRAME
+-- The big central panel. Rounded corners (12px) so edges aren't sharp.
+-- ═══════════════════════════════════════════════════════════════════════
 local MainFrame = Create("Frame", {
     Name = "MainFrame",
     Parent = ScreenGui,
@@ -384,22 +443,11 @@ local MainFrame = Create("Frame", {
     Active = true,
     ZIndex = Z.Base
 })
-AddCorner(MainFrame, 8)
+AddCorner(MainFrame, 12)  -- <-- Larger radius for smoother, rounder corners
 AddStroke(MainFrame, Theme.Border, 2)
 
--- Toggle button click handler.
--- Uses Activated so it works on both PC and mobile.
-ToggleBtn.Activated:Connect(function()
-    MainFrame.Visible = not MainFrame.Visible
-    Tween(ToggleBtn, {
-        BackgroundColor3 = MainFrame.Visible 
-            and Color3.fromRGB(15, 15, 15) 
-            or Color3.fromRGB(30, 30, 30)
-    }, 0.2)
-end)
-
 -- ═══════════════════════════════════════════════════════════════════════
--- DRAGGING SYSTEM
+-- DRAGGING SYSTEM (Main Window)
 -- Lets the user drag the window by pressing anywhere on the main frame.
 -- Works with mouse and touch.
 -- ═══════════════════════════════════════════════════════════════════════
@@ -442,19 +490,37 @@ end)
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- RESIZING SYSTEM
--- Bottom-right corner handle that lets the user resize the window.
+-- Two resize handles:
+--   1. Bottom-right corner handle (diagonal resize)
+--   2. Bottom bar handle (vertical resize only, more visible)
+-- Neither handle changes the window's Position. Only Size changes.
 -- ═══════════════════════════════════════════════════════════════════════
+
+-- ── Corner Resize Handle ──
 local ResizeHandle = Create("Frame", {
     Name = "ResizeHandle",
     Parent = MainFrame,
     BackgroundColor3 = Theme.Accent,
     BorderSizePixel = 0,
-    Position = UDim2.new(1, -14, 1, -14),
-    Size = UDim2.new(0, 14, 0, 14),
-    BackgroundTransparency = 0.4,
-    ZIndex = Z.MainUI,
+    Position = UDim2.new(1, -16, 1, -16),
+    Size = UDim2.new(0, 16, 0, 16),
+    BackgroundTransparency = 0.3,
+    ZIndex = Z.MainUI + 2,
 })
-AddCorner(ResizeHandle, 3)
+AddCorner(ResizeHandle, 4)
+
+-- Small diagonal grip icon inside the corner handle
+Create("TextLabel", {
+    Parent = ResizeHandle,
+    BackgroundTransparency = 1,
+    Size = UDim2.new(1, 0, 1, 0),
+    Font = Enum.Font.GothamBold,
+    Text = "◢",
+    TextColor3 = Color3.fromRGB(255, 255, 255),
+    TextSize = 10,
+    TextTransparency = 0.4,
+    ZIndex = Z.MainUI + 3,
+})
 
 local ResizeBtn = Create("TextButton", {
     Name = "ResizeBtn",
@@ -462,23 +528,67 @@ local ResizeBtn = Create("TextButton", {
     BackgroundTransparency = 1,
     Size = UDim2.new(1, 0, 1, 0),
     Text = "",
-    ZIndex = Z.MainUI + 1,
+    ZIndex = Z.MainUI + 3,
     Active = true,
     AutoButtonColor = false,
 })
 
-local isResizing = false
+-- ── Bottom Bar Resize Handle ──
+local BottomResizeBar = Create("Frame", {
+    Name = "BottomResizeBar",
+    Parent = MainFrame,
+    BackgroundColor3 = Theme.Accent,
+    BackgroundTransparency = 0.5,
+    BorderSizePixel = 0,
+    Position = UDim2.new(0, 40, 1, -6),
+    Size = UDim2.new(1, -80, 0, 6),
+    ZIndex = Z.MainUI + 2,
+})
+AddCorner(BottomResizeBar, 3)
 
+-- Three-dot grip indicator in the center of the bottom bar
+local GripDots = Create("TextLabel", {
+    Parent = BottomResizeBar,
+    BackgroundTransparency = 1,
+    Size = UDim2.new(1, 0, 1, 0),
+    Font = Enum.Font.GothamBold,
+    Text = "• • •",
+    TextColor3 = Color3.fromRGB(255, 255, 255),
+    TextSize = 8,
+    TextTransparency = 0.5,
+    ZIndex = Z.MainUI + 3,
+})
+
+local BottomResizeBtn = Create("TextButton", {
+    Name = "BottomResizeBtn",
+    Parent = BottomResizeBar,
+    BackgroundTransparency = 1,
+    Size = UDim2.new(1, 0, 1, 0),
+    Text = "",
+    ZIndex = Z.MainUI + 3,
+    Active = true,
+    AutoButtonColor = false,
+})
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- RESIZE LOGIC
+-- Corner handle resizes both width and height.
+-- Bottom bar resizes only height.
+-- Position is NEVER modified during resize.
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Corner resize (both axes)
+local isResizingCorner = false
 ResizeBtn.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 
        or input.UserInputType == Enum.UserInputType.Touch then
-        isResizing = true
+        isResizingCorner = true
         local startSize = MainFrame.Size
         local startMousePos = input.Position
         
         local connection
         connection = RunService.RenderStepped:Connect(function()
-            if not isResizing then
+            if not isResizingCorner then
                 connection:Disconnect()
                 return
             end
@@ -486,6 +596,7 @@ ResizeBtn.InputBegan:Connect(function(input)
             local currentMouse = UserInputService:GetMouseLocation()
             local delta = currentMouse - Vector2.new(startMousePos.X, startMousePos.Y)
             
+            -- Only change Size. Position stays exactly where it was.
             MainFrame.Size = UDim2.new(
                 0, math.max(Config.MinWindowWidth, startSize.X.Offset + delta.X),
                 0, math.max(Config.MinWindowHeight, startSize.Y.Offset + delta.Y)
@@ -494,7 +605,41 @@ ResizeBtn.InputBegan:Connect(function(input)
         
         input.Changed:Connect(function()
             if input.UserInputState == Enum.UserInputState.End then
-                isResizing = false
+                isResizingCorner = false
+            end
+        end)
+    end
+end)
+
+-- Bottom bar resize (height only)
+local isResizingBottom = false
+BottomResizeBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 
+       or input.UserInputType == Enum.UserInputType.Touch then
+        isResizingBottom = true
+        local startSize = MainFrame.Size
+        local startMousePos = input.Position
+        
+        local connection
+        connection = RunService.RenderStepped:Connect(function()
+            if not isResizingBottom then
+                connection:Disconnect()
+                return
+            end
+            
+            local currentMouse = UserInputService:GetMouseLocation()
+            local deltaY = currentMouse.Y - startMousePos.Y
+            
+            -- Only change height (Y). Width and Position stay the same.
+            MainFrame.Size = UDim2.new(
+                0, startSize.X.Offset,
+                0, math.max(Config.MinWindowHeight, startSize.Y.Offset + deltaY)
+            )
+        end)
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                isResizingBottom = false
             end
         end)
     end
@@ -2132,5 +2277,5 @@ end
 -- Open the Home page by default and print a success message.
 -- ═══════════════════════════════════════════════════════════════════════
 Pages.Home()
-print("✅ Exotic Hub PRO v10.4 loaded successfully!")
+print("✅ Exotic Hub PRO v10.5 loaded successfully!")
 print("📁 Look for ⚙️ markers to insert your automation scripts")
