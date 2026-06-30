@@ -1862,7 +1862,6 @@ function Pages.Shop()
 								Name = seed.SeedName,
 								Price = seed.PurchasePrice,
 								Rarity = seed.Rarity,
-								Single = seed.IsSingleHarvest and "Single" or "Multi",
 							})
 						end
 					end
@@ -1879,9 +1878,9 @@ function Pages.Shop()
 				------------------------------------------------
 				-- ENABLE TOGGLE
 				------------------------------------------------
-
 				CreateToggle(scroll, "Enable Seed Shop", false, function(state)
 					EnableSeedShop = state
+					print("EnableSeedShop:", EnableSeedShop)
 				end)
 			end)
 		end)
