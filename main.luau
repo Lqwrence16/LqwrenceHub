@@ -2030,6 +2030,15 @@ end
 		- Select Seeds button (opens modal with SEARCH BAR)
 		- Enable Auto Buy toggle
 --]]
+--[[
+	Pages.Shop()
+	------------
+	Purpose: The Shop page with seed auto-buy functionality.
+	Features:
+		- Seed Shop card with dropdown
+		- Select Seeds button (opens modal with SEARCH BAR)
+		- Enable Auto Buy toggle
+--]]
 function Pages.Shop()
 	SwitchPage("Shop", "Shop", "Seed Shop & Gear", function()
 		local seedCard = CreateCard(ContentScroll, "Seed Shop", "🌱", Theme.Accent)
@@ -2129,13 +2138,36 @@ function Pages.Shop()
 								SortOrder = Enum.SortOrder.LayoutOrder,
 							})
 
+							-- Rarity color mapping
+							local RarityColors = {
+								Common = Color3.fromRGB(169, 169, 169), -- Gray
+								Uncommon = Color3.fromRGB(50, 205, 50), -- Green
+								Rare = Color3.fromRGB(30, 144, 255), -- Blue
+								Epic = Color3.fromRGB(147, 112, 219), -- Purple
+								Legendary = Color3.fromRGB(255, 215, 0), -- Gold
+							}
+
+							--[[
+							FormatPrice(price)
+							------------------
+							Formats a number into a readable price string.
+							Examples: 20000 -> "$20.00K", 500 -> "$500"
+							--]]
+							local function FormatPrice(price)
+								if not price then
+									return "$0"
+								end
+								if price >= 1000 then
+									return string.format("$%.2fK", price / 1000)
+								end
+								return "$" .. tostring(price)
+							end
+
 							--[[
 							BuildModalRows(filterText)
 							--------------------------
 							Purpose: Creates or refreshes all seed rows in the modal.
-							When a row is clicked, it toggles selection and immediately
-							updates the visual appearance (color + checkmark).
-							filterText - string: Optional search text to filter seeds
+							Shows: SeedName | PurchasePrice | Rarity | [✓ if selected]
 							--]]
 							local function BuildModalRows(filterText)
 								-- Clear existing rows
@@ -2159,8 +2191,7 @@ function Pages.Shop()
 
 									local row = Create("TextButton", {
 										Parent = scroll2,
-										BackgroundColor3 = isSelected and Color3.fromRGB(55, 45, 75) -- Selected: purple tint
-											or Theme.Card, -- Not selected: normal
+										BackgroundColor3 = isSelected and Color3.fromRGB(55, 45, 75) or Theme.Card,
 										BorderSizePixel = 0,
 										Size = UDim2.new(1, 0, 0, 34),
 										LayoutOrder = i,
@@ -2172,12 +2203,12 @@ function Pages.Shop()
 									})
 									Corner(row, 4)
 
-									-- Seed name
+									-- Seed Name (left side)
 									Create("TextLabel", {
 										Parent = row,
 										BackgroundTransparency = 1,
 										Position = UDim2.new(0, 10, 0, 0),
-										Size = UDim2.new(0.6, 0, 1, 0),
+										Size = UDim2.new(0.32, 0, 1, 0),
 										Font = Enum.Font.Gotham,
 										Text = item.Name,
 										TextColor3 = Theme.TextPrimary,
@@ -2186,7 +2217,36 @@ function Pages.Shop()
 										ZIndex = 621,
 									})
 
-									-- Checkmark if selected
+									-- Purchase Price (middle)
+									Create("TextLabel", {
+										Parent = row,
+										BackgroundTransparency = 1,
+										Position = UDim2.new(0.36, 0, 0, 0),
+										Size = UDim2.new(0.24, 0, 1, 0),
+										Font = Enum.Font.Gotham,
+										Text = FormatPrice(item.Price),
+										TextColor3 = Theme.AccentYellow,
+										TextSize = 11,
+										TextXAlignment = Enum.TextXAlignment.Left,
+										ZIndex = 621,
+									})
+
+									-- Rarity (right of middle)
+									local rarityColor = RarityColors[item.Rarity] or Theme.TextSecondary
+									Create("TextLabel", {
+										Parent = row,
+										BackgroundTransparency = 1,
+										Position = UDim2.new(0.62, 0, 0, 0),
+										Size = UDim2.new(0.18, 0, 1, 0),
+										Font = Enum.Font.GothamBold,
+										Text = item.Rarity,
+										TextColor3 = rarityColor,
+										TextSize = 11,
+										TextXAlignment = Enum.TextXAlignment.Left,
+										ZIndex = 621,
+									})
+
+									-- Checkmark if selected (far right)
 									if isSelected then
 										Create("TextLabel", {
 											Parent = row,
@@ -2207,7 +2267,7 @@ function Pages.Shop()
 										Config.SelectedSeeds = Config.SelectedSeeds
 										AutoSaveConfig()
 
-										-- INSTANTLY rebuild all rows to show new selection state
+										-- Rebuild rows while preserving current search
 										BuildModalRows(
 											modalSearchBox.Text ~= "Search seeds..." and modalSearchBox.Text or ""
 										)
