@@ -1997,10 +1997,8 @@ pcall(function()
 	Networking = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
 	SeedData = require(game:GetService("ReplicatedStorage").SharedModules.SeedData)
 end)
-task.wait(5)
-
-for _, v in ipairs(workspace.Gardens.Plot1.Visual:GetDescendants()) do
-	print(v.Name, v.ClassName)
+for k, v in pairs(Networking) do
+	print(k, typeof(v))
 end
 --------------------------------------------------
 -- REUSABLE SEED MODAL
