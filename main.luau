@@ -1461,33 +1461,81 @@ end)
 -- SHOP PAGE
 local Networking = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
 local SeedData = require(game:GetService("ReplicatedStorage").SharedModules.SeedData)
+
 local SelectedSeeds = {}
 local AutoBuyEnabled = false
 
 function Pages.Shop()
-	SwitchPage("Shop", "Shop", "Game Version: ----", function()
-		local seedCard = CreateCard("Auto Buy Seeds", "🌱", Theme.AccentGreen)
+	SwitchPage("Shop", "Shop", "Shop Features", function()
+		local seedCard = CreateCard("Auto Buy Seeds", "🌱", Theme.Accent)
 
 		seedCard.Activated:Connect(function()
 			ToggleDropdown(seedCard, function(scroll)
-				CreateLabel(scroll, "Automatically purchases selected seeds.")
+				CreateLabel(scroll, "Buy Selected Seeds", Theme.TextSecondary, 12)
+
+				local SeedOptions = {}
+				local SeedLookup = {}
+
+				for _, seed in ipairs(SeedData) do
+					if seed.SeedName and seed.PurchasePrice and seed.Rarity then
+						local display = string.format("%s | $%s | %s", seed.SeedName, seed.PurchasePrice, seed.Rarity)
+
+						table.insert(SeedOptions, display)
+						SeedLookup[display] = seed.SeedName
+					end
+				end
+
+				local BuySeedBtn = Create("TextButton", {
+					Parent = scroll,
+					BackgroundColor3 = Theme.Card,
+					BorderSizePixel = 0,
+					Size = UDim2.new(1, -8, 0, 26),
+					Font = Enum.Font.Gotham,
+					Text = "Selected Seed  ^",
+					TextColor3 = Theme.TextPrimary,
+					TextSize = 12,
+					ZIndex = Z.DropControl,
+					Active = true,
+					AutoButtonColor = false,
+				})
+
+				AddCorner(BuySeedBtn, 4)
+				AddStroke(BuySeedBtn, Theme.Border, 1)
+				AddButtonEffects(BuySeedBtn, Theme.Card)
+
+				BuySeedBtn.Activated:Connect(function()
+					ShowModal("Select Seed", SeedOptions, function(selected)
+						BuySeedBtn.Text = selected .. " ^"
+
+						table.clear(SelectedSeeds)
+
+						local seedName = SeedLookup[selected]
+
+						if seedName then
+							SelectedSeeds[seedName] = true
+						end
+					end)
+				end)
 
 				CreateToggle(scroll, "Enable Auto Buy", false, function(state)
 					AutoBuyEnabled = state
 				end)
-
-				for seedName, _ in pairs(SeedData) do
-					SelectedSeeds[seedName] = false
-
-					CreateToggle(scroll, seedName, false, function(state)
-						SelectedSeeds[seedName] = state
-					end)
-				end
 			end)
 		end)
 	end)
 end
 
+task.spawn(function()
+	while task.wait(1) do
+		if AutoBuyEnabled then
+			for seedName in pairs(SelectedSeeds) do
+				pcall(function()
+					Networking.SeedShop.PurchaseSeed(seedName)
+				end)
+			end
+		end
+	end
+end)
 -- ═══════════════════════════════════════════════════════════════════════
 -- SIDEBAR SETUP (Creates the left navigation buttons)
 -- ═══════════════════════════════════════════════════════════════════════
@@ -1564,19 +1612,3 @@ end
 -- STARTUP (Runs when the script first loads)
 -- ═══════════════════════════════════════════════════════════════════════
 Pages.Home() -- Load the Home page by default
-
-task.spawn(function()
-	while true do
-		task.wait(1)
-
-		if AutoBuyEnabled then
-			for seedName, enabled in pairs(SelectedSeeds) do
-				if enabled then
-					pcall(function()
-						Networking.SeedShop.PurchaseSeed(seedName)
-					end)
-				end
-			end
-		end
-	end
-end)
