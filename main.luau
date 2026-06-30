@@ -1999,6 +1999,17 @@ pcall(function()
 	print(Networking)
 	print(getmetatable(Networking))
 end)
+for _, v in ipairs(game:GetDescendants()) do
+	if v:IsA("LocalScript") then
+		if
+			string.find(v.Name:lower(), "plant")
+			or string.find(v.Name:lower(), "seed")
+			or string.find(v.Name:lower(), "garden")
+		then
+			print(v:GetFullName())
+		end
+	end
+end
 
 --------------------------------------------------
 -- REUSABLE SEED MODAL
