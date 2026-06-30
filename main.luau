@@ -2172,8 +2172,7 @@ function Pages.Shop()
 				selectBtn.Size = UDim2.new(1, -8, 0, 30)
 
 				-- Toggle to enable/disable auto buying
-				local _, getToggle = CreateToggle(scroll, "Enable Auto Buy", EnableSeedShop, function(state)
-					EnableSeedShop = state
+				local _, getToggle = CreateToggle(scroll, "Enable Auto Buy", Config.EnableSeedShop, function(state)
 					Config.EnableSeedShop = state
 					AutoSaveConfig()
 				end)
