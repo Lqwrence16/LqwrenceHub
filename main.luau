@@ -2365,47 +2365,38 @@ function Pages.Home()
 				local placing = false
 
 				CreateToggle(scroll, "Enable Seed Placer", Config.EnableSeedPlacer, function(state)
-					Config.EnableSeedPlacer = state
-					AutoSaveConfig()
-
-					placing = state
-
 					if not state then
 						return
 					end
 
-					task.spawn(function()
-						local player = game.Players.LocalPlayer
-						local humanoid = player.Character:WaitForChild("Humanoid")
+					local player = game.Players.LocalPlayer
+					local humanoid = player.Character:WaitForChild("Humanoid")
 
-						while placing do
-							for seedName, enabled in pairs(Config.SelectedPlaceSeeds) do
-								if enabled then
-									local planted = 0
+					print("Toggle enabled!")
 
-									while planted < Config.PlaceAmount and placing do
-										local tool = player.Backpack:FindFirstChild(seedName)
+					for seedName, enabled in pairs(Config.SelectedPlaceSeeds) do
+						print(seedName, enabled)
 
-										if not tool then
-											break
-										end
+						if enabled then
+							local tool = player.Backpack:FindFirstChild(seedName)
 
-										humanoid:EquipTool(tool)
+							if tool then
+								print("Found tool:", tool.Name)
 
-										task.wait(0.2)
+								humanoid:EquipTool(tool)
 
-										tool:Activate()
+								task.wait(0.5)
 
-										planted += 1
+								print("Activating")
 
-										task.wait(0.3)
-									end
-								end
+								tool:Activate()
+
+								break
+							else
+								print("Tool not found:", seedName)
 							end
-
-							task.wait(0.2)
 						end
-					end)
+					end
 				end)
 			end)
 		end))
