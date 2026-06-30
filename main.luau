@@ -1996,10 +1996,10 @@ local Networking, SeedData
 pcall(function()
 	Networking = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
 	SeedData = require(game:GetService("ReplicatedStorage").SharedModules.SeedData)
+	print("Networking:", Networking)
+	print("SeedData:", SeedData)
 end)
-for k, v in pairs(Networking) do
-	print(k, typeof(v))
-end
+
 --------------------------------------------------
 -- REUSABLE SEED MODAL
 --------------------------------------------------
