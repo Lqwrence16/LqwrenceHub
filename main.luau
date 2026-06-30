@@ -391,7 +391,7 @@ end
 	They will show as "undefined" in Roblox Studio. This is NORMAL.
 	They work fine in Synapse X, KRNL, Fluxus, etc.
 --]]
-function SaveConfig()
+function SaveConfig(silent)
 	-- Step 1: Build clean data and convert to JSON
 	local saveData = BuildSaveData()
 	local encoded
@@ -412,7 +412,9 @@ function SaveConfig()
 			writefile(CONFIG_FILE, encoded)
 		end)
 		if fileOk then
-			Notify("Config", "Saved to file!", "Success", 2)
+			if not silent then
+				Notify("Config", "Saved to file!", "Success", 2)
+			end
 			return true, "file"
 		end
 	end
@@ -423,7 +425,9 @@ function SaveConfig()
 		player:SetAttribute(CONFIG_ATTRIBUTE, encoded)
 	end)
 	if attrOk then
-		Notify("Config", "Saved (attribute)", "Info", 2)
+		if not silent then
+			Notify("Config", "Saved (attribute)", "Info", 2)
+		end
 		return true, "attribute"
 	end
 
@@ -442,7 +446,9 @@ function SaveConfig()
 		val.Parent = playerGui
 	end)
 	if valOk then
-		Notify("Config", "Saved (StringValue)", "Info", 2)
+		if not silent then
+			Notify("Config", "Saved (StringValue)", "Info", 2)
+		end
 		return true, "stringvalue"
 	end
 
@@ -600,7 +606,7 @@ function AutoSaveConfig()
 
 	-- Schedule a new save in 1 second
 	AutoSaveDebounce = task.delay(1, function()
-		SaveConfig()
+		SaveConfig(true)
 		AutoSaveDebounce = nil
 	end)
 end
@@ -1996,10 +2002,6 @@ pcall(function()
 	SeedData = require(game:GetService("ReplicatedStorage").SharedModules.SeedData)
 end)
 
--- Local references to config values for the shop
-local SelectedSeeds = Config.SelectedSeeds
-local EnableSeedShop = Config.EnableSeedShop
-
 --[[
 	GetSelectedSeedNames()
 	----------------------
@@ -2008,7 +2010,7 @@ local EnableSeedShop = Config.EnableSeedShop
 --]]
 local function GetSelectedSeedNames()
 	local names = {}
-	for name, selected in pairs(SelectedSeeds) do
+	for name, selected in pairs(Config.SelectedSeeds) do
 		if selected then
 			table.insert(names, name)
 		end
@@ -2098,7 +2100,7 @@ function Pages.Shop()
 								end
 
 								for i, item in ipairs(items) do
-									local isSelected = SelectedSeeds[item.Name] == true
+									local isSelected = Config.SelectedSeeds[item.Name] == true
 
 									local row = Create("TextButton", {
 										Parent = scroll2,
@@ -2146,8 +2148,8 @@ function Pages.Shop()
 
 									-- Click to toggle selection with INSTANT visual update
 									AddConnection(row.Activated:Connect(function()
-										SelectedSeeds[item.Name] = not SelectedSeeds[item.Name]
-										Config.SelectedSeeds = SelectedSeeds
+										Config.SelectedSeeds[item.Name] = not Config.SelectedSeeds[item.Name]
+										Config.SelectedSeeds = Config.SelectedSeeds
 										AutoSaveConfig()
 
 										-- INSTANTLY rebuild all rows to show new selection state
@@ -2172,8 +2174,7 @@ function Pages.Shop()
 				selectBtn.Size = UDim2.new(1, -8, 0, 30)
 
 				-- Toggle to enable/disable auto buying
-				local _, getToggle = CreateToggle(scroll, "Enable Auto Buy", EnableSeedShop, function(state)
-					EnableSeedShop = state
+				local _, getToggle = CreateToggle(scroll, "Enable Auto Buy", Config.EnableSeedShop, function(state)
 					Config.EnableSeedShop = state
 					AutoSaveConfig()
 				end)
@@ -2491,7 +2492,7 @@ table.insert(
 			task.wait(0.2) -- Check every 0.2 seconds
 
 			-- Only buy if enabled and game modules loaded
-			if EnableSeedShop and Networking and SeedData then
+			if Config.EnableSeedShop and Networking and SeedData then
 				-- Get player's money
 				local leaderstats = player:FindFirstChild("leaderstats")
 				local sheckles = leaderstats and leaderstats:FindFirstChild("Sheckles")
@@ -2499,7 +2500,7 @@ table.insert(
 				if sheckles then
 					-- Try to buy each selected seed
 					for _, seed in ipairs(SeedData) do
-						if SelectedSeeds[seed.SeedName] and sheckles.Value >= (seed.PurchasePrice or 0) then
+						if Config.SelectedSeeds[seed.SeedName] and sheckles.Value >= (seed.PurchasePrice or 0) then
 							pcall(function()
 								Networking.SeedShop.PurchaseSeed:Fire(seed.SeedName)
 							end)
