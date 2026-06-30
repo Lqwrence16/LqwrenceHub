@@ -2209,11 +2209,48 @@ function Pages.Shop()
 
 						-- Open multi-select modal
 						ShowModal("Select Seeds", function(modal, content)
-							-- Scrollable list of seeds
+							--[[
+									Modal Search Bar
+									----------------
+									A search input at the top of the modal that filters
+									seed rows in real-time as you type.
+									--]]
+							local searchBox = Create("TextBox", {
+								Parent = content,
+								BackgroundColor3 = Theme.Card,
+								BorderSizePixel = 0,
+								Position = UDim2.new(0, 0, 0, 0),
+								Size = UDim2.new(1, 0, 0, 32),
+								Font = Enum.Font.Gotham,
+								Text = "Search seeds...",
+								TextColor3 = Theme.TextSecondary,
+								TextSize = 12,
+								ZIndex = 620,
+								ClearTextOnFocus = true,
+								Active = true,
+							})
+							Corner(searchBox, 6)
+							Stroke(searchBox, Theme.Border, 1)
+
+							-- Search icon inside the search box
+							Create("TextLabel", {
+								Parent = searchBox,
+								BackgroundTransparency = 1,
+								Position = UDim2.new(0, 8, 0, 0),
+								Size = UDim2.new(0, 22, 1, 0),
+								Font = Enum.Font.GothamBold,
+								Text = "🔍",
+								TextColor3 = Theme.TextMuted,
+								TextSize = 12,
+								ZIndex = 621,
+							})
+
+							-- Scrollable list of seeds (below search bar)
 							local scroll2 = Create("ScrollingFrame", {
 								Parent = content,
 								BackgroundTransparency = 1,
-								Size = UDim2.new(1, 0, 1, -40),
+								Position = UDim2.new(0, 0, 0, 40),
+								Size = UDim2.new(1, 0, 1, -80),
 								ScrollBarThickness = 3,
 								ScrollBarImageColor3 = Theme.ScrollBar,
 								CanvasSize = UDim2.new(0, 0, 0, 0),
@@ -2228,13 +2265,15 @@ function Pages.Shop()
 							})
 
 							--[[
-							BuildModalRows()
-							----------------
-							Purpose: Creates or refreshes all seed rows in the modal.
-							When a row is clicked, it toggles selection and immediately
-							updates the visual appearance (color + checkmark).
-							--]]
-							local function BuildModalRows()
+										BuildModalRows(filterText)
+										-------------------------
+										Purpose: Creates or refreshes all seed rows in the modal.
+										When a row is clicked, it toggles selection and immediately
+										updates the visual appearance (color + checkmark).
+										Parameters:
+											filterText - string: Optional search text to filter seeds by name
+										--]]
+							local function BuildModalRows(filterText)
 								-- Clear existing rows
 								for _, child in pairs(scroll2:GetChildren()) do
 									if child:IsA("TextButton") then
@@ -2242,7 +2281,33 @@ function Pages.Shop()
 									end
 								end
 
-								for i, item in ipairs(items) do
+								local filteredItems = {}
+								local searchLower = filterText and filterText:lower() or ""
+
+								-- Filter items based on search text
+								for _, item in ipairs(items) do
+									if searchLower == "" or item.Name:lower():find(searchLower, 1, true) then
+										table.insert(filteredItems, item)
+									end
+								end
+
+								-- Show "No results" if nothing matches
+								if #filteredItems == 0 then
+									local noResults = Create("TextLabel", {
+										Parent = scroll2,
+										BackgroundTransparency = 1,
+										Size = UDim2.new(1, 0, 0, 34),
+										Font = Enum.Font.Gotham,
+										Text = "No seeds found",
+										TextColor3 = Theme.TextMuted,
+										TextSize = 12,
+										ZIndex = 620,
+									})
+									scroll2.CanvasSize = UDim2.new(0, 0, 0, 34)
+									return
+								end
+
+								for i, item in ipairs(filteredItems) do
 									local isSelected = SelectedSeeds[item.Name] == true
 
 									local row = Create("TextButton", {
@@ -2296,15 +2361,24 @@ function Pages.Shop()
 										AutoSaveConfig()
 
 										-- INSTANTLY rebuild all rows to show new selection state
-										BuildModalRows()
+										BuildModalRows(searchBox.Text)
 									end))
 								end
 
-								scroll2.CanvasSize = UDim2.new(0, 0, 0, #items * 37)
+								scroll2.CanvasSize = UDim2.new(0, 0, 0, #filteredItems * 37)
 							end
 
-							-- Build rows initially
+							-- Build rows initially (no filter)
 							BuildModalRows()
+
+							-- Rebuild rows whenever search text changes
+							AddConnection(searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+								local text = searchBox.Text
+								if text == "Search seeds..." then
+									text = ""
+								end
+								BuildModalRows(text)
+							end))
 
 							-- Done button to close modal
 							local doneBtn = CreateButton(content, "Done", Theme.Accent, 80, 32, function()
