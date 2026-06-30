@@ -1901,7 +1901,7 @@ task.spawn(function()
 			for seedName, selected in pairs(SelectedSeeds) do
 				if selected then
 					pcall(function()
-						Networking.SeedShop.PurchaseSeed(seedName)
+						Networking.SeedShop.PurchaseSeed:Fire(seedName)
 					end)
 				end
 			end
