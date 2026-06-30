@@ -2001,16 +2001,15 @@ end)
 task.wait(5)
 
 local player = game.Players.LocalPlayer
-local tool = player.Backpack:FindFirstChild("Carrot")
 
-if tool then
-	print("===== TOOL CONTENTS =====")
+print("===== BACKPACK =====")
+for _, v in ipairs(player.Backpack:GetChildren()) do
+	print(v.Name, v.ClassName)
+end
 
-	for _, v in ipairs(tool:GetDescendants()) do
-		print(v.Name, v.ClassName)
-	end
-else
-	print("Carrot tool not found.")
+print("===== CHARACTER =====")
+for _, v in ipairs(player.Character:GetChildren()) do
+	print(v.Name, v.ClassName)
 end
 --------------------------------------------------
 -- REUSABLE SEED MODAL
