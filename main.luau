@@ -2388,6 +2388,9 @@ function Pages.Home()
 								task.wait(0.5)
 
 								print("Activating")
+								local mouse = player:GetMouse()
+
+								print(mouse.Target)
 
 								tool:Activate()
 
