@@ -1938,39 +1938,13 @@ local function SwitchPage(pageName, title, subtitle, builder)
 end
 
 --══════════════════════════════════════════════════════--
--- PAGES
+-- #PAGES
 --══════════════════════════════════════════════════════--
--- Each page function defines what appears when you click a sidebar button.
-
---[[
-	Pages.Home()
-	------------
-	Purpose: The Home page - shown when the script first loads.
-	Content: Welcome message and statistics card.
---]]
+--#HomePage
 function Pages.Home()
-	SwitchPage("Home", "Home", "Game Version: v2.0.6", function()
-		-- Welcome text
-		CreateLabel(ContentScroll, "Welcome to LRX_Hub", Theme.Accent, 14)
-		CreateLabel(ContentScroll, "Select a category from the sidebar to get started.", Theme.TextSecondary, 12)
-
-		-- Statistics card
-		local statsCard = CreateCard(ContentScroll, "Statistics", "📊", Theme.AccentCyan)
-		AddConnection(statsCard.Activated:Connect(function()
-			ToggleDropdown(statsCard, function(scroll)
-				CreateLabel(scroll, "FPS: Monitoring...", Theme.TextPrimary, 12)
-				CreateLabel(scroll, "Ping: Monitoring...", Theme.TextPrimary, 12)
-				CreateLabel(scroll, "Memory: Monitoring...", Theme.TextPrimary, 12)
-			end)
-		end))
-	end)
+	SwitchPage("Home", "Home", "Game Version: v2.0.6", function() end)
 end
 
---[[
-	Pages.Account()
-	---------------
-	Purpose: Shows user account information.
---]]
 function Pages.Account()
 	SwitchPage("Account", "Account", "User Profile", function()
 		local card = CreateCard(ContentScroll, "Account Info", "👤", Theme.Accent)
@@ -1983,31 +1957,18 @@ function Pages.Account()
 	end)
 end
 
---[[
-	Pages.Premium()
-	---------------
-	Purpose: Shows premium features and benefits.
---]]
+--#PremiumPage
 function Pages.Premium()
-	SwitchPage("Premium", "Premium", "Premium Features", function()
-		CreateLabel(ContentScroll, "Premium Benefits", Theme.Accent, 14)
-		CreateLabel(ContentScroll, "• Auto Farm\n• Multi-Select\n• Advanced Stats", Theme.TextSecondary, 12)
-	end)
+	SwitchPage("Premium", "Premium", "Premium Features", function() end)
 end
 
--- Try to load game modules for the Shop page
+--#ShopPage
 local Networking, SeedData
 pcall(function()
 	Networking = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
 	SeedData = require(game:GetService("ReplicatedStorage").SharedModules.SeedData)
 end)
 
---[[
-	GetSelectedSeedNames()
-	----------------------
-	Purpose: Returns a comma-separated string of selected seed names.
-	Returns: string (e.g. "Carrot, Strawberry" or "None")
---]]
 local function GetSelectedSeedNames()
 	local names = {}
 	for name, selected in pairs(Config.SelectedSeeds) do
@@ -2021,26 +1982,8 @@ local function GetSelectedSeedNames()
 	return table.concat(names, ", ")
 end
 
---[[
-	Pages.Shop()
-	------------
-	Purpose: The Shop page with seed auto-buy functionality.
-	Features:
-		- Seed Shop card with dropdown
-		- Select Seeds button (opens modal with SEARCH BAR)
-		- Enable Auto Buy toggle
---]]
---[[
-	Pages.Shop()
-	------------
-	Purpose: The Shop page with seed auto-buy functionality.
-	Features:
-		- Seed Shop card with dropdown
-		- Select Seeds button (opens modal with SEARCH BAR)
-		- Enable Auto Buy toggle
---]]
 function Pages.Shop()
-	SwitchPage("Shop", "Shop", "Seed Shop & Gear", function()
+	SwitchPage("Shop", "Shop", "ShopFeatures", function()
 		local seedCard = CreateCard(ContentScroll, "Seed Shop", "🌱", Theme.Accent)
 
 		AddConnection(seedCard.Activated:Connect(function()
@@ -2050,6 +1993,80 @@ function Pages.Shop()
 				-- Show currently selected seeds
 				local selectedLabel = CreateLabel(scroll, "Selected: " .. GetSelectedSeedNames(), Theme.TextMuted, 10)
 				selectedLabel.Name = "SelectedLabel"
+				local function UpdateSelectedLabel()
+					local names = {}
+
+					for seedName, selected in pairs(Config.SelectedSeeds) do
+						if selected then
+							table.insert(names, seedName)
+						end
+					end
+
+					table.sort(names)
+
+					local displayNames = {}
+					for i = 1, math.min(#names, 10) do
+						table.insert(displayNames, names[i])
+					end
+
+					local text = table.concat(displayNames, ", ")
+
+					if #names > 10 then
+						text = text .. "..."
+					end
+
+					if text == "" then
+						text = "None"
+					end
+
+					selectedLabel.Text = string.format("Selected (%d): %s", #names, text)
+				end
+
+				CreateLabel(scroll, "Quick Actions", Theme.Accent, 11)
+
+				local buttonFrame = Create("Frame", {
+					Parent = scroll,
+					BackgroundTransparency = 1,
+					Size = UDim2.new(1, 0, 0, 30),
+				})
+
+				local selectAllBtn = CreateButton(
+					buttonFrame,
+					"Select All",
+					Theme.Accent,
+					(buttonFrame.AbsoluteSize.X / 2) - 4,
+					30,
+					function()
+						if SeedData then
+							for _, seed in ipairs(SeedData) do
+								if seed.SeedName then
+									Config.SelectedSeeds[seed.SeedName] = true
+								end
+							end
+						end
+
+						AutoSaveConfig()
+						UpdateSelectedLabel()
+					end
+				)
+
+				selectAllBtn.Position = UDim2.new(0, 0, 0, 0)
+
+				local clearAllBtn = CreateButton(
+					buttonFrame,
+					"Clear All",
+					Color3.fromRGB(180, 60, 60),
+					(buttonFrame.AbsoluteSize.X / 2) - 4,
+					30,
+					function()
+						table.clear(Config.SelectedSeeds)
+
+						AutoSaveConfig()
+						UpdateSelectedLabel()
+					end
+				)
+
+				clearAllBtn.Position = UDim2.new(0.5, 4, 0, 0)
 
 				-- Button to open seed selection modal
 				local selectBtn = CreateButton(
@@ -2073,11 +2090,7 @@ function Pages.Shop()
 							end
 						end
 
-						-- Open multi-select modal with SEARCH BAR
 						ShowModal("Select Seeds", function(modal, content)
-							-- ════════════════════════════════════════
-							-- MODAL SEARCH BAR
-							-- ════════════════════════════════════════
 							local searchContainer = Create("Frame", {
 								Parent = content,
 								BackgroundColor3 = Theme.Content,
@@ -2086,10 +2099,7 @@ function Pages.Shop()
 								Position = UDim2.new(0, 0, 0, 0),
 								ZIndex = 620,
 							})
-							Corner(searchContainer, 6)
-							Stroke(searchContainer, Theme.Border, 1)
 
-							-- Search icon
 							Create("TextLabel", {
 								Parent = searchContainer,
 								BackgroundTransparency = 1,
@@ -2102,7 +2112,6 @@ function Pages.Shop()
 								ZIndex = 621,
 							})
 
-							-- Search input
 							local modalSearchBox = Create("TextBox", {
 								Parent = searchContainer,
 								BackgroundTransparency = 1,
@@ -2117,9 +2126,6 @@ function Pages.Shop()
 								Active = true,
 							})
 
-							-- ════════════════════════════════════════
-							-- SEED LIST SCROLL AREA
-							-- ════════════════════════════════════════
 							local scroll2 = Create("ScrollingFrame", {
 								Parent = content,
 								BackgroundTransparency = 1,
@@ -2138,21 +2144,15 @@ function Pages.Shop()
 								SortOrder = Enum.SortOrder.LayoutOrder,
 							})
 
-							-- Rarity color mapping
 							local RarityColors = {
 								Common = Color3.fromRGB(169, 169, 169), -- Gray
 								Uncommon = Color3.fromRGB(50, 205, 50), -- Green
 								Rare = Color3.fromRGB(30, 144, 255), -- Blue
 								Epic = Color3.fromRGB(147, 112, 219), -- Purple
 								Legendary = Color3.fromRGB(255, 215, 0), -- Gold
+								Mythic = Color3.fromRGB(255, 69, 0), -- OrangeRed
 							}
 
-							--[[
-							FormatPrice(price)
-							------------------
-							Formats a number into a readable price string.
-							Examples: 20000 -> "$20.00K", 500 -> "$500"
-							--]]
 							local function FormatPrice(price)
 								if not price then
 									return "$0"
@@ -2163,14 +2163,7 @@ function Pages.Shop()
 								return "$" .. tostring(price)
 							end
 
-							--[[
-							BuildModalRows(filterText)
-							--------------------------
-							Purpose: Creates or refreshes all seed rows in the modal.
-							Shows: SeedName | PurchasePrice | Rarity | [✓ if selected]
-							--]]
 							local function BuildModalRows(filterText)
-								-- Clear existing rows
 								for _, child in pairs(scroll2:GetChildren()) do
 									if child:IsA("TextButton") then
 										child:Destroy()
@@ -2181,7 +2174,6 @@ function Pages.Shop()
 								local visibleCount = 0
 
 								for i, item in ipairs(items) do
-									-- Filter: only show seeds matching the search text
 									if lowerFilter ~= "" and not item.Name:lower():find(lowerFilter, 1, true) then
 										continue
 									end
@@ -2203,7 +2195,6 @@ function Pages.Shop()
 									})
 									Corner(row, 4)
 
-									-- Seed Name (left side)
 									Create("TextLabel", {
 										Parent = row,
 										BackgroundTransparency = 1,
@@ -2217,7 +2208,6 @@ function Pages.Shop()
 										ZIndex = 621,
 									})
 
-									-- Purchase Price (middle)
 									Create("TextLabel", {
 										Parent = row,
 										BackgroundTransparency = 1,
@@ -2231,7 +2221,6 @@ function Pages.Shop()
 										ZIndex = 621,
 									})
 
-									-- Rarity (right of middle)
 									local rarityColor = RarityColors[item.Rarity] or Theme.TextSecondary
 									Create("TextLabel", {
 										Parent = row,
@@ -2246,7 +2235,6 @@ function Pages.Shop()
 										ZIndex = 621,
 									})
 
-									-- Checkmark if selected (far right)
 									if isSelected then
 										Create("TextLabel", {
 											Parent = row,
@@ -2264,10 +2252,13 @@ function Pages.Shop()
 									-- Click to toggle selection with INSTANT visual update
 									AddConnection(row.Activated:Connect(function()
 										Config.SelectedSeeds[item.Name] = not Config.SelectedSeeds[item.Name]
-										Config.SelectedSeeds = Config.SelectedSeeds
+
 										AutoSaveConfig()
 
-										-- Rebuild rows while preserving current search
+										-- Update the label outside the modal instantly
+										UpdateSelectedLabel()
+
+										-- Refresh the modal rows
 										BuildModalRows(
 											modalSearchBox.Text ~= "Search seeds..." and modalSearchBox.Text or ""
 										)
