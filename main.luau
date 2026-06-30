@@ -35,10 +35,10 @@ local playerGui = player:WaitForChild("PlayerGui")
 
 local Config = {
 	-- Window settings
-	WindowWidth = 720, -- How wide the main window is
-	WindowHeight = 480, -- How tall the main window is
-	MinWindowWidth = 580, -- Minimum width when resizing (enforced)
-	MinWindowHeight = 360, -- Minimum height when resizing (enforced)
+	WindowWidth = 600, -- How wide the main window is
+	WindowHeight = 400, -- How tall the main window is
+	MinWindowWidth = 320, -- Minimum width when resizing
+	MinWindowHeight = 240, -- Minimum height when resizing
 	SidebarWidth = 170, -- Width of the left sidebar
 
 	-- Appearance
@@ -135,6 +135,7 @@ local AutoSaveDebounce = nil -- Tracks pending auto-save
 local ContentGrid = nil -- The UIGridLayout for cards
 
 -- Dropdown layer (floating above content)
+local DropdownLayer = nil -- Container for floating dropdowns
 
 --══════════════════════════════════════════════════════--
 -- CONFIG SAVE/LOAD SYSTEM
@@ -1122,7 +1123,18 @@ ContentGrid = Create("UIGridLayout", {
 	FillDirectionMaxCells = 2, -- Max 2 columns per row
 })
 
--- Dropdowns are parented directly to MainFrame for stable positioning during resize.
+-- Dropdown layer: a floating frame above ContentScroll where dropdowns appear
+-- This prevents dropdowns from pushing other cards down (they float above)
+DropdownLayer = Create("Frame", {
+	Name = "DropdownLayer",
+	Parent = ContentFrame,
+	BackgroundTransparency = 1,
+	Position = UDim2.new(0, 12, 0, 12), -- Same position as ContentScroll
+	Size = UDim2.new(1, -24, 1, -24), -- Same size as ContentScroll
+	ZIndex = 50, -- Above ContentScroll (ZIndex 11)
+	ClipsDescendants = false, -- Allow dropdown to extend outside
+	Active = false, -- Don't block clicks on content below
+})
 
 --══════════════════════════════════════════════════════--
 -- COMPONENT BUILDERS
@@ -1434,7 +1446,7 @@ AddConnection(ContentFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(Upda
 	UpdateDropdownPosition()
 	------------------------
 	Purpose: Keeps the floating dropdown positioned exactly below its parent card.
-	How: Calculates the card's position relative to MainFrame and updates
+	How: Calculates the card's position relative to DropdownLayer and updates
 	     the dropdown's Position and Size every frame.
 	Also closes the dropdown if the card scrolls out of view.
 --]]
@@ -1491,7 +1503,7 @@ end
 	How it works:
 		1. If clicking the same card, close the dropdown
 		2. Otherwise, close any existing dropdown
-		3. Create a new dropdown frame in MainFrame (floats above grid)
+		3. Create a new dropdown frame in DropdownLayer (floats above grid)
 		4. Position it exactly below the card
 		5. Start a heartbeat connection to keep it positioned during scroll/resize
 		6. Call buildFunc to fill it with content (toggles, buttons, etc.)
@@ -1499,15 +1511,6 @@ end
 		8. Other cards stay in place - nothing is pushed down!
 --]]
 local function UpdateDropdownPosition()
-	--[[
-		UpdateDropdownPosition()
-		------------------------
-		Purpose: Keeps the floating dropdown positioned exactly below its parent card.
-		How: Calculates the card's screen position relative to MainFrame and updates
-		     the dropdown's Position and Size every frame.
-		Parenting to MainFrame ensures the dropdown stays locked to the card
-		dropdown stays locked to the card even when the window is resized.
-	--]]
 	if not ActiveDropdownFrame or not ActiveDropdownCard then
 		return
 	end
@@ -1518,24 +1521,23 @@ local function UpdateDropdownPosition()
 	local card = ActiveDropdownCard
 	local drop = ActiveDropdownFrame
 
-	-- Get absolute screen positions
+	-- Check if card is still visible (not scrolled out of view)
 	local cardAbsPos = card.AbsolutePosition
 	local cardAbsSize = card.AbsoluteSize
-	local mainAbsPos = MainFrame.AbsolutePosition
-	local mainAbsSize = MainFrame.AbsoluteSize
+	local layerAbsPos = DropdownLayer.AbsolutePosition
+	local layerAbsSize = DropdownLayer.AbsoluteSize
 
-	-- If card is scrolled completely outside MainFrame vertically, close dropdown
-	if cardAbsPos.Y + cardAbsSize.Y < mainAbsPos.Y or cardAbsPos.Y > mainAbsPos.Y + mainAbsSize.Y then
+	-- If card is completely outside the visible area, close dropdown
+	if cardAbsPos.Y + cardAbsSize.Y < layerAbsPos.Y or cardAbsPos.Y > layerAbsPos.Y + layerAbsSize.Y then
 		CloseDropdown()
 		return
 	end
 
-	-- Calculate position relative to MainFrame (our dropdown parent)
-	-- This makes the dropdown stick to the card even during resize/drag
-	local relX = cardAbsPos.X - mainAbsPos.X
-	local relY = cardAbsPos.Y - mainAbsPos.Y + cardAbsSize.Y
+	-- Calculate position relative to DropdownLayer
+	local relX = cardAbsPos.X - layerAbsPos.X
+	local relY = cardAbsPos.Y - layerAbsPos.Y + cardAbsSize.Y
 
-	-- Update position and width to match card exactly
+	-- Update position and width to match card
 	drop.Position = UDim2.new(0, relX, 0, relY)
 	drop.Size = UDim2.new(0, cardAbsSize.X, 0, drop.Size.Y.Offset)
 end
@@ -1564,17 +1566,17 @@ local function ToggleDropdown(card, buildFunc)
 		arrow.Text = "v"
 	end -- Change arrow to point down
 
-	-- Calculate initial position below the card (relative to MainFrame)
+	-- Calculate initial position below the card
 	local cardAbsPos = card.AbsolutePosition
 	local cardAbsSize = card.AbsoluteSize
-	local mainAbsPos = MainFrame.AbsolutePosition
-	local relX = cardAbsPos.X - mainAbsPos.X
-	local relY = cardAbsPos.Y - mainAbsPos.Y + cardAbsSize.Y
+	local layerAbsPos = DropdownLayer.AbsolutePosition
+	local relX = cardAbsPos.X - layerAbsPos.X
+	local relY = cardAbsPos.Y - layerAbsPos.Y + cardAbsSize.Y
 
-	-- Create the dropdown container parented to MainFrame (above grid)
+	-- Create the dropdown container in the floating layer (above grid)
 	local drop = Create("Frame", {
 		Name = "Dropdown",
-		Parent = MainFrame,
+		Parent = DropdownLayer,
 		BackgroundColor3 = Theme.DropdownBg,
 		BorderSizePixel = 0,
 		Position = UDim2.new(0, relX, 0, relY),
@@ -1999,7 +2001,7 @@ end))
 	Why: When switching pages, we need to delete the old page's content
 	     before showing the new page's content. Otherwise they stack on top
 	     of each other causing the "repeating text" bug.
-	What it destroys: Cards, labels, and dropdowns from ContentScroll and MainFrame
+	What it destroys: Cards, labels, and dropdowns from ContentScroll and DropdownLayer
 --]]
 local function ClearContent()
 	-- Reset scroll position to top
@@ -2021,8 +2023,8 @@ local function ClearContent()
 		end
 	end
 
-	-- Clear any leftover dropdowns in MainFrame
-	for _, child in pairs(MainFrame:GetChildren()) do
+	-- Clear any leftover dropdowns in the floating layer
+	for _, child in pairs(DropdownLayer:GetChildren()) do
 		if child:IsA("Frame") and child.Name == "Dropdown" then
 			child:Destroy()
 		end
@@ -2194,9 +2196,8 @@ function Pages.Shop()
 						-- Build list of available seeds from game data
 						local items = {}
 						if SeedData then
-							-- Use pairs to handle both arrays and dictionaries
-							for _, seed in pairs(SeedData) do
-								if typeof(seed) == "table" and seed.SeedName then
+							for _, seed in ipairs(SeedData) do
+								if seed.SeedName then
 									table.insert(items, {
 										Name = seed.SeedName,
 										Price = seed.PurchasePrice,
@@ -2204,10 +2205,6 @@ function Pages.Shop()
 									})
 								end
 							end
-							-- Sort alphabetically for consistent display
-							table.sort(items, function(a, b)
-								return a.Name < b.Name
-							end)
 						end
 
 						-- Open multi-select modal
@@ -2294,23 +2291,19 @@ function Pages.Shop()
 									end
 								end
 
-								-- Show message if nothing matches or no data available
+								-- Show "No results" if nothing matches
 								if #filteredItems == 0 then
-									local msg = #items == 0
-											and "No seed data available. Make sure the game modules are loaded."
-										or "No seeds match your search."
 									local noResults = Create("TextLabel", {
 										Parent = scroll2,
 										BackgroundTransparency = 1,
-										Size = UDim2.new(1, 0, 0, 50),
+										Size = UDim2.new(1, 0, 0, 34),
 										Font = Enum.Font.Gotham,
-										Text = msg,
+										Text = "No seeds found",
 										TextColor3 = Theme.TextMuted,
 										TextSize = 12,
-										TextWrapped = true,
 										ZIndex = 620,
 									})
-									scroll2.CanvasSize = UDim2.new(0, 0, 0, 50)
+									scroll2.CanvasSize = UDim2.new(0, 0, 0, 34)
 									return
 								end
 
@@ -2736,12 +2729,8 @@ table.insert(
 
 				if sheckles then
 					-- Try to buy each selected seed
-					for _, seed in pairs(SeedData) do
-						if
-							typeof(seed) == "table"
-							and SelectedSeeds[seed.SeedName]
-							and sheckles.Value >= (seed.PurchasePrice or 0)
-						then
+					for _, seed in ipairs(SeedData) do
+						if SelectedSeeds[seed.SeedName] and sheckles.Value >= (seed.PurchasePrice or 0) then
 							pcall(function()
 								Networking.SeedShop.PurchaseSeed:Fire(seed.SeedName)
 							end)
@@ -2760,8 +2749,8 @@ table.insert(
 
 if UserInputService.TouchEnabled then
 	local viewport = workspace.CurrentCamera.ViewportSize
-	local w = math.max(Config.MinWindowWidth, math.min(Config.WindowWidth, viewport.X - 20))
-	local h = math.max(Config.MinWindowHeight, math.min(Config.WindowHeight, viewport.Y - 40))
+	local w = math.min(Config.WindowWidth, viewport.X - 20)
+	local h = math.min(Config.WindowHeight, viewport.Y - 40)
 	MainFrame.Size = UDim2.new(0, w, 0, h)
 	MainFrame.Position = UDim2.new(0.5, -w / 2, 0.5, -h / 2)
 end
