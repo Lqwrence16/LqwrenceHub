@@ -1192,6 +1192,61 @@ local function CreateCard(parent, title, icon, iconColor)
 
 	return card
 end
+--[[CreateInput(parent, text, defaultState, callback)
+	--------------------------------------------------
+	Purpose: Creates a text input box with a label.
+	Parameters:
+		parent       - Instance: Where to put the input
+		text         - string: Label text above the input box
+		defaultState - string: Default text inside the input box
+		callback     - function(value): Called when user presses Enter or leaves the box
+	Returns: Frame (the container), TextBox (the input box)
+	Example:
+		local container, inputBox = CreateInput(ContentScroll, "Username", "Player123", function(value)
+		    print("User entered:", value)
+		end)
+--]]
+local function CreateInput(parent, title, defaultText, callback)
+	local container = Create("Frame", {
+		Parent = parent,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -8, 0, 50),
+	})
+
+	Create("TextLabel", {
+		Parent = container,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 16),
+		Font = Enum.Font.Gotham,
+		Text = title,
+		TextColor3 = Theme.TextPrimary,
+		TextSize = 12,
+		TextXAlignment = Enum.TextXAlignment.Left,
+	})
+
+	local box = Create("TextBox", {
+		Parent = container,
+		BackgroundColor3 = Theme.Card,
+		BorderSizePixel = 0,
+		Position = UDim2.new(0, 0, 0, 20),
+		Size = UDim2.new(1, 0, 0, 26),
+		Font = Enum.Font.Gotham,
+		Text = defaultText or "",
+		PlaceholderText = "Enter value...",
+		TextColor3 = Theme.TextPrimary,
+		PlaceholderColor3 = Theme.TextMuted,
+		TextSize = 12,
+		ClearTextOnFocus = false,
+	})
+
+	Corner(box, 4)
+
+	AddConnection(box.FocusLost:Connect(function(enterPressed)
+		callback(box.Text)
+	end))
+
+	return container, box
+end
 
 --[[
 	CreateToggle(parent, text, defaultState, callback)
@@ -1942,27 +1997,6 @@ pcall(function()
 	Networking = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
 	SeedData = require(game:GetService("ReplicatedStorage").SharedModules.SeedData)
 end)
-
-task.wait(5)
-
-local player = game.Players.LocalPlayer
-local humanoid = player.Character:WaitForChild("Humanoid")
-
-local tool = player.Backpack:FindFirstChild("Carrot")
-
-if tool then
-	print("Found Carrot!")
-
-	humanoid:EquipTool(tool)
-
-	task.wait(1)
-
-	print("Activating Carrot!")
-
-	tool:Activate()
-else
-	print("Carrot tool not found.")
-end
 --------------------------------------------------
 -- REUSABLE SEED MODAL
 --------------------------------------------------
@@ -2206,6 +2240,7 @@ function Pages.Home()
 		AddConnection(card.Activated:Connect(function()
 			ToggleDropdown(card, function(scroll)
 				Config.SelectedPlaceSeeds = Config.SelectedPlaceSeeds or {}
+				Config.PlaceAmount = Config.PlaceAmount or 10
 
 				CreateLabel(scroll, "Seed Placer", Theme.Accent, 12)
 
@@ -2290,6 +2325,14 @@ function Pages.Home()
 				)
 				clearAllBtn.Position = UDim2.new(0.5, 3, 0, 0)
 				clearAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
+				CreateInput(scroll, "Plant Amount", tostring(Config.PlaceAmount), function(text)
+					local amount = tonumber(text)
+
+					if amount and amount > 0 then
+						Config.PlaceAmount = math.floor(amount)
+						AutoSaveConfig()
+					end
+				end)
 
 				--------------------------------------------------
 				-- RANDOM POSITION GENERATOR
@@ -2317,9 +2360,14 @@ function Pages.Home()
 				-- ENABLE SEED PLACER
 				--------------------------------------------------
 
+				Config.EnableSeedPlacer = Config.EnableSeedPlacer or false
+
 				local placing = false
 
-				CreateToggle(scroll, "Enable Seed Placer", false, function(state)
+				CreateToggle(scroll, "Enable Seed Placer", Config.EnableSeedPlacer, function(state)
+					Config.EnableSeedPlacer = state
+					AutoSaveConfig()
+
 					placing = state
 
 					if not state then
@@ -2327,24 +2375,33 @@ function Pages.Home()
 					end
 
 					task.spawn(function()
+						local player = game.Players.LocalPlayer
+						local humanoid = player.Character:WaitForChild("Humanoid")
+
 						while placing do
 							for seedName, enabled in pairs(Config.SelectedPlaceSeeds) do
 								if enabled then
-									local position = GetRandomPlantPosition()
+									local planted = 0
 
-									if position and plot then
-										pcall(function()
-											-- CHANGE THIS TO THE CORRECT NETWORK CALL
+									while planted < Config.PlaceAmount and placing do
+										local tool = player.Backpack:FindFirstChild(seedName)
 
-											Networking.Plant.PlantSeed:Fire(position, seedName, plot)
-										end)
+										if not tool then
+											break
+										end
 
-										task.wait(0.25)
+										humanoid:EquipTool(tool)
+
+										task.wait(0.05)
+
+										tool:Activate()
+
+										planted += 1
+
+										task.wait(0.05)
 									end
 								end
 							end
-
-							task.wait(1)
 						end
 					end)
 				end)
