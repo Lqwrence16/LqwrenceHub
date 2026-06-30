@@ -1997,19 +1997,11 @@ pcall(function()
 	Networking = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
 	SeedData = require(game:GetService("ReplicatedStorage").SharedModules.SeedData)
 end)
-
 task.wait(5)
 
-local player = game.Players.LocalPlayer
-local mouse = player:GetMouse()
-
-print("Move your mouse around...")
-
-mouse.Move:Connect(function()
-	if mouse.Target then
-		print(mouse.Target:GetFullName())
-	end
-end)
+for _, v in ipairs(workspace.Gardens.Plot1.Visual:GetDescendants()) do
+	print(v.Name, v.ClassName)
+end
 --------------------------------------------------
 -- REUSABLE SEED MODAL
 --------------------------------------------------
