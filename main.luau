@@ -1997,8 +1997,8 @@ pcall(function()
 	Networking = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
 	SeedData = require(game:GetService("ReplicatedStorage").SharedModules.SeedData)
 end)
-for k, v in pairs(Networking) do
-	print("TOP:", k, typeof(v))
+for k, v in pairs(Networking.Plant) do
+	print("Plant:", k, typeof(v))
 
 	if typeof(v) == "table" then
 		for k2, v2 in pairs(v) do
