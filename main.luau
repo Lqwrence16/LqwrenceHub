@@ -182,11 +182,6 @@ local function SetupSmartScrollbar(scrollingFrame)
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- ⚙️ AUTO SCRIPTS (Placeholder automation scripts - replace with real ones)
--- Each script has: Name, IsRunning flag, Start/Stop/Toggle functions
--- ═══════════════════════════════════════════════════════════════════════
-
--- ═══════════════════════════════════════════════════════════════════════
 -- MAIN UI CREATION (Building the screen that holds everything)
 -- ═══════════════════════════════════════════════════════════════════════
 
@@ -195,7 +190,7 @@ local ScreenGui = Create("ScreenGui", {
 	Parent = playerGui,
 	ResetOnSpawn = false,
 	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-	DisplayOrder = 999, -- ⬅️ ADD THIS: Renders above ALL other game UIs
+	DisplayOrder = 999, -- ⬅️ Renders above ALL other game UIs
 })
 
 -- ═══════════════════════════════════════════════════════════════════════
@@ -240,12 +235,12 @@ AddStroke(MainIcon, Theme.Border, 1)
 
 --[[
     DRAG & CLICK DETECTION FOR TOGGLE BUTTON (Mobile Compatible)
-    
+
     HOW IT WORKS:
     1. When you press down (touch or click), we record the starting position
     2. While holding, if you move more than 8 pixels, we treat it as a DRAG
     3. If you release and moved less than 8 pixels, we treat it as a CLICK (toggle UI)
-    
+
     This prevents the UI from toggling when you just want to drag the button.
 ]]
 local toggleDragActive = false -- Is user currently dragging?
@@ -256,6 +251,9 @@ local toggleClickThreshold = 8 -- Pixels of movement to distinguish click vs dra
 
 -- When user starts touching the button
 MainIcon.InputBegan:Connect(function(input)
+	if ModalOverlay and ModalOverlay.Visible then
+		return
+	end
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 		toggleDragActive = true
 		toggleDragInputObj = input
@@ -310,6 +308,10 @@ local dragStartPos = nil
 local frameStartPos = nil
 
 MainFrame.InputBegan:Connect(function(input)
+	-- ⛔ BLOCK DRAG WHEN MODAL IS OPEN
+	if ModalOverlay and ModalOverlay.Visible then
+		return
+	end
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 		isDragging = true
 		dragInput = input
@@ -648,7 +650,7 @@ CloseBtn.Activated:Connect(function()
 end)
 
 -- ═══════════════════════════════════════════════════════════════════════
--- LEFT SIDEBAR (Navigation menu with page buttons)Position = UDim2.new(0.5, -Config.WindowWidth / 2, 0.5, -Config.WindowHeight / 2),
+-- LEFT SIDEBAR (Navigation menu with page buttons)
 -- ═══════════════════════════════════════════════════════════════════════
 local Sidebar = Create("Frame", {
 	Name = "Sidebar",
@@ -742,13 +744,13 @@ local DropdownLayer = Create("Frame", {
 })
 
 -- ═══════════════════════════════════════════════════════════════════════
--- MODAL POPUP (Centered popup window for selections like "Select Pet")
+-- MODAL POPUP (Centered popup window for multi-select like "Buy Selected Seeds")
 -- ═══════════════════════════════════════════════════════════════════════
 local ModalOverlay = Create("Frame", {
 	Name = "ModalOverlay",
 	Parent = ScreenGui,
 	BackgroundColor3 = Color3.fromRGB(0, 0, 0),
-	BackgroundTransparency = 0.5, -- Semi-transparent black background
+	BackgroundTransparency = 0.4, -- Semi-transparent black background
 	BorderSizePixel = 0,
 	Size = UDim2.new(1, 0, 1, 0),
 	Visible = false,
@@ -756,58 +758,129 @@ local ModalOverlay = Create("Frame", {
 	Active = true,
 })
 
+-- Modal frame - BIGGER like in the video (520x420)
 local ModalFrame = Create("Frame", {
 	Name = "ModalFrame",
 	Parent = ModalOverlay,
 	BackgroundColor3 = Theme.Background,
 	BorderSizePixel = 0,
-	Position = UDim2.new(0.5, -150, 0.5, -75),
-	Size = UDim2.new(0, 300, 0, 150),
+	Position = UDim2.new(0.5, -260, 0.5, -210),
+	Size = UDim2.new(0, 520, 0, 420),
 	ZIndex = Z.ModalFrame,
+})
+AddCorner(ModalFrame, 8)
+AddStroke(ModalFrame, Theme.Border, 1)
+
+-- Modal title bar with icon + title + Done button
+local ModalTitleBar = Create("Frame", {
+	Name = "TitleBar",
+	Parent = ModalFrame,
+	BackgroundTransparency = 1,
+	Position = UDim2.new(0, 15, 0, 12),
+	Size = UDim2.new(1, -30, 0, 28),
+	ZIndex = Z.ModalCtrl,
+})
+
+local ModalTitleIcon = Create("TextLabel", {
+	Name = "Icon",
+	Parent = ModalTitleBar,
+	BackgroundTransparency = 1,
+	Position = UDim2.new(0, 0, 0, 0),
+	Size = UDim2.new(0, 22, 1, 0),
+	Font = Enum.Font.GothamBold,
+	Text = "✅",
+	TextColor3 = Theme.AccentGreen,
+	TextSize = 14,
+	ZIndex = Z.ModalCtrl,
 })
 
 local ModalTitle = Create("TextLabel", {
 	Name = "Title",
-	Parent = ModalFrame,
+	Parent = ModalTitleBar,
 	BackgroundTransparency = 1,
-	Position = UDim2.new(0, 15, 0, 10),
-	Size = UDim2.new(1, -30, 0, 25),
+	Position = UDim2.new(0, 26, 0, 0),
+	Size = UDim2.new(1, -120, 1, 0),
 	Font = Enum.Font.GothamBold,
 	Text = "Select Item",
 	TextColor3 = Theme.TextPrimary,
-	TextSize = 16,
+	TextSize = 15,
 	TextXAlignment = Enum.TextXAlignment.Left,
 	ZIndex = Z.ModalCtrl,
 })
 
 local ModalDone = Create("TextButton", {
 	Name = "DoneBtn",
-	Parent = ModalFrame,
+	Parent = ModalTitleBar,
 	BackgroundColor3 = Theme.Accent,
 	BorderSizePixel = 0,
-	Position = UDim2.new(1, -85, 0, 8),
+	Position = UDim2.new(1, -75, 0, -2),
 	Size = UDim2.new(0, 75, 0, 28),
 	Font = Enum.Font.GothamBold,
 	Text = "Done",
 	TextColor3 = Color3.fromRGB(255, 255, 255),
-	TextSize = 14,
+	TextSize = 13,
 	ZIndex = Z.ModalCtrl,
 	Active = true,
 	AutoButtonColor = false,
 })
 AddCorner(ModalDone, 6)
 
+-- ═══════════════════════════════════════════════════════════════════════
+-- MODAL SEARCH BAR (Search inside the modal - like in the video)
+-- ═══════════════════════════════════════════════════════════════════════
+local ModalSearchFrame = Create("Frame", {
+	Name = "SearchFrame",
+	Parent = ModalFrame,
+	BackgroundColor3 = Theme.Content,
+	BorderSizePixel = 0,
+	Position = UDim2.new(0, 15, 0, 50),
+	Size = UDim2.new(1, -30, 0, 32),
+	ZIndex = Z.ModalCtrl,
+})
+AddCorner(ModalSearchFrame, 6)
+AddStroke(ModalSearchFrame, Theme.Border, 1)
+
+Create("TextLabel", {
+	Name = "SearchIcon",
+	Parent = ModalSearchFrame,
+	BackgroundTransparency = 1,
+	Position = UDim2.new(0, 10, 0, 0),
+	Size = UDim2.new(0, 20, 1, 0),
+	Font = Enum.Font.GothamBold,
+	Text = "🔍",
+	TextColor3 = Theme.TextMuted,
+	TextSize = 12,
+	ZIndex = Z.ModalCtrl + 1,
+})
+
+local ModalSearchBox = Create("TextBox", {
+	Name = "SearchBox",
+	Parent = ModalSearchFrame,
+	BackgroundTransparency = 1,
+	Position = UDim2.new(0, 32, 0, 0),
+	Size = UDim2.new(1, -42, 1, 0),
+	Font = Enum.Font.Gotham,
+	Text = "Search items...",
+	TextColor3 = Theme.TextMuted,
+	TextSize = 12,
+	ZIndex = Z.ModalCtrl + 1,
+	ClearTextOnFocus = true,
+	Active = true,
+})
+
+-- Modal scrollable list
 local ModalScroll = Create("ScrollingFrame", {
 	Name = "Scroll",
 	Parent = ModalFrame,
 	BackgroundTransparency = 1,
-	Position = UDim2.new(0, 10, 0, 45),
-	Size = UDim2.new(1, -20, 1, -55),
+	Position = UDim2.new(0, 15, 0, 90),
+	Size = UDim2.new(1, -30, 1, -102),
 	ScrollBarThickness = 3,
 	ScrollBarImageColor3 = Theme.ScrollBar,
 	ZIndex = Z.ModalCtrl,
 	ScrollingEnabled = true,
 	Active = true,
+	ClipsDescendants = true,
 })
 
 Create("UIListLayout", {
@@ -818,16 +891,6 @@ Create("UIListLayout", {
 
 -- Apply smart scrollbar to modal
 SetupSmartScrollbar(ModalScroll)
-
--- Close modal and clear its contents
-ModalDone.Activated:Connect(function()
-	ModalOverlay.Visible = false
-	for _, child in pairs(ModalScroll:GetChildren()) do
-		if child:IsA("TextButton") then
-			child:Destroy()
-		end
-	end
-end)
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- STATE VARIABLES (Track what's currently happening in the UI)
@@ -974,7 +1037,7 @@ local function CreateCard(title, icon, iconColor)
 		Font = Enum.Font.Gotham,
 		Text = title,
 		TextColor3 = Theme.TextPrimary,
-		TextSize = 13,
+		TextSize = 12,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		ZIndex = Z.Card + 1,
 	})
@@ -1147,7 +1210,7 @@ local function CreateToggle(parent, text, defaultState, onToggleCallback)
 		Font = Enum.Font.Gotham,
 		Text = text,
 		TextColor3 = Theme.TextPrimary,
-		TextSize = 12,
+		TextSize = 11,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		ZIndex = Z.DropControl,
 	})
@@ -1201,7 +1264,7 @@ local function CreateLabel(parent, text, textColor, fontSize)
 		Font = Enum.Font.Gotham,
 		Text = text,
 		TextColor3 = textColor or Theme.TextSecondary,
-		TextSize = fontSize or 12,
+		TextSize = fontSize or 11,
 		TextWrapped = true,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		ZIndex = Z.DropControl,
@@ -1229,42 +1292,201 @@ local function CreateBtn(parent, text, bgColor, width)
 	return btn
 end
 
--- Shows a centered modal popup with a list of selectable items
--- Usage: ShowModal("Select Pet", {"Dog", "Cat"}, function(selected) print(selected) end)
-local function ShowModal(titleText, items, onSelectCallback)
-	ModalFrame.Title.Text = titleText
+-- ═══════════════════════════════════════════════════════════════════════
+-- MODAL SYSTEM (Multi-select modal with search)
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Rarity color mapping (matches video colors)
+local RarityColors = {
+	Common = Color3.fromRGB(180, 180, 180),
+	Uncommon = Color3.fromRGB(80, 220, 80),
+	Rare = Color3.fromRGB(100, 150, 255),
+	Epic = Color3.fromRGB(180, 130, 255),
+	Legendary = Color3.fromRGB(255, 215, 0),
+	Super = Color3.fromRGB(255, 100, 100),
+	Mythic = Color3.fromRGB(255, 105, 180),
+}
+
+-- Format price to match video (e.g. $1.00, $20.00K, $90.00M)
+local function FormatPrice(value)
+	if not value or value == 0 then
+		return "$0"
+	elseif value >= 1000000 then
+		return string.format("$%.2fM", value / 1000000)
+	elseif value >= 1000 then
+		return string.format("$%.2fK", value / 1000)
+	else
+		return string.format("$%.2f", value)
+	end
+end
+
+-- Modal internal state
+local ModalItems = {}
+local ModalItemRows = {}
+local ModalSelectedItems = {}
+local ModalOnDoneCallback = nil
+local ModalCurrentFilter = ""
+
+-- Build/rebuild modal item rows based on filter and selection
+local function BuildModalItems()
+	-- Clear existing rows
 	for _, child in pairs(ModalScroll:GetChildren()) do
 		if child:IsA("TextButton") then
 			child:Destroy()
 		end
 	end
-	for _, item in pairs(items) do
-		local btn = Create("TextButton", {
-			Parent = ModalScroll,
-			BackgroundColor3 = Theme.Card,
-			BorderSizePixel = 0,
-			Size = UDim2.new(1, -10, 0, 34),
-			Font = Enum.Font.Gotham,
-			Text = item,
-			TextColor3 = Theme.TextPrimary,
-			TextSize = 13,
-			ZIndex = Z.ModalCtrl,
-			Active = true,
-			AutoButtonColor = false,
-		})
-		AddCorner(btn, 4)
-		AddButtonEffects(btn, Theme.Card)
-		btn.Activated:Connect(function()
-			if onSelectCallback then
-				onSelectCallback(item)
+	ModalItemRows = {}
+
+	local filter = ModalCurrentFilter:lower()
+	local layoutOrder = 0
+
+	for _, item in ipairs(ModalItems) do
+		if filter == "" or item.Name:lower():find(filter, 1, true) then
+			local isSelected = ModalSelectedItems[item.Name] == true
+
+			local row = Create("TextButton", {
+				Name = item.Name,
+				Parent = ModalScroll,
+				BackgroundColor3 = isSelected and Color3.fromRGB(55, 45, 75) or Theme.Card,
+				BorderSizePixel = 0,
+				Size = UDim2.new(1, 0, 0, 32),
+				LayoutOrder = layoutOrder,
+				Font = Enum.Font.Gotham,
+				Text = "",
+				ZIndex = Z.ModalCtrl,
+				Active = true,
+				AutoButtonColor = false,
+			})
+			layoutOrder = layoutOrder + 1
+			AddCorner(row, 4)
+
+			-- Seed Name (left side)
+			Create("TextLabel", {
+				Parent = row,
+				BackgroundTransparency = 1,
+				Position = UDim2.new(0, 10, 0, 0),
+				Size = UDim2.new(0, 140, 1, 0),
+				Font = Enum.Font.Gotham,
+				Text = item.Name,
+				TextColor3 = Theme.TextPrimary,
+				TextSize = 12,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				ZIndex = Z.ModalCtrl + 1,
+			})
+
+			-- Price (green, like in video)
+			Create("TextLabel", {
+				Parent = row,
+				BackgroundTransparency = 1,
+				Position = UDim2.new(0, 155, 0, 0),
+				Size = UDim2.new(0, 80, 1, 0),
+				Font = Enum.Font.GothamBold,
+				Text = item.Price,
+				TextColor3 = Color3.fromRGB(80, 220, 80),
+				TextSize = 11,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				ZIndex = Z.ModalCtrl + 1,
+			})
+
+			-- Rarity (colored based on rarity)
+			local rarityColor = RarityColors[item.Rarity] or Theme.TextSecondary
+			Create("TextLabel", {
+				Parent = row,
+				BackgroundTransparency = 1,
+				Position = UDim2.new(0, 240, 0, 0),
+				Size = UDim2.new(0, 70, 1, 0),
+				Font = Enum.Font.Gotham,
+				Text = item.Rarity,
+				TextColor3 = rarityColor,
+				TextSize = 11,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				ZIndex = Z.ModalCtrl + 1,
+			})
+
+			-- Type (Single/Multi)
+			Create("TextLabel", {
+				Parent = row,
+				BackgroundTransparency = 1,
+				Position = UDim2.new(0, 315, 0, 0),
+				Size = UDim2.new(0, 50, 1, 0),
+				Font = Enum.Font.Gotham,
+				Text = item.Type,
+				TextColor3 = Theme.TextSecondary,
+				TextSize = 11,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				ZIndex = Z.ModalCtrl + 1,
+			})
+
+			-- Checkmark indicator when selected
+			if isSelected then
+				Create("TextLabel", {
+					Parent = row,
+					BackgroundTransparency = 1,
+					Position = UDim2.new(1, -30, 0, 0),
+					Size = UDim2.new(0, 20, 1, 0),
+					Font = Enum.Font.GothamBold,
+					Text = "✓",
+					TextColor3 = Theme.Accent,
+					TextSize = 14,
+					ZIndex = Z.ModalCtrl + 1,
+				})
 			end
-			-- Flash accent color when selected
-			btn.BackgroundColor3 = Theme.Accent
-			task.wait(0.1)
-			btn.BackgroundColor3 = Theme.Card
-		end)
+
+			-- Click to toggle selection
+			row.Activated:Connect(function()
+				ModalSelectedItems[item.Name] = not (ModalSelectedItems[item.Name] == true)
+				BuildModalItems() -- Rebuild to update visuals
+			end)
+
+			table.insert(ModalItemRows, row)
+		end
 	end
-	ModalScroll.CanvasSize = UDim2.new(0, 0, 0, #items * 37)
+
+	ModalScroll.CanvasSize = UDim2.new(0, 0, 0, #ModalItemRows * 35)
+end
+
+-- Modal search handler
+ModalSearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+	local text = ModalSearchBox.Text
+	if text == "Search items..." then
+		text = ""
+	end
+	ModalCurrentFilter = text
+	BuildModalItems()
+end)
+
+ModalSearchBox.FocusLost:Connect(function()
+	if ModalSearchBox.Text == "" then
+		ModalSearchBox.Text = "Search items..."
+	end
+end)
+
+-- Done button closes modal and returns selections
+ModalDone.Activated:Connect(function()
+	ModalOverlay.Visible = false
+	if ModalOnDoneCallback then
+		ModalOnDoneCallback(ModalSelectedItems)
+	end
+end)
+
+-- ShowModal: opens the modal with items, supports multi-select + search
+-- items: array of {Name, Price, Rarity, Type}
+-- onDoneCallback: function(selectedDict) where selectedDict = {[name] = true}
+-- preSelected: optional dict of pre-selected item names
+local function ShowModal(titleText, items, onDoneCallback, preSelected)
+	ModalTitle.Text = titleText
+	ModalItems = items or {}
+	ModalSelectedItems = {}
+	if preSelected then
+		for k, v in pairs(preSelected) do
+			ModalSelectedItems[k] = v
+		end
+	end
+	ModalOnDoneCallback = onDoneCallback
+	ModalCurrentFilter = ""
+	ModalSearchBox.Text = "Search items..."
+
+	BuildModalItems()
 	ModalOverlay.Visible = true
 end
 
@@ -1458,104 +1680,392 @@ RegisterSearch("Premium", "Premium", "💎", function()
 	SidebarButtons["Premium"]()
 end)
 
--- SHOP PAGE
-local Networking = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
-local SeedData = require(game:GetService("ReplicatedStorage").SharedModules.SeedData)
+-- ═══════════════════════════════════════════════════════════════════════
+-- SHOP PAGE (Seed Shop + Gear Shop - matches the video exactly)
+-- ═══════════════════════════════════════════════════════════════════════
+local Networking, SeedData
+pcall(function()
+	Networking = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
+	SeedData = require(game:GetService("ReplicatedStorage").SharedModules.SeedData)
+end)
 
+-- Fallback test data if modules not available (for testing outside game)
+if not SeedData or (typeof(SeedData) == "table" and #SeedData == 0) then
+	SeedData = {
+		{ SeedName = "Carrot", Price = 1, Rarity = "Common", Type = "Single" },
+		{ SeedName = "Green Bean", Price = 20000, Rarity = "Epic", Type = "Multi" },
+		{ SeedName = "Dragon's Breath", Price = 90000000, Rarity = "Super", Type = "Multi" },
+		{ SeedName = "Coconut", Price = 140000, Rarity = "Epic", Type = "Multi" },
+		{ SeedName = "Tulip", Price = 40, Rarity = "Uncommon", Type = "Single" },
+		{ SeedName = "Tomato", Price = 200, Rarity = "Uncommon", Type = "Multi" },
+		{ SeedName = "Gold", Price = 0, Rarity = "Legendary", Type = "Multi" },
+		{ SeedName = "Sunflower", Price = 5000000, Rarity = "Legendary", Type = "Multi" },
+		{ SeedName = "Strawberry", Price = 10, Rarity = "Common", Type = "Multi" },
+		{ SeedName = "Glow Mushroom", Price = 15000, Rarity = "Epic", Type = "Multi" },
+		{ SeedName = "Poison Apple", Price = 25000000, Rarity = "Mythic", Type = "Multi" },
+		{ SeedName = "Banana", Price = 30000, Rarity = "Epic", Type = "Multi" },
+		{ SeedName = "Poison Ivy", Price = 2800000, Rarity = "Legendary", Type = "Multi" },
+		{ SeedName = "Romanesco", Price = 1, Rarity = "Mythic", Type = "Multi" },
+		{ SeedName = "Briar Rose", Price = 50000000, Rarity = "Mythic", Type = "Multi" },
+		{ SeedName = "Venus Fly Trap", Price = 7000000, Rarity = "Epic", Type = "Multi" },
+		{ SeedName = "Pineapple", Price = 10000, Rarity = "Rare", Type = "Multi" },
+		{ SeedName = "Blueberry", Price = 25, Rarity = "Common", Type = "Multi" },
+		{ SeedName = "Hypno Bloom", Price = 90000000, Rarity = "Super", Type = "Multi" },
+		{ SeedName = "Mango", Price = 300000, Rarity = "Epic", Type = "Multi" },
+		{ SeedName = "Cactus", Price = 5000, Rarity = "Rare", Type = "Multi" },
+		{ SeedName = "Apple", Price = 400, Rarity = "Uncommon", Type = "Multi" },
+		{ SeedName = "Rainbow", Price = 0, Rarity = "Mythic", Type = "Multi" },
+		{ SeedName = "Horned Melon", Price = 1, Rarity = "Rare", Type = "Multi" },
+		{ SeedName = "Moon Bloom", Price = 65000000, Rarity = "Super", Type = "Multi" },
+		{ SeedName = "Ghost Pepper", Price = 2800000, Rarity = "Mythic", Type = "Multi" },
+	}
+end
+
+-- Shop state
 local SelectedSeeds = {}
-local AutoBuyEnabled = false
+local EnableSeedShop = false
+local EnableShecklesReserve = false
+local MinSheckles = 0
+local EnableTriggerBuying = false
+local TriggerTime = "Any Time"
 
 function Pages.Shop()
 	SwitchPage("Shop", "Shop", "Shop Features", function()
-		local seedCard = CreateCard("Auto Buy Seeds", "🌱", Theme.Accent)
+		-- ═══════════════════════════════════════════════════════
+		-- SEED SHOP CARD
+		-- ═══════════════════════════════════════════════════════
+		local seedShopCard = CreateCard("Seed Shop", "🌱", Theme.Accent)
+		seedShopCard.Activated:Connect(function()
+			ToggleDropdown(seedShopCard, function(scroll)
+				-- Info label (small, clean text like video)
+				local infoLabel = CreateLabel(
+					scroll,
+					"Select the seeds you want to buy. Nothing is bought unless it is selected.",
+					Theme.TextSecondary,
+					11
+				)
+				infoLabel.TextWrapped = true
+				infoLabel.Size = UDim2.new(1, -8, 0, 36)
 
-		seedCard.Activated:Connect(function()
-			ToggleDropdown(seedCard, function(scroll)
-				CreateLabel(scroll, "Buy Selected Seeds", Theme.TextSecondary, 12)
+				-- ✅ Buy Selected Seeds header
+				local headerFrame = Create("Frame", {
+					Parent = scroll,
+					BackgroundTransparency = 1,
+					Size = UDim2.new(1, -8, 0, 20),
+					ZIndex = Z.DropControl,
+				})
 
-				local BuySeedBtn = Create("TextButton", {
+				Create("TextLabel", {
+					Parent = headerFrame,
+					BackgroundTransparency = 1,
+					Position = UDim2.new(0, 0, 0, 0),
+					Size = UDim2.new(0, 18, 1, 0),
+					Font = Enum.Font.GothamBold,
+					Text = "✅",
+					TextColor3 = Theme.AccentGreen,
+					TextSize = 11,
+					ZIndex = Z.DropControl,
+				})
+
+				Create("TextLabel", {
+					Parent = headerFrame,
+					BackgroundTransparency = 1,
+					Position = UDim2.new(0, 20, 0, 0),
+					Size = UDim2.new(1, -20, 1, 0),
+					Font = Enum.Font.GothamBold,
+					Text = "Buy Selected Seeds",
+					TextColor3 = Theme.TextPrimary,
+					TextSize = 11,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					ZIndex = Z.DropControl,
+				})
+
+				-- Selected seed display (clickable, opens modal)
+				local selectedSeedBtn = Create("TextButton", {
+					Parent = scroll,
+					BackgroundColor3 = Theme.Card,
+					BorderSizePixel = 0,
+					Size = UDim2.new(1, -8, 0, 28),
+					Font = Enum.Font.Gotham,
+					Text = "",
+					ZIndex = Z.DropControl,
+					Active = true,
+					AutoButtonColor = false,
+				})
+				AddCorner(selectedSeedBtn, 4)
+				AddStroke(selectedSeedBtn, Theme.Border, 1)
+
+				local selectedSeedText = Create("TextLabel", {
+					Parent = selectedSeedBtn,
+					BackgroundTransparency = 1,
+					Position = UDim2.new(0, 10, 0, 0),
+					Size = UDim2.new(1, -30, 1, 0),
+					Font = Enum.Font.Gotham,
+					Text = "Click to select seeds",
+					TextColor3 = Theme.TextSecondary,
+					TextSize = 11,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					ZIndex = Z.DropControl + 1,
+				})
+
+				local arrowLabel = Create("TextLabel", {
+					Parent = selectedSeedBtn,
+					BackgroundTransparency = 1,
+					Position = UDim2.new(1, -22, 0, 0),
+					Size = UDim2.new(0, 18, 1, 0),
+					Font = Enum.Font.GothamBold,
+					Text = "^",
+					TextColor3 = Theme.TextSecondary,
+					TextSize = 12,
+					ZIndex = Z.DropControl + 1,
+				})
+
+				-- Update the display text based on current selections
+				local function UpdateSelectedDisplay()
+					local count = 0
+					local firstSeed = nil
+					for seedName, selected in pairs(SelectedSeeds) do
+						if selected then
+							count = count + 1
+							if not firstSeed then
+								firstSeed = seedName
+							end
+						end
+					end
+
+					if count == 0 then
+						selectedSeedText.Text = "Click to select seeds"
+						selectedSeedText.TextColor3 = Theme.TextSecondary
+					else
+						-- Show first selected seed info
+						for _, seed in ipairs(SeedData) do
+							if seed.SeedName == firstSeed then
+								local priceStr = FormatPrice(seed.Price)
+								local rColor = RarityColors[seed.Rarity] or Theme.TextSecondary
+								-- Build rich text-like display (name + price + rarity + type)
+								selectedSeedText.Text = string.format(
+									"%s %s %s %s",
+									seed.SeedName,
+									priceStr,
+									seed.Rarity,
+									seed.Type or "Single"
+								)
+								selectedSeedText.TextColor3 = Theme.TextPrimary
+								break
+							end
+						end
+					end
+				end
+
+				UpdateSelectedDisplay()
+
+				-- Select All & Clear buttons row
+				local btnFrame = Create("Frame", {
+					Parent = scroll,
+					BackgroundTransparency = 1,
+					Size = UDim2.new(1, -8, 0, 28),
+					ZIndex = Z.DropControl,
+				})
+
+				local selectAllBtn = Create("TextButton", {
+					Parent = btnFrame,
+					BackgroundColor3 = Theme.Card,
+					BorderSizePixel = 0,
+					Position = UDim2.new(0, 0, 0, 0),
+					Size = UDim2.new(0.48, 0, 1, 0),
+					Font = Enum.Font.Gotham,
+					Text = "✅ Select All",
+					TextColor3 = Theme.TextPrimary,
+					TextSize = 11,
+					ZIndex = Z.DropControl,
+					Active = true,
+					AutoButtonColor = false,
+				})
+				AddCorner(selectAllBtn, 4)
+				AddStroke(selectAllBtn, Theme.Border, 1)
+				AddButtonEffects(selectAllBtn, Theme.Card)
+
+				local clearBtn = Create("TextButton", {
+					Parent = btnFrame,
+					BackgroundColor3 = Theme.Card,
+					BorderSizePixel = 0,
+					Position = UDim2.new(0.52, 0, 0, 0),
+					Size = UDim2.new(0.48, 0, 1, 0),
+					Font = Enum.Font.Gotham,
+					Text = "🧹 Clear",
+					TextColor3 = Theme.TextPrimary,
+					TextSize = 11,
+					ZIndex = Z.DropControl,
+					Active = true,
+					AutoButtonColor = false,
+				})
+				AddCorner(clearBtn, 4)
+				AddStroke(clearBtn, Theme.Border, 1)
+				AddButtonEffects(clearBtn, Theme.Card)
+
+				selectAllBtn.Activated:Connect(function()
+					for _, seed in ipairs(SeedData) do
+						SelectedSeeds[seed.SeedName] = true
+					end
+					UpdateSelectedDisplay()
+				end)
+
+				clearBtn.Activated:Connect(function()
+					table.clear(SelectedSeeds)
+					UpdateSelectedDisplay()
+				end)
+
+				-- Open modal when clicking the seed display
+				selectedSeedBtn.Activated:Connect(function()
+					local modalItems = {}
+					for _, seed in ipairs(SeedData) do
+						table.insert(modalItems, {
+							Name = seed.SeedName,
+							Price = FormatPrice(seed.Price),
+							Rarity = seed.Rarity,
+							Type = seed.Type or "Single",
+						})
+					end
+
+					ShowModal("Buy Selected Seeds", modalItems, function(newSelected)
+						SelectedSeeds = {}
+						for name, selected in pairs(newSelected) do
+							if selected then
+								SelectedSeeds[name] = true
+							end
+						end
+						UpdateSelectedDisplay()
+					end, SelectedSeeds)
+				end)
+
+				-- ═════════════════════════════════════════════
+				-- TOGGLES (matching video)
+				-- ═════════════════════════════════════════════
+
+				-- Enable Seed Shop toggle
+				CreateToggle(scroll, "Enable Seed Shop", EnableSeedShop, function(state)
+					EnableSeedShop = state
+				end)
+
+				-- Tooltip text (small, muted)
+				local tip1 = CreateLabel(scroll, "When enabled, buys selected seeds only.", Theme.TextMuted, 10)
+				tip1.Size = UDim2.new(1, -8, 0, 14)
+
+				-- Enable Sheckles Reserve toggle
+				CreateToggle(scroll, "Enable Sheckles Reserve", EnableShecklesReserve, function(state)
+					EnableShecklesReserve = state
+				end)
+
+				-- Keep Min Sheckles label + input
+				local minLabel =
+					CreateLabel(scroll, "Keep Min Sheckles: " .. tostring(MinSheckles), Theme.TextPrimary, 11)
+				minLabel.Size = UDim2.new(1, -8, 0, 18)
+
+				local minInput = Create("TextBox", {
+					Parent = scroll,
+					BackgroundColor3 = Theme.Content,
+					BorderSizePixel = 0,
+					Size = UDim2.new(1, -8, 0, 26),
+					Font = Enum.Font.Gotham,
+					Text = tostring(MinSheckles),
+					TextColor3 = Theme.TextPrimary,
+					TextSize = 12,
+					ZIndex = Z.DropControl,
+					Active = true,
+				})
+				AddCorner(minInput, 4)
+				AddStroke(minInput, Theme.Border, 1)
+
+				minInput.FocusLost:Connect(function()
+					local num = tonumber(minInput.Text)
+					if num then
+						MinSheckles = math.floor(num)
+					end
+					minInput.Text = tostring(MinSheckles)
+					minLabel.Text = "Keep Min Sheckles: " .. tostring(MinSheckles)
+				end)
+
+				-- Enable Trigger Buying toggle
+				CreateToggle(scroll, "Enable Trigger Buying", EnableTriggerBuying, function(state)
+					EnableTriggerBuying = state
+				end)
+
+				-- Trigger dropdown button (Any Time)
+				local triggerBtn = Create("TextButton", {
 					Parent = scroll,
 					BackgroundColor3 = Theme.Card,
 					BorderSizePixel = 0,
 					Size = UDim2.new(1, -8, 0, 26),
 					Font = Enum.Font.Gotham,
-					Text = "Selected Seeds (0)  ^",
+					Text = TriggerTime .. "  ^",
 					TextColor3 = Theme.TextPrimary,
-					TextSize = 12,
+					TextSize = 11,
 					ZIndex = Z.DropControl,
 					Active = true,
 					AutoButtonColor = false,
 				})
+				AddCorner(triggerBtn, 4)
+				AddStroke(triggerBtn, Theme.Border, 1)
+				AddButtonEffects(triggerBtn, Theme.Card)
 
-				AddCorner(BuySeedBtn, 4)
-				AddStroke(BuySeedBtn, Theme.Border, 1)
-				AddButtonEffects(BuySeedBtn, Theme.Card)
-
-				local function UpdateButton()
-					local count = 0
-
-					for _, selected in pairs(SelectedSeeds) do
-						if selected then
-							count += 1
-						end
-					end
-
-					BuySeedBtn.Text = string.format("Selected Seeds (%d)  ^", count)
-				end
-
-				BuySeedBtn.Activated:Connect(function()
-					local buttons = {}
-
-					for _, seed in ipairs(SeedData) do
-						if seed.SeedName then
-							table.insert(buttons, seed.SeedName)
-						end
-					end
-
-					ShowModal("Select Seeds", buttons, function(container)
-						for _, child in ipairs(container:GetChildren()) do
-							if child:IsA("TextButton") then
-								local seedName = child.Text
-
-								if SelectedSeeds[seedName] then
-									child.BackgroundColor3 = Theme.Accent
-								end
-
-								child.Activated:Connect(function()
-									SelectedSeeds[seedName] = not SelectedSeeds[seedName]
-
-									if SelectedSeeds[seedName] then
-										child.BackgroundColor3 = Theme.Accent
-									else
-										child.BackgroundColor3 = Theme.Card
-									end
-
-									UpdateButton()
-								end)
+				triggerBtn.Activated:Connect(function()
+					local times = { "Any Time", "Morning", "Afternoon", "Evening", "Night" }
+					ShowModal(
+						"Select Trigger",
+						(function()
+							local t = {}
+							for _, v in ipairs(times) do
+								table.insert(t, { Name = v, Price = "", Rarity = "", Type = "" })
 							end
-						end
-					end)
+							return t
+						end)(),
+						function(selected)
+							for name, sel in pairs(selected) do
+								if sel then
+									TriggerTime = name
+									triggerBtn.Text = TriggerTime .. "  ^"
+									break
+								end
+							end
+						end,
+						{ [TriggerTime] = true }
+					)
 				end)
+			end)
+		end)
 
-				CreateToggle(scroll, "Enable Auto Buy", false, function(state)
-					AutoBuyEnabled = state
-				end)
+		-- ═══════════════════════════════════════════════════════
+		-- GEAR SHOP CARD (placeholder like in video)
+		-- ═══════════════════════════════════════════════════════
+		local gearShopCard = CreateCard("Gear Shop", "🔧", Theme.Accent)
+		gearShopCard.Activated:Connect(function()
+			ToggleDropdown(gearShopCard, function(scroll)
+				CreateLabel(scroll, "Gear Shop features coming soon!", Theme.TextSecondary, 11)
 			end)
 		end)
 	end)
 end
+RegisterSearch("Shop", "Shop", "🏪", function()
+	SidebarButtons["Shop"]()
+end)
 
+-- ═══════════════════════════════════════════════════════════════════════
+-- AUTO-BUY LOOP (runs every second when enabled)
+-- ═══════════════════════════════════════════════════════════════════════
 task.spawn(function()
 	while task.wait(1) do
-		if AutoBuyEnabled then
-			for seedName in pairs(SelectedSeeds) do
-				pcall(function()
-					Networking.SeedShop.PurchaseSeed(seedName)
-				end)
+		if EnableSeedShop and Networking and Networking.SeedShop and Networking.SeedShop.PurchaseSeed then
+			for seedName, selected in pairs(SelectedSeeds) do
+				if selected then
+					pcall(function()
+						Networking.SeedShop.PurchaseSeed(seedName)
+					end)
+				end
 			end
 		end
 	end
 end)
+
 -- ═══════════════════════════════════════════════════════════════════════
 -- SIDEBAR SETUP (Creates the left navigation buttons)
 -- ═══════════════════════════════════════════════════════════════════════
@@ -1579,7 +2089,7 @@ for index, item in ipairs(SidebarItems) do
 		Font = Enum.Font.Gotham,
 		Text = "  " .. item.Icon .. "  " .. item.Name,
 		TextColor3 = item.Color,
-		TextSize = 13,
+		TextSize = 12,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		AutoButtonColor = false,
 		ZIndex = Z.MainUI + 2,
