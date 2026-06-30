@@ -2392,14 +2392,18 @@ function Pages.Home()
 
 										humanoid:EquipTool(tool)
 
-										task.wait(0.4)
+										task.wait(0.2)
 
 										tool:Activate()
 
-										task.wait(0.5)
+										planted += 1
+
+										task.wait(0.3)
 									end
 								end
 							end
+
+							task.wait(0.2)
 						end
 					end)
 				end)
