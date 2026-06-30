@@ -1996,17 +1996,13 @@ local Networking, SeedData
 pcall(function()
 	Networking = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
 	SeedData = require(game:GetService("ReplicatedStorage").SharedModules.SeedData)
-	print(Networking)
-	print(getmetatable(Networking))
 end)
-for _, v in ipairs(game:GetDescendants()) do
-	if v:IsA("LocalScript") then
-		if
-			string.find(v.Name:lower(), "plant")
-			or string.find(v.Name:lower(), "seed")
-			or string.find(v.Name:lower(), "garden")
-		then
-			print(v:GetFullName())
+for k, v in pairs(Networking) do
+	print("TOP:", k, typeof(v))
+
+	if typeof(v) == "table" then
+		for k2, v2 in pairs(v) do
+			print("   ", k2, typeof(v2))
 		end
 	end
 end
