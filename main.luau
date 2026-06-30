@@ -1518,26 +1518,41 @@ local function UpdateDropdownPosition()
 	local card = ActiveDropdownCard
 	local drop = ActiveDropdownFrame
 
-	-- Get absolute screen positions
-	local cardAbsPos = card.AbsolutePosition
-	local cardAbsSize = card.AbsoluteSize
-	local mainAbsPos = MainFrame.AbsolutePosition
-	local mainAbsSize = MainFrame.AbsoluteSize
+	local cardPos = card.AbsolutePosition
+	local cardSize = card.AbsoluteSize
+	local mainPos = MainFrame.AbsolutePosition
+	local mainSize = MainFrame.AbsoluteSize
 
-	-- If card is scrolled completely outside MainFrame vertically, close dropdown
-	if cardAbsPos.Y + cardAbsSize.Y < mainAbsPos.Y or cardAbsPos.Y > mainAbsPos.Y + mainAbsSize.Y then
+	-- Hide dropdown if main UI is hidden
+	if not MainFrame.Visible then
+		drop.Visible = false
+		return
+	else
+		drop.Visible = true
+	end
+
+	-- Close if card scrolled out of view
+	if
+		cardPos.Y + cardSize.Y < mainPos.Y
+		or cardPos.Y > mainPos.Y + mainSize.Y
+		or cardPos.X + cardSize.X < mainPos.X
+		or cardPos.X > mainPos.X + mainSize.X
+	then
 		CloseDropdown()
 		return
 	end
 
-	-- Calculate position relative to MainFrame (our dropdown parent)
-	-- This makes the dropdown stick to the card even during resize/drag
-	local relX = cardAbsPos.X - mainAbsPos.X
-	local relY = cardAbsPos.Y - mainAbsPos.Y + cardAbsSize.Y
+	-- ABSOLUTE SCREEN POSITION - no parent math needed
+	local dropX = cardPos.X
+	local dropY = cardPos.Y + cardSize.Y
 
-	-- Update position and width to match card exactly
-	drop.Position = UDim2.new(0, relX, 0, relY)
-	drop.Size = UDim2.new(0, cardAbsSize.X, 0, drop.Size.Y.Offset)
+	-- Clamp to screen edges
+	local viewport = workspace.CurrentCamera.ViewportSize
+	local dropWidth = math.min(cardSize.X, viewport.X - dropX - 10)
+	local dropHeight = math.min(drop.Size.Y.Offset, viewport.Y - dropY - 10)
+
+	drop.Position = UDim2.new(0, dropX, 0, dropY)
+	drop.Size = UDim2.new(0, dropWidth, 0, dropHeight)
 end
 
 local function ToggleDropdown(card, buildFunc)
@@ -1574,10 +1589,10 @@ local function ToggleDropdown(card, buildFunc)
 	-- Create the dropdown container parented to MainFrame (above grid)
 	local drop = Create("Frame", {
 		Name = "Dropdown",
-		Parent = MainFrame,
+		Parent = ScreenGui,
 		BackgroundColor3 = Theme.DropdownBg,
 		BorderSizePixel = 0,
-		Position = UDim2.new(0, relX, 0, relY),
+		Position = UDim2.new(0, cardAbsPos.X, 0, cardAbsPos.Y + cardAbsSize.Y),
 		Size = UDim2.new(0, cardAbsSize.X, 0, 0), -- Start at height 0, width matches card
 		ClipsDescendants = true,
 		ZIndex = 55, -- Above cards (ZIndex 50)
@@ -1635,7 +1650,7 @@ local function ToggleDropdown(card, buildFunc)
 	Tween(drop, { Size = UDim2.new(0, cardAbsSize.X, 0, maxHeight) }, 0.2)
 
 	-- Start heartbeat to track card position during scroll/resize
-	DropdownHeartbeat = AddConnection(RunService.Heartbeat:Connect(UpdateDropdownPosition))
+	DropdownHeartbeat = AddConnection(RunService.RenderStepped:Connect(UpdateDropdownPosition))
 
 	-- Allow clicking again after animation finishes
 	task.delay(0.25, function()
@@ -2022,7 +2037,7 @@ local function ClearContent()
 	end
 
 	-- Clear any leftover dropdowns in MainFrame
-	for _, child in pairs(MainFrame:GetChildren()) do
+	for _, child in pairs(ScreenGui:GetChildren()) do
 		if child:IsA("Frame") and child.Name == "Dropdown" then
 			child:Destroy()
 		end
