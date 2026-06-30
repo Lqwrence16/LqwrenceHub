@@ -1943,6 +1943,50 @@ pcall(function()
 	SeedData = require(game:GetService("ReplicatedStorage").SharedModules.SeedData)
 end)
 
+--#debug
+task.wait(5)
+
+print("===== BACKPACK =====")
+
+for _, v in ipairs(game.Players.LocalPlayer.Backpack:GetChildren()) do
+	print(v.Name, v.ClassName)
+end
+
+print("===== CHARACTER =====")
+
+for _, v in ipairs(game.Players.LocalPlayer.Character:GetChildren()) do
+	print(v.Name, v.ClassName)
+end
+
+task.wait(5)
+
+local tool = game.Players.LocalPlayer.Backpack:FindFirstChild("Carrot")
+
+if tool then
+	print("===== TOOL CONTENTS =====")
+
+	for _, v in ipairs(tool:GetDescendants()) do
+		print(v.Name, v.ClassName)
+	end
+end
+
+local player = game.Players.LocalPlayer
+local humanoid = player.Character:WaitForChild("Humanoid")
+
+local tool = player.Backpack:FindFirstChild("Carrot")
+
+if tool then
+	humanoid:EquipTool(tool)
+end
+
+local player = game.Players.LocalPlayer
+local humanoid = player.Character:WaitForChild("Humanoid")
+
+local tool = player.Backpack:FindFirstChild("Carrot")
+
+if tool then
+	humanoid:EquipTool(tool)
+end
 --------------------------------------------------
 -- REUSABLE SEED MODAL
 --------------------------------------------------
@@ -2185,15 +2229,6 @@ function Pages.Home()
 
 		AddConnection(card.Activated:Connect(function()
 			ToggleDropdown(card, function(scroll)
-				-- DEBUG
-				if workspace.Gardens:FindFirstChild("Plot1") then
-					print("=== Plot1 Children ===")
-
-					for _, v in ipairs(workspace.Gardens.Plot1:GetChildren()) do
-						print(v.Name, v.ClassName)
-					end
-				end
-
 				Config.SelectedPlaceSeeds = Config.SelectedPlaceSeeds or {}
 
 				CreateLabel(scroll, "Seed Placer", Theme.Accent, 12)
