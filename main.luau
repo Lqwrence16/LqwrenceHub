@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════════════
---  EXOTIC HUB PRO v2.0.6
+--  LRX_Hub v2.0.6
 --  Complete UI Framework with Full Documentation, Working Notifications,
 --  Modal Visual Updates, and Proper Dropdown Behavior (pushes content down)
 -- ═══════════════════════════════════════════════════════════════════════
@@ -38,7 +38,7 @@ local Config = {
 	SidebarWidth = 170, -- Width of the left sidebar
 
 	-- Appearance
-	ToggleButtonText = "_hub", -- Text on the floating toggle button
+	ToggleButtonText = "LRX", -- Text on the floating toggle button
 	Theme = "Dark", -- Which color theme to use
 	AnimationSpeed = 0.2, -- How fast animations play (seconds)
 	DisableAnimations = false, -- If true, animations are instant
@@ -136,9 +136,9 @@ local AutoSaveDebounce = nil -- Tracks pending auto-save
 --   3. StringValue - Last resort, stores in PlayerGui
 
 -- The filename used when saving to disk (executor method)
-local CONFIG_FILE = "ExoticHubPro_Config.json"
+local CONFIG_FILE = "LRX_Hub_Config.json"
 -- The attribute name used when saving to player (fallback method)
-local CONFIG_ATTRIBUTE = "ExoticHubProConfig"
+local CONFIG_ATTRIBUTE = "LRX_Hub_Config"
 
 -- These are the ONLY keys that will be saved.
 -- We use a whitelist to prevent accidentally saving non-JSON data.
@@ -213,7 +213,7 @@ end
 -- This fixes the "ScreenGui is undefined" error in Notify.
 
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "ExoticHubPro"
+ScreenGui.Name = "LRX_Hub"
 ScreenGui.Parent = playerGui -- Parent to PlayerGui, NOT CoreGui
 ScreenGui.ResetOnSpawn = false -- Don't destroy when player respawns
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -567,7 +567,7 @@ function ResetConfig()
 		MinWindowWidth = 320,
 		MinWindowHeight = 240,
 		SidebarWidth = 170,
-		ToggleButtonText = "_hub",
+		ToggleButtonText = "LRX",
 		Theme = "Dark",
 		AnimationSpeed = 0.2,
 		DisableAnimations = false,
@@ -835,7 +835,7 @@ local TopBar = Create("Frame", {
 	ZIndex = 10,
 })
 
--- "_hub" logo text on the left
+-- "LRX" logo text on the left
 Create("TextLabel", {
 	Name = "Title",
 	Parent = TopBar,
@@ -843,7 +843,7 @@ Create("TextLabel", {
 	Position = UDim2.new(0, 14, 0, 0),
 	Size = UDim2.new(0, 70, 1, 0),
 	Font = Enum.Font.GothamBold,
-	Text = " _hub",
+	Text = " LRX",
 	TextColor3 = Theme.TextPrimary,
 	TextSize = 20,
 	TextXAlignment = Enum.TextXAlignment.Left,
@@ -1951,7 +1951,7 @@ end
 function Pages.Home()
 	SwitchPage("Home", "Home", "Game Version: v2.0.6", function()
 		-- Welcome text
-		CreateLabel(ContentScroll, "Welcome to Exotic Hub Pro", Theme.Accent, 14)
+		CreateLabel(ContentScroll, "Welcome to LRX_Hub", Theme.Accent, 14)
 		CreateLabel(ContentScroll, "Select a category from the sidebar to get started.", Theme.TextSecondary, 12)
 
 		-- Statistics card
@@ -2027,7 +2027,7 @@ end
 	Purpose: The Shop page with seed auto-buy functionality.
 	Features:
 		- Seed Shop card with dropdown
-		- Select Seeds button (opens modal)
+		- Select Seeds button (opens modal with SEARCH BAR)
 		- Enable Auto Buy toggle
 --]]
 function Pages.Shop()
@@ -2064,13 +2064,58 @@ function Pages.Shop()
 							end
 						end
 
-						-- Open multi-select modal
+						-- Open multi-select modal with SEARCH BAR
 						ShowModal("Select Seeds", function(modal, content)
-							-- Scrollable list of seeds
+							-- ════════════════════════════════════════
+							-- MODAL SEARCH BAR
+							-- ════════════════════════════════════════
+							local searchContainer = Create("Frame", {
+								Parent = content,
+								BackgroundColor3 = Theme.Content,
+								BorderSizePixel = 0,
+								Size = UDim2.new(1, 0, 0, 32),
+								Position = UDim2.new(0, 0, 0, 0),
+								ZIndex = 620,
+							})
+							Corner(searchContainer, 6)
+							Stroke(searchContainer, Theme.Border, 1)
+
+							-- Search icon
+							Create("TextLabel", {
+								Parent = searchContainer,
+								BackgroundTransparency = 1,
+								Position = UDim2.new(0, 8, 0, 0),
+								Size = UDim2.new(0, 22, 1, 0),
+								Font = Enum.Font.GothamBold,
+								Text = "🔍",
+								TextColor3 = Theme.TextMuted,
+								TextSize = 12,
+								ZIndex = 621,
+							})
+
+							-- Search input
+							local modalSearchBox = Create("TextBox", {
+								Parent = searchContainer,
+								BackgroundTransparency = 1,
+								Position = UDim2.new(0, 32, 0, 0),
+								Size = UDim2.new(1, -44, 1, 0),
+								Font = Enum.Font.Gotham,
+								Text = "Search seeds...",
+								TextColor3 = Theme.TextMuted,
+								TextSize = 12,
+								ZIndex = 621,
+								ClearTextOnFocus = true,
+								Active = true,
+							})
+
+							-- ════════════════════════════════════════
+							-- SEED LIST SCROLL AREA
+							-- ════════════════════════════════════════
 							local scroll2 = Create("ScrollingFrame", {
 								Parent = content,
 								BackgroundTransparency = 1,
-								Size = UDim2.new(1, 0, 1, -40),
+								Position = UDim2.new(0, 0, 0, 40),
+								Size = UDim2.new(1, 0, 1, -80),
 								ScrollBarThickness = 3,
 								ScrollBarImageColor3 = Theme.ScrollBar,
 								CanvasSize = UDim2.new(0, 0, 0, 0),
@@ -2085,13 +2130,14 @@ function Pages.Shop()
 							})
 
 							--[[
-							BuildModalRows()
-							----------------
+							BuildModalRows(filterText)
+							--------------------------
 							Purpose: Creates or refreshes all seed rows in the modal.
 							When a row is clicked, it toggles selection and immediately
 							updates the visual appearance (color + checkmark).
-						--]]
-							local function BuildModalRows()
+							filterText - string: Optional search text to filter seeds
+							--]]
+							local function BuildModalRows(filterText)
 								-- Clear existing rows
 								for _, child in pairs(scroll2:GetChildren()) do
 									if child:IsA("TextButton") then
@@ -2099,7 +2145,16 @@ function Pages.Shop()
 									end
 								end
 
+								local lowerFilter = filterText and filterText:lower() or ""
+								local visibleCount = 0
+
 								for i, item in ipairs(items) do
+									-- Filter: only show seeds matching the search text
+									if lowerFilter ~= "" and not item.Name:lower():find(lowerFilter, 1, true) then
+										continue
+									end
+
+									visibleCount = visibleCount + 1
 									local isSelected = Config.SelectedSeeds[item.Name] == true
 
 									local row = Create("TextButton", {
@@ -2153,15 +2208,43 @@ function Pages.Shop()
 										AutoSaveConfig()
 
 										-- INSTANTLY rebuild all rows to show new selection state
-										BuildModalRows()
+										BuildModalRows(
+											modalSearchBox.Text ~= "Search seeds..." and modalSearchBox.Text or ""
+										)
 									end))
 								end
 
-								scroll2.CanvasSize = UDim2.new(0, 0, 0, #items * 37)
+								-- Update scroll canvas size
+								scroll2.CanvasSize = UDim2.new(0, 0, 0, visibleCount * 37)
+
+								-- Show "No seeds found" message if filter returns nothing
+								if visibleCount == 0 and lowerFilter ~= "" then
+									local noResults = Create("TextLabel", {
+										Parent = scroll2,
+										BackgroundTransparency = 1,
+										Size = UDim2.new(1, 0, 0, 60),
+										Font = Enum.Font.Gotham,
+										Text = 'No seeds found matching "' .. filterText .. '"',
+										TextColor3 = Theme.TextMuted,
+										TextSize = 12,
+										TextWrapped = true,
+										ZIndex = 620,
+									})
+									scroll2.CanvasSize = UDim2.new(0, 0, 0, 70)
+								end
 							end
 
-							-- Build rows initially
-							BuildModalRows()
+							-- Build rows initially (show all)
+							BuildModalRows("")
+
+							-- Search functionality: filter rows as user types
+							AddConnection(modalSearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+								local text = modalSearchBox.Text
+								if text == "Search seeds..." then
+									text = ""
+								end
+								BuildModalRows(text)
+							end))
 
 							-- Done button to close modal
 							local doneBtn = CreateButton(content, "Done", Theme.Accent, 80, 32, function()
@@ -2537,4 +2620,4 @@ LoadConfig()
 Pages.Home()
 
 -- Show a welcome notification
-Notify("Exotic Hub Pro", "v2.0.6 Loaded! Dropdowns now push content down.", "Success", 4)
+Notify("LRX_Hub", "v2.0.6 Loaded! Dropdowns now push content down.", "Success", 4)
