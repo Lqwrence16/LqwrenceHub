@@ -1490,9 +1490,12 @@ pcall(function()
 	SeedData = require(game:GetService("ReplicatedStorage").SharedModules.SeedData)
 end)
 
+local SelectedSeeds = Config.SelectedSeeds
+local EnableSeedShop = Config.EnableSeedShop
+
 local function GetSelectedSeedNames()
 	local names = {}
-	for name, selected in pairs(Config.SelectedSeeds) do
+	for name, selected in pairs(SelectedSeeds) do
 		if selected then
 			table.insert(names, name)
 		end
@@ -1559,7 +1562,7 @@ local function ShowSeedSelectionModal()
 			end
 
 			for i, item in ipairs(filteredItems) do
-				local isSelected = Config.SelectedSeeds[item.Name] == true
+				local isSelected = SelectedSeeds[item.Name] == true
 				local row = Create("TextButton", {
 					Parent = scroll2,
 					BackgroundColor3 = isSelected and Color3.fromRGB(55, 45, 75) or Theme.Card,
@@ -1602,7 +1605,8 @@ local function ShowSeedSelectionModal()
 				end
 
 				AddConnection(row.Activated:Connect(function()
-					Config.SelectedSeeds[item.Name] = not Config.SelectedSeeds[item.Name]
+					SelectedSeeds[item.Name] = not SelectedSeeds[item.Name]
+					Config.SelectedSeeds = SelectedSeeds
 					AutoSaveConfig()
 					BuildModalRows(filterText)
 				end))
@@ -1647,7 +1651,8 @@ local function BuildSeedShopDropdown(scroll)
 	end)
 	selectBtn.Size = UDim2.new(1, -8, 0, 30)
 
-	CreateToggle(scroll, "Enable Auto Buy", Config.EnableSeedShop, function(state)
+	local _, getToggle = CreateToggle(scroll, "Enable Auto Buy", EnableSeedShop, function(state)
+		EnableSeedShop = state
 		Config.EnableSeedShop = state
 		AutoSaveConfig()
 	end)
@@ -1695,12 +1700,17 @@ function Pages.Settings()
 	SwitchPage("Settings", "Settings", "Preferences", function()
 		CreateLabel(ContentScroll, "UI Settings", Theme.Accent, 14)
 
-		CreateToggle(ContentScroll, "Disable Animations", Config.DisableAnimations, function(state)
-			Config.DisableAnimations = state
-			AutoSaveConfig()
-		end)
+		local _, animToggle = CreateToggle(
+			ContentScroll,
+			"Disable Animations",
+			Config.DisableAnimations,
+			function(state)
+				Config.DisableAnimations = state
+				AutoSaveConfig()
+			end
+		)
 
-		CreateToggle(ContentScroll, "Reduce Effects", Config.ReduceEffects, function(state)
+		local _, effectToggle = CreateToggle(ContentScroll, "Reduce Effects", Config.ReduceEffects, function(state)
 			Config.ReduceEffects = state
 			AutoSaveConfig()
 		end)
@@ -1981,13 +1991,13 @@ table.insert(
 		while ScriptRunning do
 			task.wait(0.2)
 
-			if Config.EnableSeedShop and Networking and SeedData then
+			if EnableSeedShop and Networking and SeedData then
 				local leaderstats = player:FindFirstChild("leaderstats")
 				local sheckles = leaderstats and leaderstats:FindFirstChild("Sheckles")
 
 				if sheckles then
 					for _, seed in ipairs(SeedData) do
-						if Config.SelectedSeeds[seed.SeedName] and sheckles.Value >= (seed.PurchasePrice or 0) then
+						if SelectedSeeds[seed.SeedName] and sheckles.Value >= (seed.PurchasePrice or 0) then
 							pcall(function()
 								Networking.SeedShop.PurchaseSeed:Fire(seed.SeedName)
 							end)
