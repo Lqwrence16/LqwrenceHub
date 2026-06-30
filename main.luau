@@ -2001,17 +2001,15 @@ end)
 task.wait(5)
 
 local player = game.Players.LocalPlayer
+local mouse = player:GetMouse()
 
-for _, tool in ipairs(player.Backpack:GetChildren()) do
-	if tool:IsA("Tool") and tool.Name:lower():find("carrot") then
-		print("Found:", tool.Name)
+print("Move your mouse around...")
 
-		print("===== CONTENTS =====")
-		for _, v in ipairs(tool:GetDescendants()) do
-			print(v.Name, v.ClassName)
-		end
+mouse.Move:Connect(function()
+	if mouse.Target then
+		print(mouse.Target:GetFullName())
 	end
-end
+end)
 --------------------------------------------------
 -- REUSABLE SEED MODAL
 --------------------------------------------------
