@@ -2268,14 +2268,69 @@ function Pages.Home()
 						UpdateSelectedLabel()
 					end
 				)
-
 				clearAllBtn.Position = UDim2.new(0.5, 3, 0, 0)
-
 				clearAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
+
+				--------------------------------------------------
+				-- RANDOM POSITION GENERATOR
+				--------------------------------------------------
+
+				local plot = workspace.Gardens:FindFirstChild("Plot1")
+
+				local function GetRandomPlantPosition()
+					if not plot then
+						return nil
+					end
+
+					local center = plot.Position
+
+					local xOffset = math.random(-20, 20)
+					local zOffset = math.random(-40, 40)
+
+					return Vector3.new(center.X + xOffset, center.Y - 4, center.Z + zOffset)
+				end
+
+				--------------------------------------------------
+				-- ENABLE SEED PLACER
+				--------------------------------------------------
+
+				local placing = false
+
+				CreateToggle(scroll, "Enable Seed Placer", false, function(state)
+					placing = state
+
+					if not state then
+						return
+					end
+
+					task.spawn(function()
+						while placing do
+							for seedName, enabled in pairs(Config.SelectedPlaceSeeds) do
+								if enabled then
+									local position = GetRandomPlantPosition()
+
+									if position and plot then
+										pcall(function()
+											-- CHANGE THIS TO THE CORRECT NETWORK CALL
+
+											Networking.Plant.PlantSeed:Fire(position, seedName, plot)
+										end)
+
+										task.wait(0.25)
+									end
+								end
+							end
+
+							task.wait(1)
+						end
+					end)
+				end)
 			end)
 		end))
 	end)
 end
+print(Networking.Plant.PlantSeed)
+print(typeof(Networking.Plant.PlantSeed))
 
 function Pages.Account()
 	SwitchPage("Account", "Account", "User Profile", function()
