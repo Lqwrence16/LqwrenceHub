@@ -2021,6 +2021,8 @@ function Pages.Shop()
 
 					selectedLabel.Text = string.format("Selected (%d): %s", #names, text)
 				end
+				-- Initialize the label when opening the dropdown
+				UpdateSelectedLabel()
 
 				-- Button to open seed selection modal
 				local selectBtn = CreateButton(
@@ -2261,41 +2263,33 @@ function Pages.Shop()
 				)
 				selectBtn.Size = UDim2.new(1, -8, 0, 30)
 
-				CreateLabel(scroll, "Quick Actions", Theme.Accent, 11)
-
-				local buttonFrame = Create("Frame", {
+				-- Select All / Clear All buttons
+				local actionFrame = Create("Frame", {
 					Parent = scroll,
 					BackgroundTransparency = 1,
-					Size = UDim2.new(1, 0, 0, 30),
+					Size = UDim2.new(1, -8, 0, 30),
 				})
 
-				local selectAllBtn = CreateButton(
-					buttonFrame,
-					"Select All",
-					Theme.Accent,
-					(buttonFrame.AbsoluteSize.X / 2) - 4,
-					30,
-					function()
-						if SeedData then
-							for _, seed in ipairs(SeedData) do
-								if seed.SeedName then
-									Config.SelectedSeeds[seed.SeedName] = true
-								end
+				local selectAllBtn = CreateButton(actionFrame, "Select All", Theme.Accent, 100, 30, function()
+					if SeedData then
+						for _, seed in ipairs(SeedData) do
+							if seed.SeedName then
+								Config.SelectedSeeds[seed.SeedName] = true
 							end
 						end
-
-						AutoSaveConfig()
-						UpdateSelectedLabel()
 					end
-				)
 
-				selectAllBtn.Position = UDim2.new(0, 0, 0, 0)
+					AutoSaveConfig()
+					UpdateSelectedLabel()
+				end)
+
+				selectAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
 
 				local clearAllBtn = CreateButton(
-					buttonFrame,
+					actionFrame,
 					"Clear All",
-					Color3.fromRGB(180, 60, 60),
-					(buttonFrame.AbsoluteSize.X / 2) - 4,
+					Color3.fromRGB(185, 65, 65),
+					100,
 					30,
 					function()
 						table.clear(Config.SelectedSeeds)
@@ -2305,7 +2299,8 @@ function Pages.Shop()
 					end
 				)
 
-				clearAllBtn.Position = UDim2.new(0.5, 4, 0, 0)
+				clearAllBtn.Position = UDim2.new(0.5, 3, 0, 0)
+				clearAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
 
 				-- Toggle to enable/disable auto buying
 				local _, getToggle = CreateToggle(scroll, "Enable Auto Buy", Config.EnableSeedShop, function(state)
