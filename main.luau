@@ -423,7 +423,7 @@ function SaveConfig(silent)
 
 	-- Method 1: Save to file (BEST - requires executor like Synapse X, KRNL, etc.)
 	-- writefile() creates a .json file in your executor's workspace folder
-	if writefile then
+	if typeof(writefile) == "function" then
 		local fileOk = pcall(function()
 			writefile(CONFIG_FILE, encoded)
 		end)
@@ -493,8 +493,9 @@ function LoadConfig()
 
 	-- Method 1: Load from file
 	-- isfile() checks if the file exists, readfile() reads its contents
-	if isfile and isfile(CONFIG_FILE) then
+	if typeof(isfile) == "function" and typeof(readfile) == "function" and isfile(CONFIG_FILE) then
 		local ok, result = pcall(readfile, CONFIG_FILE)
+
 		if ok and result and #result > 0 then
 			encoded = result
 			method = "file"
@@ -560,7 +561,7 @@ end
 --]]
 function ResetConfig()
 	-- Try to delete the file (delfile is executor-only)
-	if delfile then
+	if typeof(delfile) == "function" then
 		pcall(function()
 			delfile(CONFIG_FILE)
 		end)
@@ -733,7 +734,9 @@ end
 local function Create(className, properties)
 	local instance = Instance.new(className)
 	for property, value in pairs(properties or {}) do
-		instance[property] = value
+		local ok = pcall(function()
+			instance[property] = value
+		end)
 	end
 	return instance
 end
