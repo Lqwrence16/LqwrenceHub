@@ -1996,8 +1996,8 @@ local Networking, SeedData
 pcall(function()
 	Networking = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
 	SeedData = require(game:GetService("ReplicatedStorage").SharedModules.SeedData)
-	print("Networking:", Networking)
-	print("SeedData:", SeedData)
+	print(Networking)
+	print(getmetatable(Networking))
 end)
 
 --------------------------------------------------
