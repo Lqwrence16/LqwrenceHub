@@ -2404,6 +2404,35 @@ function Pages.Shop()
 		end))
 	end)
 end
+--══════════════════════════════════════════════════════--
+-- #AUTOB UY LOOP
+--══════════════════════════════════════════════════════--
+table.insert(
+	Tasks,
+	task.spawn(function()
+		while ScriptRunning do
+			task.wait(0.2) -- Check every 0.2 seconds
+
+			-- Only buy if enabled and game modules loaded
+			if Config.EnableSeedShop and Networking and SeedData then
+				-- Get player's money
+				local leaderstats = player:FindFirstChild("leaderstats")
+				local sheckles = leaderstats and leaderstats:FindFirstChild("Sheckles")
+
+				if sheckles then
+					-- Try to buy each selected seed
+					for _, seed in ipairs(SeedData) do
+						if Config.SelectedSeeds[seed.SeedName] and sheckles.Value >= (seed.PurchasePrice or 0) then
+							pcall(function()
+								Networking.SeedShop.PurchaseSeed:Fire(seed.SeedName)
+							end)
+						end
+					end
+				end
+			end
+		end
+	end)
+)
 
 --[[
 	Pages.Settings()
@@ -2463,7 +2492,6 @@ end
 --══════════════════════════════════════════════════════--
 -- SIDEBAR SETUP
 --══════════════════════════════════════════════════════--
--- This creates the navigation buttons on the left side.
 
 -- Define the sidebar items
 local SidebarItems = {
@@ -2541,9 +2569,6 @@ SidebarScroll.CanvasSize = UDim2.new(0, 0, 0, #SidebarItems * 39 + 10)
 --══════════════════════════════════════════════════════--
 -- GLOBAL CLICK HANDLER
 --══════════════════════════════════════════════════════--
--- This handles clicks anywhere on the screen to close
--- dropdowns and search suggestions when clicking outside them.
-
 AddConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	-- Ignore if the game already processed this input (e.g., typing in a TextBox)
 	if gameProcessed then
@@ -2589,7 +2614,6 @@ end))
 --══════════════════════════════════════════════════════--
 -- RESIZING SYSTEM
 --══════════════════════════════════════════════════════--
--- Allows users to resize the window by dragging the bottom-right corner.
 
 local ResizeHandle = Create("Frame", {
 	Name = "ResizeHandle",
@@ -2663,7 +2687,6 @@ end))
 --══════════════════════════════════════════════════════--
 -- WINDOW DRAG
 --══════════════════════════════════════════════════════--
--- Allows users to drag the window by clicking and dragging the top bar.
 
 local dragging = false
 local dragStart, frameStart
@@ -2702,43 +2725,8 @@ AddConnection(UserInputService.InputEnded:Connect(function(input)
 end))
 
 --══════════════════════════════════════════════════════--
--- AUTO BUY LOOP
---══════════════════════════════════════════════════════--
--- This background loop automatically buys selected seeds
--- when EnableSeedShop is true and you have enough money.
-
-table.insert(
-	Tasks,
-	task.spawn(function()
-		while ScriptRunning do
-			task.wait(0.2) -- Check every 0.2 seconds
-
-			-- Only buy if enabled and game modules loaded
-			if Config.EnableSeedShop and Networking and SeedData then
-				-- Get player's money
-				local leaderstats = player:FindFirstChild("leaderstats")
-				local sheckles = leaderstats and leaderstats:FindFirstChild("Sheckles")
-
-				if sheckles then
-					-- Try to buy each selected seed
-					for _, seed in ipairs(SeedData) do
-						if Config.SelectedSeeds[seed.SeedName] and sheckles.Value >= (seed.PurchasePrice or 0) then
-							pcall(function()
-								Networking.SeedShop.PurchaseSeed:Fire(seed.SeedName)
-							end)
-						end
-					end
-				end
-			end
-		end
-	end)
-)
-
---══════════════════════════════════════════════════════--
 -- MOBILE SUPPORT
 --══════════════════════════════════════════════════════--
--- If the device has a touchscreen, shrink the window to fit.
-
 if UserInputService.TouchEnabled then
 	local viewport = workspace.CurrentCamera.ViewportSize
 	local w = math.min(Config.WindowWidth, viewport.X - 20)
@@ -2747,16 +2735,5 @@ if UserInputService.TouchEnabled then
 	MainFrame.Position = UDim2.new(0.5, -w / 2, 0.5, -h / 2)
 end
 
---══════════════════════════════════════════════════════--
--- STARTUP
---══════════════════════════════════════════════════════--
--- This code runs when the script first loads.
-
--- Try to load saved configuration
 LoadConfig()
-
--- Show the Home page by default
-Pages.Home()
-
--- Show a welcome notification
-Notify("LRX_Hub", "v2.0.6 Loaded! Dropdowns now push content down.", "Success", 4)
+Pages.Account()
