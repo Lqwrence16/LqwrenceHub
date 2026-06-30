@@ -1450,38 +1450,6 @@ AddConnection(ContentFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(Upda
 	     the dropdown's Position and Size every frame.
 	Also closes the dropdown if the card scrolls out of view.
 --]]
-local function UpdateDropdownPosition()
-	if not ActiveDropdownFrame or not ActiveDropdownCard then
-		return
-	end
-	if not ActiveDropdownFrame.Parent then
-		return
-	end
-
-	local card = ActiveDropdownCard
-	local drop = ActiveDropdownFrame
-
-	-- Check if card is still visible (not scrolled out of view)
-	local cardAbsPos = card.AbsolutePosition
-	local cardAbsSize = card.AbsoluteSize
-	local layerAbsPos = DropdownLayer.AbsolutePosition
-	local layerAbsSize = DropdownLayer.AbsoluteSize
-
-	-- If card is completely outside the visible area, close dropdown
-	if cardAbsPos.Y + cardAbsSize.Y < layerAbsPos.Y or cardAbsPos.Y > layerAbsPos.Y + layerAbsSize.Y then
-		CloseDropdown()
-		return
-	end
-
-	-- Calculate position relative to DropdownLayer
-	local relX = cardAbsPos.X - layerAbsPos.X
-	local relY = cardAbsPos.Y - layerAbsPos.Y + cardAbsSize.Y
-
-	-- Update position and width to match card
-	drop.Position = UDim2.new(0, relX, 0, relY)
-	drop.Size = UDim2.new(0, cardAbsSize.X, 0, drop.Size.Y.Offset)
-end
-
 --[[
 	CloseDropdown()
 	---------------
@@ -1542,6 +1510,38 @@ end
 		7. Animate it opening
 		8. Other cards stay in place - nothing is pushed down!
 --]]
+local function UpdateDropdownPosition()
+	if not ActiveDropdownFrame or not ActiveDropdownCard then
+		return
+	end
+	if not ActiveDropdownFrame.Parent then
+		return
+	end
+
+	local card = ActiveDropdownCard
+	local drop = ActiveDropdownFrame
+
+	-- Check if card is still visible (not scrolled out of view)
+	local cardAbsPos = card.AbsolutePosition
+	local cardAbsSize = card.AbsoluteSize
+	local layerAbsPos = DropdownLayer.AbsolutePosition
+	local layerAbsSize = DropdownLayer.AbsoluteSize
+
+	-- If card is completely outside the visible area, close dropdown
+	if cardAbsPos.Y + cardAbsSize.Y < layerAbsPos.Y or cardAbsPos.Y > layerAbsPos.Y + layerAbsSize.Y then
+		CloseDropdown()
+		return
+	end
+
+	-- Calculate position relative to DropdownLayer
+	local relX = cardAbsPos.X - layerAbsPos.X
+	local relY = cardAbsPos.Y - layerAbsPos.Y + cardAbsSize.Y
+
+	-- Update position and width to match card
+	drop.Position = UDim2.new(0, relX, 0, relY)
+	drop.Size = UDim2.new(0, cardAbsSize.X, 0, drop.Size.Y.Offset)
+end
+
 local function ToggleDropdown(card, buildFunc)
 	-- Prevent rapid clicking while animating
 	if DropdownDebounce then
