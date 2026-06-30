@@ -1473,25 +1473,13 @@ function Pages.Shop()
 			ToggleDropdown(seedCard, function(scroll)
 				CreateLabel(scroll, "Buy Selected Seeds", Theme.TextSecondary, 12)
 
-				local SeedOptions = {}
-				local SeedLookup = {}
-
-				for _, seed in ipairs(SeedData) do
-					if seed.SeedName and seed.PurchasePrice and seed.Rarity then
-						local display = string.format("%s | $%s | %s", seed.SeedName, seed.PurchasePrice, seed.Rarity)
-
-						table.insert(SeedOptions, display)
-						SeedLookup[display] = seed.SeedName
-					end
-				end
-
 				local BuySeedBtn = Create("TextButton", {
 					Parent = scroll,
 					BackgroundColor3 = Theme.Card,
 					BorderSizePixel = 0,
 					Size = UDim2.new(1, -8, 0, 26),
 					Font = Enum.Font.Gotham,
-					Text = "Selected Seed  ^",
+					Text = "Selected Seeds (0)  ^",
 					TextColor3 = Theme.TextPrimary,
 					TextSize = 12,
 					ZIndex = Z.DropControl,
@@ -1503,16 +1491,48 @@ function Pages.Shop()
 				AddStroke(BuySeedBtn, Theme.Border, 1)
 				AddButtonEffects(BuySeedBtn, Theme.Card)
 
+				local function UpdateButton()
+					local count = 0
+
+					for _, selected in pairs(SelectedSeeds) do
+						if selected then
+							count += 1
+						end
+					end
+
+					BuySeedBtn.Text = string.format("Selected Seeds (%d)  ^", count)
+				end
+
 				BuySeedBtn.Activated:Connect(function()
-					ShowModal("Select Seed", SeedOptions, function(selected)
-						BuySeedBtn.Text = selected .. " ^"
+					local buttons = {}
 
-						table.clear(SelectedSeeds)
+					for _, seed in ipairs(SeedData) do
+						if seed.SeedName then
+							table.insert(buttons, seed.SeedName)
+						end
+					end
 
-						local seedName = SeedLookup[selected]
+					ShowModal("Select Seeds", buttons, function(container)
+						for _, child in ipairs(container:GetChildren()) do
+							if child:IsA("TextButton") then
+								local seedName = child.Text
 
-						if seedName then
-							SelectedSeeds[seedName] = true
+								if SelectedSeeds[seedName] then
+									child.BackgroundColor3 = Theme.Accent
+								end
+
+								child.Activated:Connect(function()
+									SelectedSeeds[seedName] = not SelectedSeeds[seedName]
+
+									if SelectedSeeds[seedName] then
+										child.BackgroundColor3 = Theme.Accent
+									else
+										child.BackgroundColor3 = Theme.Card
+									end
+
+									UpdateButton()
+								end)
+							end
 						end
 					end)
 				end)
