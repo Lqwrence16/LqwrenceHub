@@ -1,7 +1,11 @@
 -- ═══════════════════════════════════════════════════════════════════════
---  EXOTIC HUB PRO v2.0.6
---  Complete UI Framework with Full Documentation, Working Notifications,
---  Modal Visual Updates, and Proper Dropdown Behavior (pushes content down)
+--  EXOTIC HUB PRO v2.0.7
+--  Complete UI Framework with Full Documentation
+--  Changes in v2.0.7:
+--    • Silent auto-save (no spam notifications)
+--    • 2-column grid layout for cards (side-by-side)
+--    • Floating dropdowns that resize with window
+--    • Detailed comments on every function
 -- ═══════════════════════════════════════════════════════════════════════
 
 --══════════════════════════════════════════════════════--
@@ -10,11 +14,11 @@
 -- Services are Roblox built-in systems that we need access to.
 -- We get them once at the top so we can use them anywhere in the script.
 
-local Players = game:GetService("Players") -- Access player data
-local TweenService = game:GetService("TweenService") -- Smooth animations
+local Players = game:GetService("Players")              -- Access player data
+local TweenService = game:GetService("TweenService")    -- Smooth animations
 local UserInputService = game:GetService("UserInputService") -- Detect clicks/touches
-local RunService = game:GetService("RunService") -- Runs code every frame
-local HttpService = game:GetService("HttpService") -- JSON encode/decode for saving
+local RunService = game:GetService("RunService")        -- Runs code every frame
+local HttpService = game:GetService("HttpService")      -- JSON encode/decode for saving
 
 -- Get the local player (the person running this script)
 local player = Players.LocalPlayer
@@ -31,29 +35,29 @@ local playerGui = player:WaitForChild("PlayerGui")
 
 local Config = {
 	-- Window settings
-	WindowWidth = 600, -- How wide the main window is
-	WindowHeight = 400, -- How tall the main window is
-	MinWindowWidth = 320, -- Minimum width when resizing
-	MinWindowHeight = 240, -- Minimum height when resizing
-	SidebarWidth = 170, -- Width of the left sidebar
+	WindowWidth = 600,           -- How wide the main window is
+	WindowHeight = 400,          -- How tall the main window is
+	MinWindowWidth = 320,        -- Minimum width when resizing
+	MinWindowHeight = 240,       -- Minimum height when resizing
+	SidebarWidth = 170,          -- Width of the left sidebar
 
 	-- Appearance
-	ToggleButtonText = "_hub", -- Text on the floating toggle button
-	Theme = "Dark", -- Which color theme to use
-	AnimationSpeed = 0.2, -- How fast animations play (seconds)
-	DisableAnimations = false, -- If true, animations are instant
-	NotificationDuration = 3, -- How long notifications stay on screen
-	ModalDarkening = 0.5, -- How dark the background gets behind modals
-	UIScale = 1.0, -- Scale multiplier for UI size
+	ToggleButtonText = "_hub",   -- Text on the floating toggle button
+	Theme = "Dark",              -- Which color theme to use
+	AnimationSpeed = 0.2,        -- How fast animations play (seconds)
+	DisableAnimations = false,   -- If true, animations are instant
+	NotificationDuration = 3,    -- How long notifications stay on screen
+	ModalDarkening = 0.5,        -- How dark the background gets behind modals
+	UIScale = 1.0,               -- Scale multiplier for UI size
 
 	-- Saved window state
-	WindowPosition = nil, -- Where the window was last placed
-	WindowSize = nil, -- What size the window was last set to
+	WindowPosition = nil,        -- Where the window was last placed
+	WindowSize = nil,            -- What size the window was last set to
 
 	-- Feature settings
-	SelectedSeeds = {}, -- Which seeds are selected for auto-buy
-	EnableSeedShop = false, -- Whether auto-buy is turned on
-	ReduceEffects = false, -- Whether to reduce visual effects
+	SelectedSeeds = {},          -- Which seeds are selected for auto-buy
+	EnableSeedShop = false,      -- Whether auto-buy is turned on
+	ReduceEffects = false,       -- Whether to reduce visual effects
 
 	-- Keybinds (stored as string names because JSON can't save Enum.KeyCode)
 	Keybinds = { ToggleUI = "F" },
@@ -68,26 +72,26 @@ local Config = {
 
 local Themes = {
 	Dark = {
-		Background = Color3.fromRGB(22, 22, 26), -- Main window background
-		Sidebar = Color3.fromRGB(28, 28, 32), -- Left panel background
-		Content = Color3.fromRGB(18, 18, 22), -- Right content area background
-		Card = Color3.fromRGB(35, 35, 40), -- Card/button background
-		CardHover = Color3.fromRGB(45, 45, 50), -- Card color when mouse hovers
-		DropdownBg = Color3.fromRGB(32, 32, 38), -- Dropdown menu background
-		TextPrimary = Color3.fromRGB(255, 255, 255), -- Main text (white)
-		TextSecondary = Color3.fromRGB(160, 160, 160), -- Secondary text (gray)
-		TextMuted = Color3.fromRGB(100, 100, 100), -- Dimmed text
-		Accent = Color3.fromRGB(147, 112, 219), -- Purple accent
-		AccentPink = Color3.fromRGB(255, 105, 180), -- Pink accent
-		AccentCyan = Color3.fromRGB(0, 255, 255), -- Cyan accent
-		AccentGreen = Color3.fromRGB(50, 205, 50), -- Green accent
-		AccentRed = Color3.fromRGB(255, 80, 80), -- Red accent
-		AccentYellow = Color3.fromRGB(255, 215, 0), -- Yellow accent
-		Border = Color3.fromRGB(50, 50, 55), -- Border/stroke color
-		ToggleBg = Color3.fromRGB(60, 60, 65), -- Toggle background (OFF)
-		ToggleOn = Color3.fromRGB(147, 112, 219), -- Toggle background (ON)
-		ScrollBar = Color3.fromRGB(60, 60, 70), -- Scrollbar color
-		Overlay = Color3.fromRGB(0, 0, 0), -- Modal overlay color
+		Background = Color3.fromRGB(22, 22, 26),      -- Main window background
+		Sidebar = Color3.fromRGB(28, 28, 32),         -- Left panel background
+		Content = Color3.fromRGB(18, 18, 22),         -- Right content area background
+		Card = Color3.fromRGB(35, 35, 40),            -- Card/button background
+		CardHover = Color3.fromRGB(45, 45, 50),       -- Card color when mouse hovers
+		DropdownBg = Color3.fromRGB(32, 32, 38),      -- Dropdown menu background
+		TextPrimary = Color3.fromRGB(255, 255, 255),  -- Main text (white)
+		TextSecondary = Color3.fromRGB(160, 160, 160),-- Secondary text (gray)
+		TextMuted = Color3.fromRGB(100, 100, 100),    -- Dimmed text
+		Accent = Color3.fromRGB(147, 112, 219),       -- Purple accent
+		AccentPink = Color3.fromRGB(255, 105, 180),   -- Pink accent
+		AccentCyan = Color3.fromRGB(0, 255, 255),     -- Cyan accent
+		AccentGreen = Color3.fromRGB(50, 205, 50),    -- Green accent
+		AccentRed = Color3.fromRGB(255, 80, 80),      -- Red accent
+		AccentYellow = Color3.fromRGB(255, 215, 0),   -- Yellow accent
+		Border = Color3.fromRGB(50, 50, 55),          -- Border/stroke color
+		ToggleBg = Color3.fromRGB(60, 60, 65),        -- Toggle background (OFF)
+		ToggleOn = Color3.fromRGB(147, 112, 219),     -- Toggle background (ON)
+		ScrollBar = Color3.fromRGB(60, 60, 70),       -- Scrollbar color
+		Overlay = Color3.fromRGB(0, 0, 0),            -- Modal overlay color
 	},
 }
 
@@ -101,30 +105,37 @@ local Theme = Themes[Config.Theme]
 -- These variables track the current state of the UI.
 -- They MUST be defined before any function that uses them.
 
-local ScriptRunning = true -- Controls whether background loops run
-local Connections = {} -- Stores event connections for cleanup
-local Tasks = {} -- Stores running threads
-local ActiveNotifs = 0 -- Count of visible notifications
-local CurrentPage = "Home" -- Which page is currently showing
-local SidebarButtons = {} -- Table of sidebar click functions
-local Pages = {} -- Table of all page functions
-local SearchableItems = {} -- Items registered for search
+local ScriptRunning = true          -- Controls whether background loops run
+local Connections = {}              -- Stores event connections for cleanup
+local Tasks = {}                    -- Stores running threads
+local ActiveNotifs = 0              -- Count of visible notifications
+local CurrentPage = "Home"          -- Which page is currently showing
+local SidebarButtons = {}           -- Table of sidebar click functions
+local Pages = {}                    -- Table of all page functions
+local SearchableItems = {}          -- Items registered for search
 
 -- Dropdown state tracking
-local ActiveDropdownCard = nil -- Which card opened the dropdown
-local ActiveDropdownFrame = nil -- The currently open dropdown frame
-local DropdownDebounce = false -- Prevents rapid clicking while animating
+local ActiveDropdownCard = nil      -- Which card opened the dropdown
+local ActiveDropdownFrame = nil     -- The currently open dropdown frame
+local DropdownDebounce = false      -- Prevents rapid clicking while animating
+local DropdownHeartbeat = nil       -- Connection that updates dropdown position every frame
 
 -- Modal state tracking
-local ModalOverlay = nil -- The dark background behind modals
-local ActiveModal = nil -- The currently open modal window
-local ModalOpen = false -- Whether a modal is currently open
+local ModalOverlay = nil            -- The dark background behind modals
+local ActiveModal = nil             -- The currently open modal window
+local ModalOpen = false             -- Whether a modal is currently open
 
 -- Card ordering counter
-local CardOrder = 0 -- Increments for each card created
+local CardOrder = 0                 -- Increments for each card created
 
 -- Auto-save debounce handle
-local AutoSaveDebounce = nil -- Tracks pending auto-save
+local AutoSaveDebounce = nil        -- Tracks pending auto-save
+
+-- Grid layout reference (for updating cell size on resize)
+local ContentGrid = nil             -- The UIGridLayout for cards
+
+-- Dropdown layer (floating above content)
+local DropdownLayer = nil           -- Container for floating dropdowns
 
 --══════════════════════════════════════════════════════--
 -- CONFIG SAVE/LOAD SYSTEM
@@ -143,24 +154,11 @@ local CONFIG_ATTRIBUTE = "ExoticHubProConfig"
 -- These are the ONLY keys that will be saved.
 -- We use a whitelist to prevent accidentally saving non-JSON data.
 local SERIALIZABLE_KEYS = {
-	"WindowWidth",
-	"WindowHeight",
-	"MinWindowWidth",
-	"MinWindowHeight",
-	"SidebarWidth",
-	"ToggleButtonText",
-	"Theme",
-	"AnimationSpeed",
-	"DisableAnimations",
-	"NotificationDuration",
-	"ModalDarkening",
-	"UIScale",
-	"SelectedSeeds",
-	"EnableSeedShop",
-	"Keybinds",
-	"ReduceEffects",
-	"WindowPosition",
-	"WindowSize",
+	"WindowWidth", "WindowHeight", "MinWindowWidth", "MinWindowHeight",
+	"SidebarWidth", "ToggleButtonText", "Theme", "AnimationSpeed",
+	"DisableAnimations", "NotificationDuration", "ModalDarkening",
+	"UIScale", "SelectedSeeds", "EnableSeedShop", "Keybinds",
+	"ReduceEffects", "WindowPosition", "WindowSize",
 }
 
 --[[
@@ -192,9 +190,7 @@ end
 --]]
 local function ApplyLoadedData(data)
 	-- Safety check: make sure data is actually a table
-	if typeof(data) ~= "table" then
-		return false
-	end
+	if typeof(data) ~= "table" then return false end
 
 	-- Copy each loaded value back into Config
 	for _, key in ipairs(SERIALIZABLE_KEYS) do
@@ -214,10 +210,10 @@ end
 
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "ExoticHubPro"
-ScreenGui.Parent = playerGui -- Parent to PlayerGui, NOT CoreGui
-ScreenGui.ResetOnSpawn = false -- Don't destroy when player respawns
+ScreenGui.Parent = playerGui              -- Parent to PlayerGui, NOT CoreGui
+ScreenGui.ResetOnSpawn = false            -- Don't destroy when player respawns
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ScreenGui.DisplayOrder = 999 -- Render above most other UIs
+ScreenGui.DisplayOrder = 999              -- Render above most other UIs
 
 --══════════════════════════════════════════════════════--
 -- MAIN FRAME
@@ -231,8 +227,8 @@ MainFrame.BackgroundColor3 = Theme.Background
 MainFrame.BorderSizePixel = 0
 MainFrame.Position = UDim2.new(0.5, -Config.WindowWidth / 2, 0.5, -Config.WindowHeight / 2)
 MainFrame.Size = UDim2.new(0, Config.WindowWidth, 0, Config.WindowHeight)
-MainFrame.ClipsDescendants = false -- Allow elements to extend slightly outside
-MainFrame.Active = true -- Enable interaction
+MainFrame.ClipsDescendants = false        -- Allow elements to extend slightly outside
+MainFrame.Active = true                   -- Enable interaction
 MainFrame.ZIndex = 10
 
 local mainCorner = Instance.new("UICorner")
@@ -247,14 +243,15 @@ mainStroke.Parent = MainFrame
 -- Apply saved window position/size if available
 if Config.WindowPosition then
 	MainFrame.Position = UDim2.new(
-		Config.WindowPosition[1],
-		Config.WindowPosition[2],
-		Config.WindowPosition[3],
-		Config.WindowPosition[4]
+		Config.WindowPosition[1], Config.WindowPosition[2],
+		Config.WindowPosition[3], Config.WindowPosition[4]
 	)
 end
 if Config.WindowSize then
-	MainFrame.Size = UDim2.new(Config.WindowSize[1], Config.WindowSize[2], Config.WindowSize[3], Config.WindowSize[4])
+	MainFrame.Size = UDim2.new(
+		Config.WindowSize[1], Config.WindowSize[2],
+		Config.WindowSize[3], Config.WindowSize[4]
+	)
 end
 
 --══════════════════════════════════════════════════════--
@@ -282,17 +279,15 @@ function Notify(title, message, notifType, duration)
 
 	-- Define colors for each notification type
 	local colors = {
-		Success = Color3.fromRGB(50, 205, 50), -- Green
-		Warning = Color3.fromRGB(255, 165, 0), -- Orange
-		Error = Color3.fromRGB(255, 80, 80), -- Red
-		Info = Color3.fromRGB(100, 150, 255), -- Blue
+		Success = Color3.fromRGB(50, 205, 50),    -- Green
+		Warning = Color3.fromRGB(255, 165, 0),    -- Orange
+		Error = Color3.fromRGB(255, 80, 80),      -- Red
+		Info = Color3.fromRGB(100, 150, 255),     -- Blue
 	}
 	local accent = colors[notifType] or colors.Info
 
 	-- Wait if too many notifications are showing (max 5)
-	while ActiveNotifs >= 5 do
-		task.wait(0.1)
-	end
+	while ActiveNotifs >= 5 do task.wait(0.1) end
 	ActiveNotifs = ActiveNotifs + 1
 
 	-- Create the notification frame
@@ -355,13 +350,13 @@ function Notify(title, message, notifType, duration)
 
 	-- Animate in: slide from off-screen right to visible position
 	TweenService:Create(frame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		Position = UDim2.new(1, -300, 0, frame.Position.Y.Offset),
+		Position = UDim2.new(1, -300, 0, frame.Position.Y.Offset)
 	}):Play()
 
 	-- Auto-dismiss after duration
 	task.delay(duration, function()
 		local tween = TweenService:Create(frame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			Position = UDim2.new(1, 20, 0, frame.Position.Y.Offset),
+			Position = UDim2.new(1, 20, 0, frame.Position.Y.Offset)
 		})
 		tween.Completed:Connect(function()
 			frame:Destroy()
@@ -376,22 +371,25 @@ end
 --══════════════════════════════════════════════════════--
 
 --[[
-	SaveConfig()
-	------------
+	SaveConfig(silent)
+	------------------
 	Purpose: Saves the current configuration to disk or memory.
 	How it works:
 		1. Converts Config to JSON string
 		2. Tries writefile() first (best, executor-only)
 		3. Falls back to SetAttribute()
 		4. Falls back to StringValue
-		5. Shows a notification telling you which method worked
+	Parameters:
+		silent - boolean: If true, does NOT show notification (used for auto-save)
 	Returns: boolean (true if saved successfully), string (method used)
 
 	NOTE: writefile, isfile, readfile, delfile are EXECUTOR-ONLY functions.
 	They will show as "undefined" in Roblox Studio. This is NORMAL.
 	They work fine in Synapse X, KRNL, Fluxus, etc.
 --]]
-function SaveConfig()
+function SaveConfig(silent)
+	silent = silent or false
+
 	-- Step 1: Build clean data and convert to JSON
 	local saveData = BuildSaveData()
 	local encoded
@@ -402,6 +400,9 @@ function SaveConfig()
 	-- If JSON encoding failed, show error and exit
 	if not ok then
 		warn("[Config] JSON Encode failed:", err)
+		if not silent then
+			Notify("Config", "Failed to encode settings", "Error", 3)
+		end
 		return false, "encode_failed"
 	end
 
@@ -412,7 +413,9 @@ function SaveConfig()
 			writefile(CONFIG_FILE, encoded)
 		end)
 		if fileOk then
-			Notify("Config", "Saved to file!", "Success", 2)
+			if not silent then
+				Notify("Config", "Saved to file!", "Success", 2)
+			end
 			return true, "file"
 		end
 	end
@@ -423,7 +426,9 @@ function SaveConfig()
 		player:SetAttribute(CONFIG_ATTRIBUTE, encoded)
 	end)
 	if attrOk then
-		Notify("Config", "Saved (attribute)", "Info", 2)
+		if not silent then
+			Notify("Config", "Saved (attribute)", "Info", 2)
+		end
 		return true, "attribute"
 	end
 
@@ -432,9 +437,7 @@ function SaveConfig()
 	local valOk = pcall(function()
 		-- Remove old value if it exists
 		local existing = playerGui:FindFirstChild(CONFIG_ATTRIBUTE)
-		if existing then
-			existing:Destroy()
-		end
+		if existing then existing:Destroy() end
 		-- Create new StringValue
 		local val = Instance.new("StringValue")
 		val.Name = CONFIG_ATTRIBUTE
@@ -442,12 +445,16 @@ function SaveConfig()
 		val.Parent = playerGui
 	end)
 	if valOk then
-		Notify("Config", "Saved (StringValue)", "Info", 2)
+		if not silent then
+			Notify("Config", "Saved (StringValue)", "Info", 2)
+		end
 		return true, "stringvalue"
 	end
 
 	-- If all methods failed
-	Notify("Config", "Failed to save", "Error", 3)
+	if not silent then
+		Notify("Config", "Failed to save", "Error", 3)
+	end
 	return false, "none"
 end
 
@@ -464,8 +471,8 @@ end
 	Returns: boolean (true if loaded), string (method used)
 --]]
 function LoadConfig()
-	local encoded = nil -- Will hold the raw JSON string
-	local method = "none" -- Tracks which method succeeded
+	local encoded = nil       -- Will hold the raw JSON string
+	local method = "none"     -- Tracks which method succeeded
 
 	-- Method 1: Load from file
 	-- isfile() checks if the file exists, readfile() reads its contents
@@ -532,48 +539,34 @@ end
 		3. Removes the StringValue
 		4. Resets the Config table to factory defaults
 		5. Resets the Theme to Dark
+	Shows a notification when complete.
 --]]
 function ResetConfig()
 	-- Try to delete the file (delfile is executor-only)
 	if delfile then
-		pcall(function()
-			delfile(CONFIG_FILE)
-		end)
+		pcall(function() delfile(CONFIG_FILE) end)
 	end
 
 	-- Clear the attribute
-	pcall(function()
-		player:SetAttribute(CONFIG_ATTRIBUTE, nil)
-	end)
+	pcall(function() player:SetAttribute(CONFIG_ATTRIBUTE, nil) end)
 
 	-- Remove the StringValue
 	pcall(function()
 		local val = playerGui:FindFirstChild(CONFIG_ATTRIBUTE)
-		if val then
-			val:Destroy()
-		end
+		if val then val:Destroy() end
 	end)
 
 	-- Reset Config to default values
 	Config = {
-		WindowWidth = 600,
-		WindowHeight = 400,
-		MinWindowWidth = 320,
-		MinWindowHeight = 240,
-		SidebarWidth = 170,
-		ToggleButtonText = "_hub",
-		Theme = "Dark",
-		AnimationSpeed = 0.2,
-		DisableAnimations = false,
-		NotificationDuration = 3,
-		ModalDarkening = 0.5,
-		UIScale = 1.0,
-		WindowPosition = nil,
-		WindowSize = nil,
-		SelectedSeeds = {},
-		EnableSeedShop = false,
-		ReduceEffects = false,
-		Keybinds = { ToggleUI = "F" },
+		WindowWidth = 600, WindowHeight = 400,
+		MinWindowWidth = 320, MinWindowHeight = 240,
+		SidebarWidth = 170, ToggleButtonText = "_hub",
+		Theme = "Dark", AnimationSpeed = 0.2,
+		DisableAnimations = false, NotificationDuration = 3,
+		ModalDarkening = 0.5, UIScale = 1.0,
+		WindowPosition = nil, WindowSize = nil,
+		SelectedSeeds = {}, EnableSeedShop = false,
+		ReduceEffects = false, Keybinds = { ToggleUI = "F" },
 	}
 
 	-- Reset theme
@@ -589,18 +582,17 @@ end
 	     Instead, we wait 1 second after the last change, then save once.
 	How: Uses task.delay() to schedule a save. If another change happens
 	     before the delay finishes, we cancel the old one and start a new one.
+	This calls SaveConfig(true) so it is SILENT (no notification spam).
 --]]
 function AutoSaveConfig()
 	-- If there's already a pending save, cancel it
 	if AutoSaveDebounce then
-		pcall(function()
-			task.cancel(AutoSaveDebounce)
-		end)
+		pcall(function() task.cancel(AutoSaveDebounce) end)
 	end
 
-	-- Schedule a new save in 1 second
+	-- Schedule a new save in 1 second (silent = true)
 	AutoSaveDebounce = task.delay(1, function()
-		SaveConfig()
+		SaveConfig(true)  -- true = silent, no notification
 		AutoSaveDebounce = nil
 	end)
 end
@@ -637,9 +629,7 @@ local function DisconnectAll()
 	for _, connection in ipairs(Connections) do
 		if connection and connection.Connected then
 			-- pcall prevents errors if the connection is already dead
-			pcall(function()
-				connection:Disconnect()
-			end)
+			pcall(function() connection:Disconnect() end)
 		end
 	end
 	-- Clear the table so we don't try to disconnect them again
@@ -666,9 +656,7 @@ local function Tween(instance, properties, duration, callback)
 		for key, value in pairs(properties) do
 			instance[key] = value
 		end
-		if callback then
-			callback()
-		end
+		if callback then callback() end
 		return
 	end
 
@@ -676,9 +664,9 @@ local function Tween(instance, properties, duration, callback)
 	local tween = TweenService:Create(
 		instance,
 		TweenInfo.new(
-			duration or Config.AnimationSpeed, -- How long
-			Enum.EasingStyle.Quad, -- Easing style (smooth acceleration)
-			Enum.EasingDirection.Out -- Easing direction (fast start, slow end)
+			duration or Config.AnimationSpeed,    -- How long
+			Enum.EasingStyle.Quad,                -- Easing style (smooth acceleration)
+			Enum.EasingDirection.Out              -- Easing direction (fast start, slow end)
 		),
 		properties
 	)
@@ -753,7 +741,7 @@ local MainIcon = Create("TextButton", {
 	Parent = ScreenGui,
 	BackgroundColor3 = Color3.fromRGB(15, 15, 15),
 	BorderSizePixel = 0,
-	Position = UDim2.new(0, 8, 0, 8), -- Top-left corner by default
+	Position = UDim2.new(0, 8, 0, 8),    -- Top-left corner by default
 	Size = UDim2.new(0, 60, 0, 32),
 	Font = Enum.Font.GothamBold,
 	Text = Config.ToggleButtonText,
@@ -761,7 +749,7 @@ local MainIcon = Create("TextButton", {
 	TextSize = 13,
 	ZIndex = 10,
 	Active = true,
-	AutoButtonColor = false, -- We handle colors manually
+	AutoButtonColor = false,             -- We handle colors manually
 })
 Corner(MainIcon, 6)
 Stroke(MainIcon, Theme.Border, 1)
@@ -773,27 +761,26 @@ local toggleStartPos, toggleBtnStart
 -- When user presses down on the toggle button
 AddConnection(MainIcon.InputBegan:Connect(function(input)
 	-- Only respond to mouse left click or touch
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+	if input.UserInputType == Enum.UserInputType.MouseButton1 
+	   or input.UserInputType == Enum.UserInputType.Touch then
 		toggleDragging = true
-		toggleStartPos = input.Position -- Remember where press started
-		toggleBtnStart = MainIcon.Position -- Remember button's current position
+		toggleStartPos = input.Position       -- Remember where press started
+		toggleBtnStart = MainIcon.Position    -- Remember button's current position
 	end
 end))
 
 -- While dragging, move the button with the mouse/finger
 AddConnection(UserInputService.InputChanged:Connect(function(input)
-	if
-		toggleDragging
-		and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch)
-	then
+	if toggleDragging and (
+		input.UserInputType == Enum.UserInputType.MouseMovement 
+		or input.UserInputType == Enum.UserInputType.Touch
+	) then
 		-- Calculate how far we've moved from the start position
 		local delta = input.Position - toggleStartPos
 		-- Update button position by that delta
 		MainIcon.Position = UDim2.new(
-			toggleBtnStart.X.Scale,
-			toggleBtnStart.X.Offset + delta.X,
-			toggleBtnStart.Y.Scale,
-			toggleBtnStart.Y.Offset + delta.Y
+			toggleBtnStart.X.Scale, toggleBtnStart.X.Offset + delta.X,
+			toggleBtnStart.Y.Scale, toggleBtnStart.Y.Offset + delta.Y
 		)
 	end
 end))
@@ -809,7 +796,9 @@ AddConnection(UserInputService.InputEnded:Connect(function(input)
 		if math.abs(delta.X) <= 8 and math.abs(delta.Y) <= 8 then
 			MainFrame.Visible = not MainFrame.Visible
 			Tween(MainIcon, {
-				BackgroundColor3 = MainFrame.Visible and Color3.fromRGB(15, 15, 15) or Color3.fromRGB(30, 30, 30),
+				BackgroundColor3 = MainFrame.Visible 
+					and Color3.fromRGB(15, 15, 15) 
+					or Color3.fromRGB(30, 30, 30)
 			}, 0.2)
 		end
 	end
@@ -825,7 +814,7 @@ local TopBar = Create("Frame", {
 	Parent = MainFrame,
 	BackgroundColor3 = Theme.Sidebar,
 	BorderSizePixel = 0,
-	Size = UDim2.new(1, 0, 0, 44), -- Full width, 44 pixels tall
+	Size = UDim2.new(1, 0, 0, 44),       -- Full width, 44 pixels tall
 	ZIndex = 10,
 })
 
@@ -885,11 +874,11 @@ local SearchFrame = Create("Frame", {
 	Parent = TopBar,
 	BackgroundColor3 = Theme.Content,
 	BorderSizePixel = 0,
-	Position = UDim2.new(1, -230, 0.5, -14), -- Right side, vertically centered
+	Position = UDim2.new(1, -230, 0.5, -14),  -- Right side, vertically centered
 	Size = UDim2.new(0, 200, 0, 28),
 	ZIndex = 12,
 })
-Corner(SearchFrame, 12) -- Very rounded corners
+Corner(SearchFrame, 12)                       -- Very rounded corners
 Stroke(SearchFrame, Theme.Border, 1)
 
 -- Magnifying glass icon inside the search bar
@@ -918,14 +907,14 @@ local SearchBox = Create("TextBox", {
 	TextColor3 = Theme.TextMuted,
 	TextSize = 12,
 	ZIndex = 13,
-	ClearTextOnFocus = true, -- Clears "Search" text when clicked
+	ClearTextOnFocus = true,               -- Clears "Search" text when clicked
 	Active = true,
 })
 
 -- Suggestion dropdown (appears below search bar when typing)
 local SuggestFrame = Create("Frame", {
 	Name = "Suggestions",
-	Parent = ScreenGui, -- Parent to ScreenGui so it can float above everything
+	Parent = ScreenGui,                     -- Parent to ScreenGui so it can float above everything
 	BackgroundColor3 = Theme.DropdownBg,
 	BorderSizePixel = 0,
 	Position = UDim2.new(0, 0, 0, 0),
@@ -994,16 +983,12 @@ end))
 AddConnection(CloseBtn.Activated:Connect(function()
 	-- Save current window position and size before closing
 	Config.WindowPosition = {
-		MainFrame.Position.X.Scale,
-		MainFrame.Position.X.Offset,
-		MainFrame.Position.Y.Scale,
-		MainFrame.Position.Y.Offset,
+		MainFrame.Position.X.Scale, MainFrame.Position.X.Offset,
+		MainFrame.Position.Y.Scale, MainFrame.Position.Y.Offset
 	}
 	Config.WindowSize = {
-		MainFrame.Size.X.Scale,
-		MainFrame.Size.X.Offset,
-		MainFrame.Size.Y.Scale,
-		MainFrame.Size.Y.Offset,
+		MainFrame.Size.X.Scale, MainFrame.Size.X.Offset,
+		MainFrame.Size.Y.Scale, MainFrame.Size.Y.Offset
 	}
 	SaveConfig()
 
@@ -1025,7 +1010,7 @@ local Sidebar = Create("Frame", {
 	Parent = MainFrame,
 	BackgroundColor3 = Theme.Sidebar,
 	BorderSizePixel = 0,
-	Position = UDim2.new(0, 2, 0, 46), -- 2px from left, below top bar
+	Position = UDim2.new(0, 2, 0, 46),       -- 2px from left, below top bar
 	Size = UDim2.new(0, Config.SidebarWidth, 1, -48),
 	ZIndex = 10,
 })
@@ -1039,7 +1024,7 @@ local SidebarScroll = Create("ScrollingFrame", {
 	Size = UDim2.new(1, 0, 1, -8),
 	ScrollBarThickness = 2,
 	ScrollBarImageColor3 = Theme.ScrollBar,
-	CanvasSize = UDim2.new(0, 0, 0, 0), -- Will be set dynamically
+	CanvasSize = UDim2.new(0, 0, 0, 0),        -- Will be set dynamically
 	ZIndex = 11,
 	ScrollingEnabled = true,
 	Active = true,
@@ -1064,12 +1049,11 @@ local ContentFrame = Create("Frame", {
 	Position = UDim2.new(0, Config.SidebarWidth, 0, 46),
 	Size = UDim2.new(1, -Config.SidebarWidth, 1, -48),
 	ZIndex = 10,
-	ClipsDescendants = true, -- Prevent content from spilling out
+	ClipsDescendants = true,                   -- Prevent content from spilling out
 })
 
--- Scrollable list that holds all the cards and dropdowns
--- We use UIListLayout (not UIGridLayout) so dropdowns can be inserted
--- between cards and push other content down naturally.
+-- Scrollable list that holds all the cards in a 2-column grid
+-- UIGridLayout arranges cards side-by-side (2 columns) automatically
 local ContentScroll = Create("ScrollingFrame", {
 	Name = "ContentScroll",
 	Parent = ContentFrame,
@@ -1085,11 +1069,29 @@ local ContentScroll = Create("ScrollingFrame", {
 	ClipsDescendants = true,
 })
 
--- Vertical list layout: cards and dropdowns stack from top to bottom
-local ContentList = Create("UIListLayout", {
+-- 2-column grid layout: cards appear side-by-side
+-- CellSize updates automatically when window resizes (see UpdateGridCellSize)
+ContentGrid = Create("UIGridLayout", {
 	Parent = ContentScroll,
-	Padding = UDim.new(0, 6),
+	CellPadding = UDim2.new(0, 6, 0, 6),       -- 6px gap between cards
+	CellSize = UDim2.new(0, 200, 0, 42),       -- Default width, updated dynamically
 	SortOrder = Enum.SortOrder.LayoutOrder,
+	HorizontalAlignment = Enum.HorizontalAlignment.Center,
+	VerticalAlignment = Enum.VerticalAlignment.Top,
+	FillDirectionMaxCells = 2,                  -- Max 2 columns per row
+})
+
+-- Dropdown layer: a floating frame above ContentScroll where dropdowns appear
+-- This prevents dropdowns from pushing other cards down (they float above)
+DropdownLayer = Create("Frame", {
+	Name = "DropdownLayer",
+	Parent = ContentFrame,
+	BackgroundTransparency = 1,
+	Position = UDim2.new(0, 12, 0, 12),       -- Same position as ContentScroll
+	Size = UDim2.new(1, -24, 1, -24),           -- Same size as ContentScroll
+	ZIndex = 50,                                -- Above ContentScroll (ZIndex 11)
+	ClipsDescendants = false,                   -- Allow dropdown to extend outside
+	Active = false,                             -- Don't block clicks on content below
 })
 
 --══════════════════════════════════════════════════════--
@@ -1102,7 +1104,7 @@ local ContentList = Create("UIListLayout", {
 --[[
 	CreateCard(parent, title, icon, iconColor)
 	------------------------------------------
-	Purpose: Creates a clickable card button for the content list.
+	Purpose: Creates a clickable card button for the content grid.
 	What it looks like: A rounded rectangle with an icon, title text, and an arrow.
 	Parameters:
 		parent    - Instance: Where to put the card (usually ContentScroll)
@@ -1120,14 +1122,14 @@ local function CreateCard(parent, title, icon, iconColor)
 		BackgroundColor3 = Theme.Card,
 		BorderSizePixel = 0,
 		Size = UDim2.new(1, 0, 0, 42),
-		LayoutOrder = CardOrder * 2, -- Even numbers for cards (0, 2, 4, 6...)
+		LayoutOrder = CardOrder,               -- Order in the grid
 		Font = Enum.Font.Gotham,
-		Text = "", -- We use child labels for text
+		Text = "",                             -- We use child labels for text
 		ZIndex = 50,
 		Active = true,
-		AutoButtonColor = false, -- We handle colors manually
+		AutoButtonColor = false,               -- We handle colors manually
 	})
-	CardOrder = CardOrder + 1 -- Increment for next card
+	CardOrder = CardOrder + 1                 -- Increment for next card
 	Corner(card, 6)
 	Stroke(card, Theme.Border, 1)
 
@@ -1236,7 +1238,7 @@ local function CreateToggle(parent, text, defaultState, callback)
 		AutoButtonColor = false,
 		Text = "",
 	})
-	Corner(toggleBg, 10) -- Fully rounded ends
+	Corner(toggleBg, 10)                  -- Fully rounded ends
 
 	-- The sliding knob (white circle)
 	local knob = Create("Frame", {
@@ -1255,7 +1257,7 @@ local function CreateToggle(parent, text, defaultState, callback)
 
 	-- When the toggle is clicked
 	AddConnection(toggleBg.Activated:Connect(function()
-		state = not state -- Flip the state
+		state = not state                    -- Flip the state
 
 		-- Animate background color change
 		Tween(toggleBg, { BackgroundColor3 = state and Theme.ToggleOn or Theme.ToggleBg }, 0.2)
@@ -1265,18 +1267,14 @@ local function CreateToggle(parent, text, defaultState, callback)
 		-- Call the user's callback function if provided
 		if callback then
 			local ok, err = pcall(callback, state)
-			if not ok then
-				warn("[Toggle Error]", err)
-			end
+			if not ok then warn("[Toggle Error]", err) end
 		end
 
-		-- Auto-save config after toggle changes
+		-- Auto-save config after toggle changes (silent)
 		AutoSaveConfig()
 	end))
 
-	return container, function()
-		return state
-	end
+	return container, function() return state end
 end
 
 --[[
@@ -1329,9 +1327,7 @@ local function CreateButton(parent, text, bgColor, width, height, callback)
 	if callback then
 		AddConnection(btn.Activated:Connect(function()
 			local ok, err = pcall(callback)
-			if not ok then
-				warn("[Button Error]", err)
-			end
+			if not ok then warn("[Button Error]", err) end
 		end))
 	end
 
@@ -1360,74 +1356,136 @@ local function CreateLabel(parent, text, textColor, fontSize)
 		Text = text,
 		TextColor3 = textColor or Theme.TextSecondary,
 		TextSize = fontSize or 11,
-		TextWrapped = true, -- Wrap text if too long
+		TextWrapped = true,                    -- Wrap text if too long
 		TextXAlignment = Enum.TextXAlignment.Left,
 		ZIndex = 120,
 	})
 end
 
 --══════════════════════════════════════════════════════--
--- DROPDOWN SYSTEM (FIXED: Inserts below card, pushes content down)
+-- GRID CELL SIZE UPDATER
 --══════════════════════════════════════════════════════--
--- Dropdowns are now inserted as siblings in ContentScroll.
--- They appear BELOW the card and push other cards down naturally.
--- This means they scroll with the content and resize with the window.
+-- Updates the 2-column grid cell size when the window is resized.
+-- This ensures cards automatically resize to fit the window width.
+
+--[[
+	UpdateGridCellSize()
+	--------------------
+	Purpose: Recalculates the grid cell width based on ContentFrame width.
+	How: ContentFrame width minus padding, divided by 2 columns, minus gap.
+	Called automatically when ContentFrame.AbsoluteSize changes.
+--]]
+local function UpdateGridCellSize()
+	if not ContentGrid then return end
+	local availableWidth = ContentFrame.AbsoluteSize.X - 24  -- 12px padding each side
+	local cellWidth = math.max(100, math.floor((availableWidth - 6) / 2))  -- 2 columns, 6px gap
+	ContentGrid.CellSize = UDim2.new(0, cellWidth, 0, 42)
+end
+
+-- Listen for ContentFrame size changes to update grid
+AddConnection(ContentFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateGridCellSize))
+
+--══════════════════════════════════════════════════════--
+-- DROPDOWN SYSTEM (Floating - does NOT push content)
+--══════════════════════════════════════════════════════--
+-- Dropdowns are now FLOATING above the content grid.
+-- They appear below the card but do NOT push other cards down.
+-- They automatically resize and reposition when the window resizes.
+
+--[[
+	UpdateDropdownPosition()
+	------------------------
+	Purpose: Keeps the floating dropdown positioned exactly below its parent card.
+	How: Calculates the card's position relative to DropdownLayer and updates
+	     the dropdown's Position and Size every frame.
+	Also closes the dropdown if the card scrolls out of view.
+--]]
+local function UpdateDropdownPosition()
+	if not ActiveDropdownFrame or not ActiveDropdownCard then return end
+	if not ActiveDropdownFrame.Parent then return end
+
+	local card = ActiveDropdownCard
+	local drop = ActiveDropdownFrame
+
+	-- Check if card is still visible (not scrolled out of view)
+	local cardAbsPos = card.AbsolutePosition
+	local cardAbsSize = card.AbsoluteSize
+	local layerAbsPos = DropdownLayer.AbsolutePosition
+	local layerAbsSize = DropdownLayer.AbsoluteSize
+
+	-- If card is completely outside the visible area, close dropdown
+	if cardAbsPos.Y + cardAbsSize.Y < layerAbsPos.Y 
+	   or cardAbsPos.Y > layerAbsPos.Y + layerAbsSize.Y then
+		CloseDropdown()
+		return
+	end
+
+	-- Calculate position relative to DropdownLayer
+	local relX = cardAbsPos.X - layerAbsPos.X
+	local relY = cardAbsPos.Y - layerAbsPos.Y + cardAbsSize.Y
+
+	-- Update position and width to match card
+	drop.Position = UDim2.new(0, relX, 0, relY)
+	drop.Size = UDim2.new(0, cardAbsSize.X, 0, drop.Size.Y.Offset)
+end
 
 --[[
 	CloseDropdown()
 	---------------
-	Purpose: Closes the currently open dropdown menu.
+	Purpose: Closes the currently open floating dropdown menu.
 	What it does:
-		1. Resets the card arrow back to ">"
-		2. Animates the dropdown shrinking to height 0
-		3. Destroys the dropdown frame after animation
+		1. Stops the position-tracking heartbeat
+		2. Resets the card arrow back to ">"
+		3. Animates the dropdown shrinking to height 0
+		4. Destroys the dropdown frame after animation
 --]]
 local function CloseDropdown()
-	if not ActiveDropdownFrame then
-		return
+	-- Stop the position tracker
+	if DropdownHeartbeat then
+		pcall(function() DropdownHeartbeat:Disconnect() end)
+		DropdownHeartbeat = nil
 	end
 
 	-- Reset the parent card's appearance
 	if ActiveDropdownCard then
 		local arrow = ActiveDropdownCard:FindFirstChild("Arrow")
-		if arrow then
-			arrow.Text = ">"
-		end
+		if arrow then arrow.Text = ">" end
 		Tween(ActiveDropdownCard, { BackgroundColor3 = Theme.Card }, 0.15)
 		ActiveDropdownCard = nil
 	end
 
 	-- Animate dropdown closing (shrink height to 0)
-	local frame = ActiveDropdownFrame
-	ActiveDropdownFrame = nil
-	Tween(frame, { Size = UDim2.new(1, 0, 0, 0) }, 0.15, function()
-		if frame and frame.Parent then
-			frame:Destroy()
-		end
-	end)
+	if ActiveDropdownFrame and ActiveDropdownFrame.Parent then
+		local frame = ActiveDropdownFrame
+		ActiveDropdownFrame = nil
+		Tween(frame, { Size = UDim2.new(0, frame.Size.X.Offset, 0, 0) }, 0.15, function()
+			if frame and frame.Parent then frame:Destroy() end
+		end)
+	else
+		ActiveDropdownFrame = nil
+	end
 end
 
 --[[
 	ToggleDropdown(card, buildFunc)
-	-------------------------------
-	Purpose: Opens or closes a dropdown menu UNDER a card.
+	-----------------------------
+	Purpose: Opens or closes a FLOATING dropdown menu below a card.
 	Parameters:
 		card      - TextButton: The card that was clicked
 		buildFunc - function(scrollFrame): A function that adds content to the dropdown
 	How it works:
 		1. If clicking the same card, close the dropdown
 		2. Otherwise, close any existing dropdown
-		3. Create a new dropdown frame as a sibling of the card in ContentScroll
-		4. Set LayoutOrder to card.LayoutOrder + 1 so it appears right below
-		5. Call buildFunc to fill it with content (toggles, buttons, etc.)
-		6. Animate it opening
-		7. UIListLayout automatically pushes other cards down!
+		3. Create a new dropdown frame in DropdownLayer (floats above grid)
+		4. Position it exactly below the card
+		5. Start a heartbeat connection to keep it positioned during scroll/resize
+		6. Call buildFunc to fill it with content (toggles, buttons, etc.)
+		7. Animate it opening
+		8. Other cards stay in place - nothing is pushed down!
 --]]
 local function ToggleDropdown(card, buildFunc)
 	-- Prevent rapid clicking while animating
-	if DropdownDebounce then
-		return
-	end
+	if DropdownDebounce then return end
 
 	-- If clicking the same card that's already open, close it
 	if ActiveDropdownCard == card then
@@ -1443,21 +1501,25 @@ local function ToggleDropdown(card, buildFunc)
 	ActiveDropdownCard = card
 	Tween(card, { BackgroundColor3 = Theme.CardHover }, 0.15)
 	local arrow = card:FindFirstChild("Arrow")
-	if arrow then
-		arrow.Text = "v"
-	end -- Change arrow to point down
+	if arrow then arrow.Text = "v" end              -- Change arrow to point down
 
-	-- Create the dropdown container as a sibling in ContentScroll
-	-- LayoutOrder = card.LayoutOrder + 1 places it RIGHT AFTER the card
+	-- Calculate initial position below the card
+	local cardAbsPos = card.AbsolutePosition
+	local cardAbsSize = card.AbsoluteSize
+	local layerAbsPos = DropdownLayer.AbsolutePosition
+	local relX = cardAbsPos.X - layerAbsPos.X
+	local relY = cardAbsPos.Y - layerAbsPos.Y + cardAbsSize.Y
+
+	-- Create the dropdown container in the floating layer (above grid)
 	local drop = Create("Frame", {
 		Name = "Dropdown",
-		Parent = ContentScroll,
+		Parent = DropdownLayer,
 		BackgroundColor3 = Theme.DropdownBg,
 		BorderSizePixel = 0,
-		Size = UDim2.new(1, 0, 0, 0), -- Start at height 0
-		LayoutOrder = card.LayoutOrder + 1, -- Odd numbers for dropdowns (1, 3, 5...)
+		Position = UDim2.new(0, relX, 0, relY),
+		Size = UDim2.new(0, cardAbsSize.X, 0, 0),  -- Start at height 0, width matches card
 		ClipsDescendants = true,
-		ZIndex = 50,
+		ZIndex = 55,                                -- Above cards (ZIndex 50)
 	})
 	Corner(drop, 6)
 	Stroke(drop, Theme.Border, 1)
@@ -1466,11 +1528,12 @@ local function ToggleDropdown(card, buildFunc)
 	local scroll = Create("ScrollingFrame", {
 		Parent = drop,
 		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 0, 0, 0),
 		Size = UDim2.new(1, 0, 1, 0),
 		ScrollBarThickness = 3,
 		ScrollBarImageColor3 = Theme.ScrollBar,
 		CanvasSize = UDim2.new(0, 0, 0, 0),
-		ZIndex = 51,
+		ZIndex = 56,
 		ClipsDescendants = true,
 		Active = true,
 		ScrollingEnabled = true,
@@ -1494,11 +1557,9 @@ local function ToggleDropdown(card, buildFunc)
 
 	-- Build the dropdown content using the provided function
 	local ok, err = pcall(buildFunc, scroll)
-	if not ok then
-		warn("[Dropdown Build Error]", err)
-	end
+	if not ok then warn("[Dropdown Build Error]", err) end
 
-	task.wait() -- Wait one frame for layout to calculate
+	task.wait()  -- Wait one frame for layout to calculate
 
 	-- Calculate height based on content, cap at 260 pixels max
 	local contentHeight = list.AbsoluteContentSize.Y + 16
@@ -1507,13 +1568,14 @@ local function ToggleDropdown(card, buildFunc)
 	scroll.CanvasSize = UDim2.new(0, 0, 0, contentHeight)
 	ActiveDropdownFrame = drop
 
-	-- Animate opening (height expands, pushing other cards down automatically)
-	Tween(drop, { Size = UDim2.new(1, 0, 0, maxHeight) }, 0.2)
+	-- Animate opening (height expands)
+	Tween(drop, { Size = UDim2.new(0, cardAbsSize.X, 0, maxHeight) }, 0.2)
+
+	-- Start heartbeat to track card position during scroll/resize
+	DropdownHeartbeat = AddConnection(RunService.Heartbeat:Connect(UpdateDropdownPosition))
 
 	-- Allow clicking again after animation finishes
-	task.delay(0.25, function()
-		DropdownDebounce = false
-	end)
+	task.delay(0.25, function() DropdownDebounce = false end)
 end
 
 --══════════════════════════════════════════════════════--
@@ -1533,7 +1595,7 @@ end
 --]]
 local function SetModalState(isOpen)
 	ModalOpen = isOpen
-	MainFrame.Active = not isOpen -- Disable/enable main window clicks
+	MainFrame.Active = not isOpen           -- Disable/enable main window clicks
 	SidebarScroll.ScrollingEnabled = not isOpen
 	ContentScroll.ScrollingEnabled = not isOpen
 end
@@ -1550,19 +1612,12 @@ end
 function CloseModal()
 	if ActiveModal then
 		-- Slide modal down slightly while fading
-		Tween(
-			ActiveModal,
-			{
-				Position = UDim2.new(0.5, -ActiveModal.Size.X.Offset / 2, 0.5, -ActiveModal.Size.Y.Offset / 2 + 20),
-			},
-			0.2,
-			function()
-				if ActiveModal then
-					ActiveModal:Destroy()
-				end
-				ActiveModal = nil
-			end
-		)
+		Tween(ActiveModal, {
+			Position = UDim2.new(0.5, -ActiveModal.Size.X.Offset/2, 0.5, -ActiveModal.Size.Y.Offset/2 + 20)
+		}, 0.2, function()
+			if ActiveModal then ActiveModal:Destroy() end
+			ActiveModal = nil
+		end)
 	end
 
 	if ModalOverlay then
@@ -1598,9 +1653,9 @@ function ShowModal(title, buildFunc, width, height)
 			Name = "ModalOverlay",
 			Parent = ScreenGui,
 			BackgroundColor3 = Theme.Overlay,
-			BackgroundTransparency = 1, -- Start fully transparent
+			BackgroundTransparency = 1,        -- Start fully transparent
 			BorderSizePixel = 0,
-			Size = UDim2.new(1, 0, 1, 0), -- Full screen
+			Size = UDim2.new(1, 0, 1, 0),      -- Full screen
 			ZIndex = 500,
 			Active = false,
 			Visible = false,
@@ -1626,9 +1681,7 @@ function ShowModal(title, buildFunc, width, height)
 	Tween(ModalOverlay, { BackgroundTransparency = Config.ModalDarkening }, 0.2)
 
 	-- Remove old modal if one exists
-	if ActiveModal then
-		ActiveModal:Destroy()
-	end
+	if ActiveModal then ActiveModal:Destroy() end
 
 	-- Create the modal window frame
 	local modal = Create("Frame", {
@@ -1636,7 +1689,7 @@ function ShowModal(title, buildFunc, width, height)
 		Parent = ModalOverlay,
 		BackgroundColor3 = Theme.Background,
 		BorderSizePixel = 0,
-		Position = UDim2.new(0.5, -width / 2, 0.5, -height / 2),
+		Position = UDim2.new(0.5, -width/2, 0.5, -height/2),
 		Size = UDim2.new(0, width, 0, height),
 		ZIndex = 600,
 		Active = true,
@@ -1697,14 +1750,12 @@ function ShowModal(title, buildFunc, width, height)
 	ActiveModal = modal
 
 	-- Animate modal appearing (slight slide up)
-	Tween(modal, { Position = UDim2.new(0.5, -width / 2, 0.5, -height / 2) }, 0.3)
+	Tween(modal, { Position = UDim2.new(0.5, -width/2, 0.5, -height/2) }, 0.3)
 
 	-- Build the modal content
 	if buildFunc then
 		local ok, err = pcall(buildFunc, modal, content)
-		if not ok then
-			warn("[Modal Build Error]", err)
-		end
+		if not ok then warn("[Modal Build Error]", err) end
 	end
 end
 
@@ -1747,7 +1798,7 @@ end
 --]]
 local function Search(query)
 	local matches = {}
-	local lowerQuery = query:lower() -- Convert to lowercase for case-insensitive search
+	local lowerQuery = query:lower()           -- Convert to lowercase for case-insensitive search
 	for _, item in ipairs(SearchableItems) do
 		-- Check if the item name contains the query text
 		if item.Name:lower():find(lowerQuery, 1, true) then
@@ -1828,9 +1879,7 @@ local function UpdateSuggestions()
 			SearchBox.Text = "Search"
 			if item.Action then
 				local ok, err = pcall(item.Action)
-				if not ok then
-					warn("[Search Action Error]", err)
-				end
+				if not ok then warn("[Search Action Error]", err) end
 			end
 		end))
 	end
@@ -1845,9 +1894,7 @@ AddConnection(SearchBox:GetPropertyChangedSignal("Text"):Connect(UpdateSuggestio
 
 -- When search box loses focus, hide suggestions after a short delay
 AddConnection(SearchBox.FocusLost:Connect(function()
-	if SearchBox.Text == "" then
-		SearchBox.Text = "Search"
-	end
+	if SearchBox.Text == "" then SearchBox.Text = "Search" end
 	task.wait(0.2)
 	SuggestFrame.Visible = false
 end))
@@ -1872,7 +1919,7 @@ end))
 	Why: When switching pages, we need to delete the old page's content
 	     before showing the new page's content. Otherwise they stack on top
 	     of each other causing the "repeating text" bug.
-	What it destroys: Frames, TextButtons, TextLabels, and UI layouts
+	What it destroys: Cards, labels, and dropdowns from ContentScroll and DropdownLayer
 --]]
 local function ClearContent()
 	-- Reset scroll position to top
@@ -1881,16 +1928,20 @@ local function ClearContent()
 	-- Close any open dropdown
 	CloseDropdown()
 
-	-- Destroy all children of ContentScroll
-	-- This includes cards (TextButton), labels (TextLabel), dropdowns, and layouts
+	-- Destroy all children of ContentScroll (cards, labels, etc.)
 	for _, child in pairs(ContentScroll:GetChildren()) do
-		if
-			child:IsA("Frame")
-			or child:IsA("TextButton")
-			or child:IsA("TextLabel")
-			or child:IsA("UIListLayout")
-			or child:IsA("UIPadding")
-		then
+		if child:IsA("Frame") 
+		   or child:IsA("TextButton") 
+		   or child:IsA("TextLabel")
+		   or child:IsA("UIGridLayout")
+		   or child:IsA("UIPadding") then
+			child:Destroy()
+		end
+	end
+
+	-- Clear any leftover dropdowns in the floating layer
+	for _, child in pairs(DropdownLayer:GetChildren()) do
+		if child:IsA("Frame") and child.Name == "Dropdown" then
 			child:Destroy()
 		end
 	end
@@ -1898,12 +1949,19 @@ local function ClearContent()
 	-- Reset card order counter
 	CardOrder = 0
 
-	-- Recreate the list layout since we destroyed it
-	ContentList = Create("UIListLayout", {
+	-- Recreate the grid layout since we destroyed it
+	ContentGrid = Create("UIGridLayout", {
 		Parent = ContentScroll,
-		Padding = UDim.new(0, 6),
+		CellPadding = UDim2.new(0, 6, 0, 6),
+		CellSize = UDim2.new(0, 200, 0, 42),
 		SortOrder = Enum.SortOrder.LayoutOrder,
+		HorizontalAlignment = Enum.HorizontalAlignment.Center,
+		VerticalAlignment = Enum.VerticalAlignment.Top,
+		FillDirectionMaxCells = 2,
 	})
+
+	-- Update grid cell size immediately for the new page
+	UpdateGridCellSize()
 end
 
 --[[
@@ -1924,11 +1982,9 @@ local function SwitchPage(pageName, title, subtitle, builder)
 	CurrentPage = pageName
 	PageTitle.Text = title
 	PageSubtitle.Text = subtitle or ""
-	ClearContent() -- Remove old content first!
-	local ok, err = pcall(builder) -- Build new content
-	if not ok then
-		warn("[Page Error]", err)
-	end
+	ClearContent()                        -- Remove old content first!
+	local ok, err = pcall(builder)        -- Build new content
+	if not ok then warn("[Page Error]", err) end
 end
 
 --══════════════════════════════════════════════════════--
@@ -1943,8 +1999,8 @@ end
 	Content: Welcome message and statistics card.
 --]]
 function Pages.Home()
-	SwitchPage("Home", "Home", "Game Version: v2.0.6", function()
-		-- Welcome text
+	SwitchPage("Home", "Home", "Game Version: v2.0.7", function()
+		-- Welcome text (spans full width in grid)
 		CreateLabel(ContentScroll, "Welcome to Exotic Hub Pro", Theme.Accent, 14)
 		CreateLabel(ContentScroll, "Select a category from the sidebar to get started.", Theme.TextSecondary, 12)
 
@@ -1985,7 +2041,9 @@ end
 function Pages.Premium()
 	SwitchPage("Premium", "Premium", "Premium Features", function()
 		CreateLabel(ContentScroll, "Premium Benefits", Theme.Accent, 14)
-		CreateLabel(ContentScroll, "• Auto Farm\n• Multi-Select\n• Advanced Stats", Theme.TextSecondary, 12)
+		CreateLabel(ContentScroll, "• Auto Farm
+• Multi-Select
+• Advanced Stats", Theme.TextSecondary, 12)
 	end)
 end
 
@@ -2013,9 +2071,7 @@ local function GetSelectedSeedNames()
 			table.insert(names, name)
 		end
 	end
-	if #names == 0 then
-		return "None"
-	end
+	if #names == 0 then return "None" end
 	return table.concat(names, ", ")
 end
 
@@ -2025,13 +2081,14 @@ end
 	Purpose: The Shop page with seed auto-buy functionality.
 	Features:
 		- Seed Shop card with dropdown
+		- Gear Shop card (side by side in 2-column grid!)
 		- Select Seeds button (opens modal)
 		- Enable Auto Buy toggle
 --]]
 function Pages.Shop()
 	SwitchPage("Shop", "Shop", "Seed Shop & Gear", function()
+		-- Seed Shop card (left column in 2-column grid)
 		local seedCard = CreateCard(ContentScroll, "Seed Shop", "🌱", Theme.Accent)
-
 		AddConnection(seedCard.Activated:Connect(function()
 			ToggleDropdown(seedCard, function(scroll)
 				CreateLabel(scroll, "Auto Buy Seeds", Theme.Accent, 12)
@@ -2041,54 +2098,48 @@ function Pages.Shop()
 				selectedLabel.Name = "SelectedLabel"
 
 				-- Button to open seed selection modal
-				local selectBtn = CreateButton(
-					scroll,
-					"Select Seeds...",
-					Theme.Card,
-					scroll.AbsoluteSize.X - 16,
-					30,
-					function()
-						-- Build list of available seeds from game data
-						local items = {}
-						if SeedData then
-							for _, seed in ipairs(SeedData) do
-								if seed.SeedName then
-									table.insert(items, {
-										Name = seed.SeedName,
-										Price = seed.PurchasePrice,
-										Rarity = seed.Rarity or "Common",
-									})
-								end
+				local selectBtn = CreateButton(scroll, "Select Seeds...", Theme.Card, scroll.AbsoluteSize.X - 16, 30, function()
+					-- Build list of available seeds from game data
+					local items = {}
+					if SeedData then
+						for _, seed in ipairs(SeedData) do
+							if seed.SeedName then
+								table.insert(items, {
+									Name = seed.SeedName,
+									Price = seed.PurchasePrice,
+									Rarity = seed.Rarity or "Common"
+								})
 							end
 						end
+					end
 
-						-- Open multi-select modal
-						ShowModal("Select Seeds", function(modal, content)
-							-- Scrollable list of seeds
-							local scroll2 = Create("ScrollingFrame", {
-								Parent = content,
-								BackgroundTransparency = 1,
-								Size = UDim2.new(1, 0, 1, -40),
-								ScrollBarThickness = 3,
-								ScrollBarImageColor3 = Theme.ScrollBar,
-								CanvasSize = UDim2.new(0, 0, 0, 0),
-								ZIndex = 620,
-								ClipsDescendants = true,
-							})
+					-- Open multi-select modal
+					ShowModal("Select Seeds", function(modal, content)
+						-- Scrollable list of seeds
+						local scroll2 = Create("ScrollingFrame", {
+							Parent = content,
+							BackgroundTransparency = 1,
+							Size = UDim2.new(1, 0, 1, -40),
+							ScrollBarThickness = 3,
+							ScrollBarImageColor3 = Theme.ScrollBar,
+							CanvasSize = UDim2.new(0, 0, 0, 0),
+							ZIndex = 620,
+							ClipsDescendants = true,
+						})
 
-							local list2 = Create("UIListLayout", {
-								Parent = scroll2,
-								Padding = UDim.new(0, 3),
-								SortOrder = Enum.SortOrder.LayoutOrder,
-							})
+						local list2 = Create("UIListLayout", {
+							Parent = scroll2,
+							Padding = UDim.new(0, 3),
+							SortOrder = Enum.SortOrder.LayoutOrder,
+						})
 
-							--[[
+						--[[
 							BuildModalRows()
 							----------------
 							Purpose: Creates or refreshes all seed rows in the modal.
 							When a row is clicked, it toggles selection and immediately
 							updates the visual appearance (color + checkmark).
-						--]]
+							--]]
 							local function BuildModalRows()
 								-- Clear existing rows
 								for _, child in pairs(scroll2:GetChildren()) do
@@ -2102,8 +2153,9 @@ function Pages.Shop()
 
 									local row = Create("TextButton", {
 										Parent = scroll2,
-										BackgroundColor3 = isSelected and Color3.fromRGB(55, 45, 75) -- Selected: purple tint
-											or Theme.Card, -- Not selected: normal
+										BackgroundColor3 = isSelected 
+											and Color3.fromRGB(55, 45, 75)  -- Selected: purple tint
+											or Theme.Card,                   -- Not selected: normal
 										BorderSizePixel = 0,
 										Size = UDim2.new(1, 0, 0, 34),
 										LayoutOrder = i,
@@ -2167,8 +2219,7 @@ function Pages.Shop()
 							end)
 							doneBtn.Position = UDim2.new(1, -80, 1, -36)
 						end, 480, 400)
-					end
-				)
+				end)
 				selectBtn.Size = UDim2.new(1, -8, 0, 30)
 
 				-- Toggle to enable/disable auto buying
@@ -2176,6 +2227,18 @@ function Pages.Shop()
 					EnableSeedShop = state
 					Config.EnableSeedShop = state
 					AutoSaveConfig()
+				end)
+			end)
+		end))
+
+		-- Gear Shop card (right column in 2-column grid!)
+		local gearCard = CreateCard(ContentScroll, "Gear Shop", "⚔️", Theme.AccentYellow)
+		AddConnection(gearCard.Activated:Connect(function()
+			ToggleDropdown(gearCard, function(scroll)
+				CreateLabel(scroll, "Gear Shop", Theme.AccentYellow, 12)
+				CreateLabel(scroll, "Coming Soon!", Theme.TextMuted, 11)
+				CreateButton(scroll, "Browse Gear", Theme.Card, 120, 30, function()
+					Notify("Gear", "Gear shop is not available yet.", "Info", 3)
 				end)
 			end)
 		end))
@@ -2189,24 +2252,19 @@ end
 	Features:
 		- Disable Animations toggle
 		- Reduce Effects toggle
-		- Save Now button
-		- Load Config button
-		- Reset Config button
+		- Save Now button (shows notification)
+		- Load Config button (shows notification)
+		- Reset Config button (shows notification)
 --]]
 function Pages.Settings()
 	SwitchPage("Settings", "Settings", "Preferences", function()
 		CreateLabel(ContentScroll, "UI Settings", Theme.Accent, 14)
 
 		-- Toggle: Disable Animations
-		local _, animToggle = CreateToggle(
-			ContentScroll,
-			"Disable Animations",
-			Config.DisableAnimations,
-			function(state)
-				Config.DisableAnimations = state
-				AutoSaveConfig()
-			end
-		)
+		local _, animToggle = CreateToggle(ContentScroll, "Disable Animations", Config.DisableAnimations, function(state)
+			Config.DisableAnimations = state
+			AutoSaveConfig()
+		end)
 
 		-- Toggle: Reduce Effects
 		local _, effectToggle = CreateToggle(ContentScroll, "Reduce Effects", Config.ReduceEffects, function(state)
@@ -2217,20 +2275,20 @@ function Pages.Settings()
 		-- Spacer
 		CreateLabel(ContentScroll, " ", Theme.TextSecondary, 8)
 
-		-- Save Now button
+		-- Save Now button (manual save - shows notification)
 		local saveNowBtn = CreateButton(ContentScroll, "Save Now", Theme.AccentGreen, 120, 32, function()
-			SaveConfig()
+			SaveConfig(false)  -- false = NOT silent, show notification
 		end)
 
-		-- Load Config button
+		-- Load Config button (manual load - shows notification)
 		local loadNowBtn = CreateButton(ContentScroll, "Load Config", Theme.Accent, 120, 32, function()
-			LoadConfig()
+			LoadConfig()  -- Always shows notification on success
 		end)
 
 		-- Spacer
 		CreateLabel(ContentScroll, " ", Theme.TextSecondary, 8)
 
-		-- Reset Config button
+		-- Reset Config button (shows notification)
 		local resetBtn = CreateButton(ContentScroll, "Reset Config", Theme.AccentRed, 120, 32, function()
 			ResetConfig()
 		end)
@@ -2323,12 +2381,11 @@ SidebarScroll.CanvasSize = UDim2.new(0, 0, 0, #SidebarItems * 39 + 10)
 
 AddConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	-- Ignore if the game already processed this input (e.g., typing in a TextBox)
-	if gameProcessed then
-		return
-	end
+	if gameProcessed then return end
 
 	-- Only handle mouse clicks and touches
-	if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
+	if input.UserInputType ~= Enum.UserInputType.MouseButton1 
+	   and input.UserInputType ~= Enum.UserInputType.Touch then
 		return
 	end
 
@@ -2336,12 +2393,11 @@ AddConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
 
 	-- Helper: check if a position is inside a GUI element
 	local function isInside(gui)
-		if not gui or not gui.Parent then
-			return false
-		end
+		if not gui or not gui.Parent then return false end
 		local ap = gui.AbsolutePosition
 		local as = gui.AbsoluteSize
-		return pos.X >= ap.X and pos.X <= ap.X + as.X and pos.Y >= ap.Y and pos.Y <= ap.Y + as.Y
+		return pos.X >= ap.X and pos.X <= ap.X + as.X 
+		   and pos.Y >= ap.Y and pos.Y <= ap.Y + as.Y
 	end
 
 	-- Close search suggestions if clicking outside
@@ -2353,12 +2409,8 @@ AddConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
 
 	-- Close dropdown if clicking outside of it AND outside its parent card
 	if ActiveDropdownFrame and ActiveDropdownFrame.Parent then
-		if isInside(ActiveDropdownFrame) then
-			return
-		end
-		if ActiveDropdownCard and isInside(ActiveDropdownCard) then
-			return
-		end
+		if isInside(ActiveDropdownFrame) then return end
+		if ActiveDropdownCard and isInside(ActiveDropdownCard) then return end
 		CloseDropdown()
 	end
 end))
@@ -2402,35 +2454,28 @@ local ResizeBtn = Create("TextButton", {
 
 AddConnection(ResizeBtn.InputBegan:Connect(function(input)
 	-- Don't resize while a modal is open
-	if ModalOpen then
-		return
-	end
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+	if ModalOpen then return end
+	if input.UserInputType == Enum.UserInputType.MouseButton1 
+	   or input.UserInputType == Enum.UserInputType.Touch then
 		local startSize = MainFrame.Size
 		local startPos = input.Position
 		local conn
 
 		-- Update size every frame while dragging
 		conn = AddConnection(RunService.RenderStepped:Connect(function()
-			if not conn then
-				return
-			end
+			if not conn then return end
 			local mouse = UserInputService:GetMouseLocation()
 			local delta = mouse - Vector2.new(startPos.X, startPos.Y)
 			MainFrame.Size = UDim2.new(
-				0,
-				math.max(Config.MinWindowWidth, startSize.X.Offset + delta.X),
-				0,
-				math.max(Config.MinWindowHeight, startSize.Y.Offset + delta.Y)
+				0, math.max(Config.MinWindowWidth, startSize.X.Offset + delta.X),
+				0, math.max(Config.MinWindowHeight, startSize.Y.Offset + delta.Y)
 			)
 		end))
 
 		-- Stop resizing when user releases
 		AddConnection(input.Changed:Connect(function()
 			if input.UserInputState == Enum.UserInputState.End then
-				if conn then
-					conn:Disconnect()
-				end
+				if conn then conn:Disconnect() end
 				conn = nil
 			end
 		end))
@@ -2447,10 +2492,9 @@ local dragStart, frameStart
 
 AddConnection(MainFrame.InputBegan:Connect(function(input)
 	-- Don't drag while modal is open
-	if ModalOpen then
-		return
-	end
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+	if ModalOpen then return end
+	if input.UserInputType == Enum.UserInputType.MouseButton1 
+	   or input.UserInputType == Enum.UserInputType.Touch then
 		dragging = true
 		dragStart = input.Position
 		frameStart = MainFrame.Position
@@ -2458,16 +2502,14 @@ AddConnection(MainFrame.InputBegan:Connect(function(input)
 end))
 
 AddConnection(UserInputService.InputChanged:Connect(function(input)
-	if
-		dragging
-		and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch)
-	then
+	if dragging and (
+		input.UserInputType == Enum.UserInputType.MouseMovement 
+		or input.UserInputType == Enum.UserInputType.Touch
+	) then
 		local delta = input.Position - dragStart
 		MainFrame.Position = UDim2.new(
-			frameStart.X.Scale,
-			frameStart.X.Offset + delta.X,
-			frameStart.Y.Scale,
-			frameStart.Y.Offset + delta.Y
+			frameStart.X.Scale, frameStart.X.Offset + delta.X,
+			frameStart.Y.Scale, frameStart.Y.Offset + delta.Y
 		)
 	end
 end))
@@ -2484,32 +2526,29 @@ end))
 -- This background loop automatically buys selected seeds
 -- when EnableSeedShop is true and you have enough money.
 
-table.insert(
-	Tasks,
-	task.spawn(function()
-		while ScriptRunning do
-			task.wait(0.2) -- Check every 0.2 seconds
+table.insert(Tasks, task.spawn(function()
+	while ScriptRunning do
+		task.wait(0.2)  -- Check every 0.2 seconds
 
-			-- Only buy if enabled and game modules loaded
-			if EnableSeedShop and Networking and SeedData then
-				-- Get player's money
-				local leaderstats = player:FindFirstChild("leaderstats")
-				local sheckles = leaderstats and leaderstats:FindFirstChild("Sheckles")
+		-- Only buy if enabled and game modules loaded
+		if EnableSeedShop and Networking and SeedData then
+			-- Get player's money
+			local leaderstats = player:FindFirstChild("leaderstats")
+			local sheckles = leaderstats and leaderstats:FindFirstChild("Sheckles")
 
-				if sheckles then
-					-- Try to buy each selected seed
-					for _, seed in ipairs(SeedData) do
-						if SelectedSeeds[seed.SeedName] and sheckles.Value >= (seed.PurchasePrice or 0) then
-							pcall(function()
-								Networking.SeedShop.PurchaseSeed:Fire(seed.SeedName)
-							end)
-						end
+			if sheckles then
+				-- Try to buy each selected seed
+				for _, seed in ipairs(SeedData) do
+					if SelectedSeeds[seed.SeedName] and sheckles.Value >= (seed.PurchasePrice or 0) then
+						pcall(function()
+							Networking.SeedShop.PurchaseSeed:Fire(seed.SeedName)
+						end)
 					end
 				end
 			end
 		end
-	end)
-)
+	end
+end))
 
 --══════════════════════════════════════════════════════--
 -- MOBILE SUPPORT
@@ -2521,7 +2560,7 @@ if UserInputService.TouchEnabled then
 	local w = math.min(Config.WindowWidth, viewport.X - 20)
 	local h = math.min(Config.WindowHeight, viewport.Y - 40)
 	MainFrame.Size = UDim2.new(0, w, 0, h)
-	MainFrame.Position = UDim2.new(0.5, -w / 2, 0.5, -h / 2)
+	MainFrame.Position = UDim2.new(0.5, -w/2, 0.5, -h/2)
 end
 
 --══════════════════════════════════════════════════════--
@@ -2529,11 +2568,11 @@ end
 --══════════════════════════════════════════════════════--
 -- This code runs when the script first loads.
 
--- Try to load saved configuration
+-- Try to load saved configuration (shows notification on success)
 LoadConfig()
 
 -- Show the Home page by default
 Pages.Home()
 
 -- Show a welcome notification
-Notify("Exotic Hub Pro", "v2.0.6 Loaded! Dropdowns now push content down.", "Success", 4)
+Notify("Exotic Hub Pro", "v2.0.7 Loaded! 2-column grid + floating dropdowns.", "Success", 4)
