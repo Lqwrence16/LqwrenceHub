@@ -2185,6 +2185,15 @@ function Pages.Home()
 
 		AddConnection(card.Activated:Connect(function()
 			ToggleDropdown(card, function(scroll)
+				-- DEBUG
+				if workspace.Gardens:FindFirstChild("Plot1") then
+					print("=== Plot1 Children ===")
+
+					for _, v in ipairs(workspace.Gardens.Plot1:GetChildren()) do
+						print(v.Name, v.ClassName)
+					end
+				end
+
 				Config.SelectedPlaceSeeds = Config.SelectedPlaceSeeds or {}
 
 				CreateLabel(scroll, "Seed Placer", Theme.Accent, 12)
@@ -2276,18 +2285,21 @@ function Pages.Home()
 				--------------------------------------------------
 
 				local plot = workspace.Gardens:FindFirstChild("Plot1")
+				local ground = plot and plot:FindFirstChild("Base")
 
 				local function GetRandomPlantPosition()
-					if not plot then
+					if not ground then
 						return nil
 					end
 
-					local center = plot.Position
+					local center = ground.Position
+					local size = ground.Size
 
-					local xOffset = math.random(-20, 20)
-					local zOffset = math.random(-40, 40)
+					local xOffset = math.random(-size.X / 2, size.X / 2)
 
-					return Vector3.new(center.X + xOffset, center.Y - 4, center.Z + zOffset)
+					local zOffset = math.random(-size.Z / 2, size.Z / 2)
+
+					return Vector3.new(center.X + xOffset, center.Y + 1, center.Z + zOffset)
 				end
 
 				--------------------------------------------------
@@ -2329,8 +2341,6 @@ function Pages.Home()
 		end))
 	end)
 end
-print(Networking.Plant.PlantSeed)
-print(typeof(Networking.Plant.PlantSeed))
 
 function Pages.Account()
 	SwitchPage("Account", "Account", "User Profile", function()
