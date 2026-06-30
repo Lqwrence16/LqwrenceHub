@@ -1,18 +1,38 @@
+-- ═══════════════════════════════════════════════════════════════════════
+--  EXOTIC HUB PRO v2.0.7
+--  Complete UI Framework with Full Documentation
+--  Changes in v2.0.7:
+--    • Silent auto-save (no spam notifications)
+--    • 2-column grid layout for cards (side-by-side)
+--    • Floating dropdowns that resize with window
+--    • Detailed comments on every function
+-- ═══════════════════════════════════════════════════════════════════════
+
 --══════════════════════════════════════════════════════--
 -- SERVICES
 --══════════════════════════════════════════════════════--
+-- Services are Roblox built-in systems that we need access to.
+-- We get them once at the top so we can use them anywhere in the script.
+
 local Players = game:GetService("Players") -- Access player data
 local TweenService = game:GetService("TweenService") -- Smooth animations
 local UserInputService = game:GetService("UserInputService") -- Detect clicks/touches
 local RunService = game:GetService("RunService") -- Runs code every frame
 local HttpService = game:GetService("HttpService") -- JSON encode/decode for saving
 
+-- Get the local player (the person running this script)
 local player = Players.LocalPlayer
+-- PlayerGui is where all UI elements (buttons, text, frames) are stored
 local playerGui = player:WaitForChild("PlayerGui")
 
 --══════════════════════════════════════════════════════--
 -- CONFIGURATION
 --══════════════════════════════════════════════════════--
+-- Config stores all user preferences and settings.
+-- These values are saved to a file so they persist between sessions.
+-- ONLY put simple values here (numbers, strings, booleans, tables of strings)
+-- Do NOT put Color3, Instances, or Functions here or saving will break.
+
 local Config = {
 	-- Window settings
 	WindowWidth = 720, -- How wide the main window is
@@ -22,7 +42,7 @@ local Config = {
 	SidebarWidth = 170, -- Width of the left sidebar
 
 	-- Appearance
-	ToggleButtonText = "LRX_Hub", -- Text on the floating toggle button
+	ToggleButtonText = "_hub", -- Text on the floating toggle button
 	Theme = "Dark", -- Which color theme to use
 	AnimationSpeed = 0.2, -- How fast animations play (seconds)
 	DisableAnimations = false, -- If true, animations are instant
@@ -46,6 +66,10 @@ local Config = {
 --══════════════════════════════════════════════════════--
 -- THEMES
 --══════════════════════════════════════════════════════--
+-- Themes define the color palette for the entire UI.
+-- Each theme is a table of Color3 values (RGB colors).
+-- To add a new theme, copy the Dark theme and change the colors.
+
 local Themes = {
 	Dark = {
 		Background = Color3.fromRGB(22, 22, 26), -- Main window background
@@ -80,6 +104,7 @@ local Theme = Themes[Config.Theme]
 --══════════════════════════════════════════════════════--
 -- These variables track the current state of the UI.
 -- They MUST be defined before any function that uses them.
+
 local ScriptRunning = true -- Controls whether background loops run
 local Connections = {} -- Stores event connections for cleanup
 local Tasks = {} -- Stores running threads
@@ -121,9 +146,9 @@ local ContentGrid = nil -- The UIGridLayout for cards
 --   3. StringValue - Last resort, stores in PlayerGui
 
 -- The filename used when saving to disk (executor method)
-local CONFIG_FILE = "LRX_Hub_config.json"
+local CONFIG_FILE = "ExoticHubPro_Config.json"
 -- The attribute name used when saving to player (fallback method)
-local CONFIG_ATTRIBUTE = "LRX_HubConfig"
+local CONFIG_ATTRIBUTE = "ExoticHubProConfig"
 
 -- These are the ONLY keys that will be saved.
 -- We use a whitelist to prevent accidentally saving non-JSON data.
@@ -191,18 +216,24 @@ local function ApplyLoadedData(data)
 end
 
 --══════════════════════════════════════════════════════--
--- SCREENGUI - ScreenGui is the container that holds ALL UI elements.
+-- SCREENGUI (MUST BE CREATED BEFORE NOTIFY!)
 --══════════════════════════════════════════════════════--
+-- ScreenGui is the container that holds ALL UI elements.
+-- We create it HERE (before Notify) so Notify can parent notifications to it.
+-- This fixes the "ScreenGui is undefined" error in Notify.
+
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "LRX_Hub"
-ScreenGui.Parent = playerGui
-ScreenGui.ResetOnSpawn = false
+ScreenGui.Name = "ExoticHubPro"
+ScreenGui.Parent = playerGui -- Parent to PlayerGui, NOT CoreGui
+ScreenGui.ResetOnSpawn = false -- Don't destroy when player respawns
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ScreenGui.DisplayOrder = 999
+ScreenGui.DisplayOrder = 999 -- Render above most other UIs
 
 --══════════════════════════════════════════════════════--
--- MAIN FRAME - MainFrame is the big window that contains everything.
+-- MAIN FRAME
 --══════════════════════════════════════════════════════--
+-- MainFrame is the big window that contains everything.
+
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
 MainFrame.Parent = ScreenGui
@@ -210,8 +241,8 @@ MainFrame.BackgroundColor3 = Theme.Background
 MainFrame.BorderSizePixel = 0
 MainFrame.Position = UDim2.new(0.5, -Config.WindowWidth / 2, 0.5, -Config.WindowHeight / 2)
 MainFrame.Size = UDim2.new(0, Config.WindowWidth, 0, Config.WindowHeight)
-MainFrame.ClipsDescendants = false
-MainFrame.Active = true
+MainFrame.ClipsDescendants = false -- Allow elements to extend slightly outside
+MainFrame.Active = true -- Enable interaction
 MainFrame.ZIndex = 10
 
 local mainCorner = Instance.new("UICorner")
@@ -1487,41 +1518,26 @@ local function UpdateDropdownPosition()
 	local card = ActiveDropdownCard
 	local drop = ActiveDropdownFrame
 
-	local cardPos = card.AbsolutePosition
-	local cardSize = card.AbsoluteSize
-	local mainPos = MainFrame.AbsolutePosition
-	local mainSize = MainFrame.AbsoluteSize
+	-- Get absolute screen positions
+	local cardAbsPos = card.AbsolutePosition
+	local cardAbsSize = card.AbsoluteSize
+	local mainAbsPos = MainFrame.AbsolutePosition
+	local mainAbsSize = MainFrame.AbsoluteSize
 
-	-- Hide dropdown if main UI is hidden
-	if not MainFrame.Visible then
-		drop.Visible = false
-		return
-	else
-		drop.Visible = true
-	end
-
-	-- Close if card scrolled out of view
-	if
-		cardPos.Y + cardSize.Y < mainPos.Y
-		or cardPos.Y > mainPos.Y + mainSize.Y
-		or cardPos.X + cardSize.X < mainPos.X
-		or cardPos.X > mainPos.X + mainSize.X
-	then
+	-- If card is scrolled completely outside MainFrame vertically, close dropdown
+	if cardAbsPos.Y + cardAbsSize.Y < mainAbsPos.Y or cardAbsPos.Y > mainAbsPos.Y + mainAbsSize.Y then
 		CloseDropdown()
 		return
 	end
 
-	-- ABSOLUTE SCREEN POSITION - no parent math needed
-	local dropX = cardPos.X
-	local dropY = cardPos.Y + cardSize.Y
+	-- Calculate position relative to MainFrame (our dropdown parent)
+	-- This makes the dropdown stick to the card even during resize/drag
+	local relX = cardAbsPos.X - mainAbsPos.X
+	local relY = cardAbsPos.Y - mainAbsPos.Y + cardAbsSize.Y
 
-	-- Clamp to screen edges
-	local viewport = workspace.CurrentCamera.ViewportSize
-	local dropWidth = math.min(cardSize.X, viewport.X - dropX - 10)
-	local dropHeight = math.min(drop.Size.Y.Offset, viewport.Y - dropY - 10)
-
-	drop.Position = UDim2.new(0, dropX, 0, dropY)
-	drop.Size = UDim2.new(0, dropWidth, 0, dropHeight)
+	-- Update position and width to match card exactly
+	drop.Position = UDim2.new(0, relX, 0, relY)
+	drop.Size = UDim2.new(0, cardAbsSize.X, 0, drop.Size.Y.Offset)
 end
 
 local function ToggleDropdown(card, buildFunc)
@@ -1558,10 +1574,10 @@ local function ToggleDropdown(card, buildFunc)
 	-- Create the dropdown container parented to MainFrame (above grid)
 	local drop = Create("Frame", {
 		Name = "Dropdown",
-		Parent = ScreenGui,
+		Parent = MainFrame,
 		BackgroundColor3 = Theme.DropdownBg,
 		BorderSizePixel = 0,
-		Position = UDim2.new(0, cardAbsPos.X, 0, cardAbsPos.Y + cardAbsSize.Y),
+		Position = UDim2.new(0, relX, 0, relY),
 		Size = UDim2.new(0, cardAbsSize.X, 0, 0), -- Start at height 0, width matches card
 		ClipsDescendants = true,
 		ZIndex = 55, -- Above cards (ZIndex 50)
@@ -1619,7 +1635,7 @@ local function ToggleDropdown(card, buildFunc)
 	Tween(drop, { Size = UDim2.new(0, cardAbsSize.X, 0, maxHeight) }, 0.2)
 
 	-- Start heartbeat to track card position during scroll/resize
-	DropdownHeartbeat = AddConnection(RunService.RenderStepped:Connect(UpdateDropdownPosition))
+	DropdownHeartbeat = AddConnection(RunService.Heartbeat:Connect(UpdateDropdownPosition))
 
 	-- Allow clicking again after animation finishes
 	task.delay(0.25, function()
@@ -2006,7 +2022,7 @@ local function ClearContent()
 	end
 
 	-- Clear any leftover dropdowns in MainFrame
-	for _, child in pairs(ScreenGui:GetChildren()) do
+	for _, child in pairs(MainFrame:GetChildren()) do
 		if child:IsA("Frame") and child.Name == "Dropdown" then
 			child:Destroy()
 		end
