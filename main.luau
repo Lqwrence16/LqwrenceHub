@@ -1,9 +1,3 @@
--- ═══════════════════════════════════════════════════════════════════════
---  LRX_Hub v2.0.6
---  Complete UI Framework with Full Documentation, Working Notifications,
---  Modal Visual Updates, and Proper Dropdown Behavior (pushes content down)
--- ═══════════════════════════════════════════════════════════════════════
-
 --══════════════════════════════════════════════════════--
 -- SERVICES
 --══════════════════════════════════════════════════════--
@@ -108,49 +102,39 @@ local AutoSaveDebounce = nil
 local CONFIG_FILE = "LRX_Hub_Config.json"
 local CONFIG_ATTRIBUTE = "LRX_HubConfig"
 
-local SERIALIZABLE_KEYS = {
-	"WindowWidth",
-	"WindowHeight",
-	"MinWindowWidth",
-	"MinWindowHeight",
-	"SidebarWidth",
-	"ToggleButtonText",
-	"Theme",
-	"AnimationSpeed",
-	"DisableAnimations",
-	"NotificationDuration",
-	"ModalDarkening",
-	"UIScale",
-	"SelectedSeeds",
-	"EnableSeedShop",
-	"Keybinds",
-	"ReduceEffects",
-	"WindowPosition",
-	"WindowSize",
-}
+local function SanitizeTable(tbl)
+	local result = {}
 
-local function BuildSaveData()
-	local data = {}
-	for _, key in ipairs(SERIALIZABLE_KEYS) do
-		if Config[key] ~= nil then
-			data[key] = Config[key]
+	for key, value in pairs(tbl) do
+		local valueType = typeof(value)
+
+		if valueType == "table" then
+			result[key] = SanitizeTable(value)
+		elseif valueType == "number" or valueType == "string" or valueType == "boolean" or value == nil then
+			result[key] = value
 		end
 	end
-	return data
+
+	return result
+end
+
+local function BuildSaveData()
+	return SanitizeTable(Config)
 end
 
 local function ApplyLoadedData(data)
 	if typeof(data) ~= "table" then
 		return false
 	end
-	for _, key in ipairs(SERIALIZABLE_KEYS) do
-		if data[key] ~= nil then
-			Config[key] = data[key]
+
+	for key, value in pairs(data) do
+		if Config[key] ~= nil then
+			Config[key] = value
 		end
 	end
+
 	return true
 end
-
 --══════════════════════════════════════════════════════--
 -- SCREENGUI
 --══════════════════════════════════════════════════════--
@@ -415,12 +399,17 @@ function ResetConfig()
 		end
 	end)
 
-	Config = {
+	local Config = {
+		-- Window
 		WindowWidth = 600,
 		WindowHeight = 400,
 		MinWindowWidth = 320,
 		MinWindowHeight = 240,
 		SidebarWidth = 170,
+		WindowPosition = nil,
+		WindowSize = nil,
+
+		-- Appearance
 		ToggleButtonText = "LRX",
 		Theme = "Dark",
 		AnimationSpeed = 0.2,
@@ -428,12 +417,16 @@ function ResetConfig()
 		NotificationDuration = 3,
 		ModalDarkening = 0.5,
 		UIScale = 1.0,
-		WindowPosition = nil,
-		WindowSize = nil,
+
+		-- Features
 		SelectedSeeds = {},
 		EnableSeedShop = false,
 		ReduceEffects = false,
-		Keybinds = { ToggleUI = "F" },
+
+		-- Keybinds
+		Keybinds = {
+			ToggleUI = "F",
+		},
 	}
 
 	Theme = Themes.Dark
