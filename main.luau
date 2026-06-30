@@ -1937,12 +1937,344 @@ local function SwitchPage(pageName, title, subtitle, builder)
 	end
 end
 
+local Networking, SeedData
+pcall(function()
+	Networking = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
+	SeedData = require(game:GetService("ReplicatedStorage").SharedModules.SeedData)
+end)
+
+--------------------------------------------------
+-- REUSABLE SEED MODAL
+--------------------------------------------------
+local function ShowSeedSelectionModal(title, selectedTable, updateCallback)
+	local items = {}
+
+	if SeedData then
+		for _, seed in ipairs(SeedData) do
+			if seed.SeedName then
+				table.insert(items, {
+					Name = seed.SeedName,
+					Price = seed.PurchasePrice,
+					Rarity = seed.Rarity or "Common",
+				})
+			end
+		end
+	end
+
+	ShowModal("Select Seeds", function(modal, content)
+		local searchContainer = Create("Frame", {
+			Parent = content,
+			BackgroundColor3 = Theme.Content,
+			BorderSizePixel = 0,
+			Size = UDim2.new(1, 0, 0, 32),
+			Position = UDim2.new(0, 0, 0, 0),
+			ZIndex = 620,
+		})
+
+		Create("TextLabel", {
+			Parent = searchContainer,
+			BackgroundTransparency = 1,
+			Position = UDim2.new(0, 8, 0, 0),
+			Size = UDim2.new(0, 22, 1, 0),
+			Font = Enum.Font.GothamBold,
+			Text = "🔍",
+			TextColor3 = Theme.TextMuted,
+			TextSize = 12,
+			ZIndex = 621,
+		})
+
+		local modalSearchBox = Create("TextBox", {
+			Parent = searchContainer,
+			BackgroundTransparency = 1,
+			Position = UDim2.new(0, 32, 0, 0),
+			Size = UDim2.new(1, -44, 1, 0),
+			Font = Enum.Font.Gotham,
+			Text = "Search seeds...",
+			TextColor3 = Theme.TextMuted,
+			TextSize = 12,
+			ZIndex = 621,
+			ClearTextOnFocus = true,
+			Active = true,
+		})
+
+		local scroll2 = Create("ScrollingFrame", {
+			Parent = content,
+			BackgroundTransparency = 1,
+			Position = UDim2.new(0, 0, 0, 40),
+			Size = UDim2.new(1, 0, 1, -80),
+			ScrollBarThickness = 3,
+			ScrollBarImageColor3 = Theme.ScrollBar,
+			CanvasSize = UDim2.new(0, 0, 0, 0),
+			ZIndex = 620,
+			ClipsDescendants = true,
+		})
+
+		local list2 = Create("UIListLayout", {
+			Parent = scroll2,
+			Padding = UDim.new(0, 3),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		})
+
+		local RarityColors = {
+			Common = Color3.fromRGB(169, 169, 169), -- Gray
+			Uncommon = Color3.fromRGB(50, 205, 50), -- Green
+			Rare = Color3.fromRGB(30, 144, 255), -- Blue
+			Epic = Color3.fromRGB(147, 112, 219), -- Purple
+			Legendary = Color3.fromRGB(255, 215, 0), -- Gold
+			Mythic = Color3.fromRGB(255, 69, 0), -- OrangeRed
+		}
+
+		local function FormatPrice(price)
+			if not price then
+				return "$0"
+			end
+			if price >= 1000 then
+				return string.format("$%.2fK", price / 1000)
+			end
+			return "$" .. tostring(price)
+		end
+
+		local function BuildModalRows(filterText)
+			for _, child in pairs(scroll2:GetChildren()) do
+				if child:IsA("TextButton") then
+					child:Destroy()
+				end
+			end
+
+			local lowerFilter = filterText and filterText:lower() or ""
+			local visibleCount = 0
+
+			for i, item in ipairs(items) do
+				if lowerFilter ~= "" and not item.Name:lower():find(lowerFilter, 1, true) then
+					continue
+				end
+
+				visibleCount = visibleCount + 1
+				local isSelected = selectedTable[item.Name] == true
+
+				local row = Create("TextButton", {
+					Parent = scroll2,
+					BackgroundColor3 = isSelected and Color3.fromRGB(55, 45, 75) or Theme.Card,
+					BorderSizePixel = 0,
+					Size = UDim2.new(1, 0, 0, 34),
+					LayoutOrder = i,
+					Font = Enum.Font.Gotham,
+					Text = "",
+					ZIndex = 620,
+					Active = true,
+					AutoButtonColor = false,
+				})
+				Corner(row, 4)
+
+				Create("TextLabel", {
+					Parent = row,
+					BackgroundTransparency = 1,
+					Position = UDim2.new(0, 10, 0, 0),
+					Size = UDim2.new(0.32, 0, 1, 0),
+					Font = Enum.Font.Gotham,
+					Text = item.Name,
+					TextColor3 = Theme.TextPrimary,
+					TextSize = 12,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					ZIndex = 621,
+				})
+
+				Create("TextLabel", {
+					Parent = row,
+					BackgroundTransparency = 1,
+					Position = UDim2.new(0.36, 0, 0, 0),
+					Size = UDim2.new(0.24, 0, 1, 0),
+					Font = Enum.Font.Gotham,
+					Text = FormatPrice(item.Price),
+					TextColor3 = Theme.AccentYellow,
+					TextSize = 11,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					ZIndex = 621,
+				})
+
+				local rarityColor = RarityColors[item.Rarity] or Theme.TextSecondary
+				Create("TextLabel", {
+					Parent = row,
+					BackgroundTransparency = 1,
+					Position = UDim2.new(0.62, 0, 0, 0),
+					Size = UDim2.new(0.18, 0, 1, 0),
+					Font = Enum.Font.GothamBold,
+					Text = item.Rarity,
+					TextColor3 = rarityColor,
+					TextSize = 11,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					ZIndex = 621,
+				})
+
+				if isSelected then
+					Create("TextLabel", {
+						Parent = row,
+						BackgroundTransparency = 1,
+						Position = UDim2.new(1, -30, 0, 0),
+						Size = UDim2.new(0, 20, 1, 0),
+						Font = Enum.Font.GothamBold,
+						Text = "✓",
+						TextColor3 = Theme.Accent,
+						TextSize = 14,
+						ZIndex = 621,
+					})
+				end
+
+				-- Click to toggle selection with INSTANT visual update
+				AddConnection(row.Activated:Connect(function()
+					selectedTable[item.Name] = not selectedTable[item.Name]
+
+					AutoSaveConfig()
+
+					-- Update the label outside the modal instantly
+					if updateCallback then
+						updateCallback()
+					end
+
+					-- Refresh the modal rows
+					BuildModalRows(modalSearchBox.Text ~= "Search seeds..." and modalSearchBox.Text or "")
+				end))
+			end
+
+			-- Update scroll canvas size
+			scroll2.CanvasSize = UDim2.new(0, 0, 0, visibleCount * 37)
+
+			-- Show "No seeds found" message if filter returns nothing
+			if visibleCount == 0 and lowerFilter ~= "" then
+				local noResults = Create("TextLabel", {
+					Parent = scroll2,
+					BackgroundTransparency = 1,
+					Size = UDim2.new(1, 0, 0, 60),
+					Font = Enum.Font.Gotham,
+					Text = 'No seeds found matching "' .. filterText .. '"',
+					TextColor3 = Theme.TextMuted,
+					TextSize = 12,
+					TextWrapped = true,
+					ZIndex = 620,
+				})
+				scroll2.CanvasSize = UDim2.new(0, 0, 0, 70)
+			end
+		end
+
+		-- Build rows initially (show all)
+		BuildModalRows("")
+
+		-- Search functionality: filter rows as user types
+		AddConnection(modalSearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+			local text = modalSearchBox.Text
+			if text == "Search seeds..." then
+				text = ""
+			end
+			BuildModalRows(text)
+		end))
+
+		-- Done button to close modal
+		local doneBtn = CreateButton(content, "Done", Theme.Accent, 80, 32, function()
+			CloseModal()
+		end)
+		doneBtn.Position = UDim2.new(1, -80, 1, -36)
+	end, 480, 400)
+end
 --══════════════════════════════════════════════════════--
 -- #PAGES
 --══════════════════════════════════════════════════════--
 --#HomePage
 function Pages.Home()
-	SwitchPage("Home", "Home", "Game Version: v2.0.6", function() end)
+	SwitchPage("Home", "Home", "Game Version: ----", function()
+		local card = CreateCard(ContentScroll, "Seed Placer", "🏠", Theme.Accent)
+
+		AddConnection(card.Activated:Connect(function()
+			ToggleDropdown(card, function(scroll)
+				Config.SelectedPlaceSeeds = Config.SelectedPlaceSeeds or {}
+
+				CreateLabel(scroll, "Seed Placer", Theme.Accent, 12)
+
+				local selectedLabel = CreateLabel(scroll, "Selected: None", Theme.TextMuted, 10)
+
+				local function UpdateSelectedLabel()
+					local names = {}
+
+					for seedName, selected in pairs(Config.SelectedPlaceSeeds) do
+						if selected then
+							table.insert(names, seedName)
+						end
+					end
+
+					table.sort(names)
+
+					local shown = {}
+
+					for i = 1, math.min(#names, 10) do
+						table.insert(shown, names[i])
+					end
+
+					local text = table.concat(shown, ", ")
+
+					if #names > 10 then
+						text = text .. "..."
+					end
+
+					if text == "" then
+						text = "None"
+					end
+
+					selectedLabel.Text = string.format("Selected (%d): %s", #names, text)
+				end
+
+				UpdateSelectedLabel()
+
+				--------------------------------------------------
+				-- SELECT SEEDS BUTTON
+				--------------------------------------------------
+
+				local selectBtn = CreateButton(scroll, "Select Seeds...", Theme.Card, 100, 30, function()
+					ShowSeedSelectionModal("Select Seeds", Config.SelectedPlaceSeeds, UpdateSelectedLabel)
+				end)
+				selectBtn.Size = UDim2.new(1, -8, 0, 30)
+
+				--------------------------------------------------
+				-- SELECT ALL / CLEAR ALL
+				--------------------------------------------------
+
+				local actionFrame = Create("Frame", {
+					Parent = scroll,
+					BackgroundTransparency = 1,
+					Size = UDim2.new(1, -8, 0, 30),
+				})
+
+				local selectAllBtn = CreateButton(actionFrame, "Select All", Theme.Accent, 100, 30, function()
+					for _, seed in ipairs(SeedData or {}) do
+						if seed.SeedName then
+							Config.SelectedPlaceSeeds[seed.SeedName] = true
+						end
+					end
+
+					AutoSaveConfig()
+					UpdateSelectedLabel()
+				end)
+
+				selectAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
+
+				local clearAllBtn = CreateButton(
+					actionFrame,
+					"Clear All",
+					Color3.fromRGB(185, 65, 65),
+					100,
+					30,
+					function()
+						table.clear(Config.SelectedPlaceSeeds)
+
+						AutoSaveConfig()
+						UpdateSelectedLabel()
+					end
+				)
+
+				clearAllBtn.Position = UDim2.new(0.5, 3, 0, 0)
+
+				clearAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
+			end)
+		end))
+	end)
 end
 
 function Pages.Account()
@@ -1963,12 +2295,6 @@ function Pages.Premium()
 end
 
 --#ShopPage
-local Networking, SeedData
-pcall(function()
-	Networking = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
-	SeedData = require(game:GetService("ReplicatedStorage").SharedModules.SeedData)
-end)
-
 local function GetSelectedSeedNames()
 	local names = {}
 	for name, selected in pairs(Config.SelectedSeeds) do
@@ -2025,242 +2351,9 @@ function Pages.Shop()
 				UpdateSelectedLabel()
 
 				-- Button to open seed selection modal
-				local selectBtn = CreateButton(
-					scroll,
-					"Select Seeds...",
-					Theme.Card,
-					scroll.AbsoluteSize.X - 16,
-					30,
-					function()
-						-- Build list of available seeds from game data
-						local items = {}
-						if SeedData then
-							for _, seed in ipairs(SeedData) do
-								if seed.SeedName then
-									table.insert(items, {
-										Name = seed.SeedName,
-										Price = seed.PurchasePrice,
-										Rarity = seed.Rarity or "Common",
-									})
-								end
-							end
-						end
-
-						ShowModal("Select Seeds", function(modal, content)
-							local searchContainer = Create("Frame", {
-								Parent = content,
-								BackgroundColor3 = Theme.Content,
-								BorderSizePixel = 0,
-								Size = UDim2.new(1, 0, 0, 32),
-								Position = UDim2.new(0, 0, 0, 0),
-								ZIndex = 620,
-							})
-
-							Create("TextLabel", {
-								Parent = searchContainer,
-								BackgroundTransparency = 1,
-								Position = UDim2.new(0, 8, 0, 0),
-								Size = UDim2.new(0, 22, 1, 0),
-								Font = Enum.Font.GothamBold,
-								Text = "🔍",
-								TextColor3 = Theme.TextMuted,
-								TextSize = 12,
-								ZIndex = 621,
-							})
-
-							local modalSearchBox = Create("TextBox", {
-								Parent = searchContainer,
-								BackgroundTransparency = 1,
-								Position = UDim2.new(0, 32, 0, 0),
-								Size = UDim2.new(1, -44, 1, 0),
-								Font = Enum.Font.Gotham,
-								Text = "Search seeds...",
-								TextColor3 = Theme.TextMuted,
-								TextSize = 12,
-								ZIndex = 621,
-								ClearTextOnFocus = true,
-								Active = true,
-							})
-
-							local scroll2 = Create("ScrollingFrame", {
-								Parent = content,
-								BackgroundTransparency = 1,
-								Position = UDim2.new(0, 0, 0, 40),
-								Size = UDim2.new(1, 0, 1, -80),
-								ScrollBarThickness = 3,
-								ScrollBarImageColor3 = Theme.ScrollBar,
-								CanvasSize = UDim2.new(0, 0, 0, 0),
-								ZIndex = 620,
-								ClipsDescendants = true,
-							})
-
-							local list2 = Create("UIListLayout", {
-								Parent = scroll2,
-								Padding = UDim.new(0, 3),
-								SortOrder = Enum.SortOrder.LayoutOrder,
-							})
-
-							local RarityColors = {
-								Common = Color3.fromRGB(169, 169, 169), -- Gray
-								Uncommon = Color3.fromRGB(50, 205, 50), -- Green
-								Rare = Color3.fromRGB(30, 144, 255), -- Blue
-								Epic = Color3.fromRGB(147, 112, 219), -- Purple
-								Legendary = Color3.fromRGB(255, 215, 0), -- Gold
-								Mythic = Color3.fromRGB(255, 69, 0), -- OrangeRed
-							}
-
-							local function FormatPrice(price)
-								if not price then
-									return "$0"
-								end
-								if price >= 1000 then
-									return string.format("$%.2fK", price / 1000)
-								end
-								return "$" .. tostring(price)
-							end
-
-							local function BuildModalRows(filterText)
-								for _, child in pairs(scroll2:GetChildren()) do
-									if child:IsA("TextButton") then
-										child:Destroy()
-									end
-								end
-
-								local lowerFilter = filterText and filterText:lower() or ""
-								local visibleCount = 0
-
-								for i, item in ipairs(items) do
-									if lowerFilter ~= "" and not item.Name:lower():find(lowerFilter, 1, true) then
-										continue
-									end
-
-									visibleCount = visibleCount + 1
-									local isSelected = Config.SelectedSeeds[item.Name] == true
-
-									local row = Create("TextButton", {
-										Parent = scroll2,
-										BackgroundColor3 = isSelected and Color3.fromRGB(55, 45, 75) or Theme.Card,
-										BorderSizePixel = 0,
-										Size = UDim2.new(1, 0, 0, 34),
-										LayoutOrder = i,
-										Font = Enum.Font.Gotham,
-										Text = "",
-										ZIndex = 620,
-										Active = true,
-										AutoButtonColor = false,
-									})
-									Corner(row, 4)
-
-									Create("TextLabel", {
-										Parent = row,
-										BackgroundTransparency = 1,
-										Position = UDim2.new(0, 10, 0, 0),
-										Size = UDim2.new(0.32, 0, 1, 0),
-										Font = Enum.Font.Gotham,
-										Text = item.Name,
-										TextColor3 = Theme.TextPrimary,
-										TextSize = 12,
-										TextXAlignment = Enum.TextXAlignment.Left,
-										ZIndex = 621,
-									})
-
-									Create("TextLabel", {
-										Parent = row,
-										BackgroundTransparency = 1,
-										Position = UDim2.new(0.36, 0, 0, 0),
-										Size = UDim2.new(0.24, 0, 1, 0),
-										Font = Enum.Font.Gotham,
-										Text = FormatPrice(item.Price),
-										TextColor3 = Theme.AccentYellow,
-										TextSize = 11,
-										TextXAlignment = Enum.TextXAlignment.Left,
-										ZIndex = 621,
-									})
-
-									local rarityColor = RarityColors[item.Rarity] or Theme.TextSecondary
-									Create("TextLabel", {
-										Parent = row,
-										BackgroundTransparency = 1,
-										Position = UDim2.new(0.62, 0, 0, 0),
-										Size = UDim2.new(0.18, 0, 1, 0),
-										Font = Enum.Font.GothamBold,
-										Text = item.Rarity,
-										TextColor3 = rarityColor,
-										TextSize = 11,
-										TextXAlignment = Enum.TextXAlignment.Left,
-										ZIndex = 621,
-									})
-
-									if isSelected then
-										Create("TextLabel", {
-											Parent = row,
-											BackgroundTransparency = 1,
-											Position = UDim2.new(1, -30, 0, 0),
-											Size = UDim2.new(0, 20, 1, 0),
-											Font = Enum.Font.GothamBold,
-											Text = "✓",
-											TextColor3 = Theme.Accent,
-											TextSize = 14,
-											ZIndex = 621,
-										})
-									end
-
-									-- Click to toggle selection with INSTANT visual update
-									AddConnection(row.Activated:Connect(function()
-										Config.SelectedSeeds[item.Name] = not Config.SelectedSeeds[item.Name]
-
-										AutoSaveConfig()
-
-										-- Update the label outside the modal instantly
-										UpdateSelectedLabel()
-
-										-- Refresh the modal rows
-										BuildModalRows(
-											modalSearchBox.Text ~= "Search seeds..." and modalSearchBox.Text or ""
-										)
-									end))
-								end
-
-								-- Update scroll canvas size
-								scroll2.CanvasSize = UDim2.new(0, 0, 0, visibleCount * 37)
-
-								-- Show "No seeds found" message if filter returns nothing
-								if visibleCount == 0 and lowerFilter ~= "" then
-									local noResults = Create("TextLabel", {
-										Parent = scroll2,
-										BackgroundTransparency = 1,
-										Size = UDim2.new(1, 0, 0, 60),
-										Font = Enum.Font.Gotham,
-										Text = 'No seeds found matching "' .. filterText .. '"',
-										TextColor3 = Theme.TextMuted,
-										TextSize = 12,
-										TextWrapped = true,
-										ZIndex = 620,
-									})
-									scroll2.CanvasSize = UDim2.new(0, 0, 0, 70)
-								end
-							end
-
-							-- Build rows initially (show all)
-							BuildModalRows("")
-
-							-- Search functionality: filter rows as user types
-							AddConnection(modalSearchBox:GetPropertyChangedSignal("Text"):Connect(function()
-								local text = modalSearchBox.Text
-								if text == "Search seeds..." then
-									text = ""
-								end
-								BuildModalRows(text)
-							end))
-
-							-- Done button to close modal
-							local doneBtn = CreateButton(content, "Done", Theme.Accent, 80, 32, function()
-								CloseModal()
-							end)
-							doneBtn.Position = UDim2.new(1, -80, 1, -36)
-						end, 480, 400)
-					end
-				)
+				local selectBtn = CreateButton(scroll, "Select Seeds...", Theme.Card, 100, 30, function()
+					ShowSeedSelectionModal("Select Seeds", Config.SelectedSeeds, UpdateSelectedLabel)
+				end)
 				selectBtn.Size = UDim2.new(1, -8, 0, 30)
 
 				-- Select All / Clear All buttons
