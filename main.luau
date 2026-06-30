@@ -1997,6 +1997,21 @@ pcall(function()
 	Networking = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
 	SeedData = require(game:GetService("ReplicatedStorage").SharedModules.SeedData)
 end)
+
+task.wait(5)
+
+local player = game.Players.LocalPlayer
+local tool = player.Backpack:FindFirstChild("Carrot")
+
+if tool then
+	print("===== TOOL CONTENTS =====")
+
+	for _, v in ipairs(tool:GetDescendants()) do
+		print(v.Name, v.ClassName)
+	end
+else
+	print("Carrot tool not found.")
+end
 --------------------------------------------------
 -- REUSABLE SEED MODAL
 --------------------------------------------------
