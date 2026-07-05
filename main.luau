@@ -1488,65 +1488,237 @@ function SeedPlacer.RunCycle()
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SECTION 14.5: AUTO FARM SYSTEM (Collect & Shovel)
+-- SECTION 14.5: AUTO FARM SYSTEM (Collect & Shovel) - FIXED v2
 -- ═══════════════════════════════════════════════════════════════════════
 
 local AutoFarmSystem = {}
+AutoFarmSystem.DEBUG = true -- Set to false after confirming it works
 
--- ─── Scan Plot for Plant/Fruit Data ────────────────────────────────────
+local function DebugPrint(...)
+	if AutoFarmSystem.DEBUG then
+		warn("[LRX AutoFarm]", ...)
+	end
+end
+
+-- ─── Robust Helpers ───────────────────────────────────────────────────
+
+local function FindPlantsFolder(plot)
+	if not plot then
+		return nil
+	end
+	local folder = plot:FindFirstChild("Plants")
+	if folder then
+		return folder
+	end
+	local alts = { "Plant", "plant", "plants", "Crops", "crops", "Crop", "CropFolder" }
+	for _, name in ipairs(alts) do
+		folder = plot:FindFirstChild(name)
+		if folder then
+			return folder
+		end
+	end
+	return nil
+end
+
+local function GetPlantSeedName(plant)
+	if not plant then
+		return nil
+	end
+	-- 1. Attributes (correctly using pairs)
+	local attrNames = { "SeedName", "Seed", "seedName", "CropName", "Crop", "PlantType", "Type" }
+	for _, name in ipairs(attrNames) do
+		local val = plant:GetAttribute(name)
+		if val and typeof(val) == "string" and #val > 0 then
+			return val
+		end
+	end
+	-- 2. StringValue children
+	for _, name in ipairs(attrNames) do
+		local obj = plant:FindFirstChild(name)
+		if obj and obj:IsA("StringValue") and obj.Value and #obj.Value > 0 then
+			return obj.Value
+		end
+	end
+	-- 3. Infer from Fruits folder (e.g., Fruits/Carrot -> "Carrot")
+	local fruitsFolder = plant:FindFirstChild("Fruits")
+	if fruitsFolder then
+		for _, fruit in ipairs(fruitsFolder:GetChildren()) do
+			if fruit.Name and #fruit.Name > 0 then
+				return fruit.Name
+			end
+		end
+	end
+	-- 4. Fallback
+	return plant.Name
+end
+
+local function GetPlantId(plant)
+	if not plant then
+		return nil
+	end
+	local attrNames = { "Id", "PlantId", "GUID", "ID", "PlantID", "UniqueId", "uniqueId" }
+	for _, name in ipairs(attrNames) do
+		local val = plant:GetAttribute(name)
+		if val then
+			return tostring(val)
+		end
+	end
+	for _, name in ipairs(attrNames) do
+		local obj = plant:FindFirstChild(name)
+		if obj and obj:IsA("ValueBase") then
+			return tostring(obj.Value)
+		end
+	end
+	-- GUID name is likely the actual server ID
+	return plant.Name
+end
+
+local function IsPlantReady(plant)
+	if not plant then
+		return false
+	end
+	-- Attribute methods
+	if plant:GetAttribute("PlantGrowthReady") == true then
+		return true
+	end
+	if plant:GetAttribute("Ready") == true then
+		return true
+	end
+	if plant:GetAttribute("HarvestReady") == true then
+		return true
+	end
+	if plant:GetAttribute("Grown") == true then
+		return true
+	end
+	if plant:GetAttribute("Mature") == true then
+		return true
+	end
+	if plant:GetAttribute("GrowthStage") then
+		local stage = plant:GetAttribute("GrowthStage")
+		if stage == "Ready" or stage == "Mature" or stage == "Grown" or stage == 3 then
+			return true
+		end
+	end
+	-- Physical fruit methods (your game likely uses these)
+	local fruitsFolder = plant:FindFirstChild("Fruits")
+	if fruitsFolder and #fruitsFolder:GetChildren() > 0 then
+		return true
+	end
+	local fruitSpawns = plant:FindFirstChild("FruitSpawnLocations")
+	if fruitSpawns and #fruitSpawns:GetChildren() > 0 then
+		return true
+	end
+	-- Any visible fruit part
+	for _, desc in ipairs(plant:GetDescendants()) do
+		if desc:IsA("BasePart") and desc.Transparency < 1 then
+			local parent = desc.Parent
+			if parent and (parent.Name == "Fruits" or desc.Name:lower():find("fruit")) then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+local function FindFruitInPlant(plant)
+	if not plant then
+		return nil, nil
+	end
+	local fruitsFolder = plant:FindFirstChild("Fruits")
+	if fruitsFolder then
+		for _, fruit in ipairs(fruitsFolder:GetChildren()) do
+			local fid = fruit:GetAttribute("FruitId")
+				or fruit:GetAttribute("Id")
+				or fruit:GetAttribute("ID")
+				or fruit.Name
+			return tostring(fid), fruit
+		end
+	end
+	-- Fallback
+	for _, desc in ipairs(plant:GetDescendants()) do
+		if desc.Name:lower():find("fruit") and desc ~= fruitsFolder then
+			local fid = desc:GetAttribute("FruitId") or desc:GetAttribute("Id") or desc.Name
+			return tostring(fid), desc
+		end
+	end
+	return nil, nil
+end
+
+local function SafeFireRemote(remote, ...)
+	if not remote then
+		DebugPrint("Remote is nil")
+		return false, "nil"
+	end
+	local ok, err = pcall(function(...)
+		if typeof(remote) == "table" and remote.Fire then
+			remote:Fire(...)
+		elseif typeof(remote) == "Instance" and remote:IsA("RemoteEvent") then
+			remote:FireServer(...)
+		elseif typeof(remote) == "Instance" and remote:IsA("RemoteFunction") then
+			remote:InvokeServer(...)
+		else
+			error("Bad remote type: " .. typeof(remote))
+		end
+	end, ...)
+	if not ok then
+		DebugPrint("Remote fire failed:", err)
+		return false, err
+	end
+	return true, nil
+end
+
+-- ─── Scan Plot ─────────────────────────────────────────────────────────
 
 function AutoFarmSystem.ScanPlotData()
 	local plot = PlotSystem.FindPlayerPlot()
 	if not plot then
+		DebugPrint("No plot found")
 		return {}, {}
 	end
-
-	local plantsFolder = plot:FindFirstChild("Plants")
+	local plantsFolder = FindPlantsFolder(plot)
 	if not plantsFolder then
+		DebugPrint("No Plants folder")
 		return {}, {}
 	end
 
-	local plantMap = {} -- SeedName -> {PlantId, PlantInstance}
-	local fruitMap = {} -- SeedName -> {FruitId, PlantId, PlantInstance}
+	local plantMap = {}
+	local fruitMap = {}
 
 	for _, plant in ipairs(plantsFolder:GetChildren()) do
-		local seedName = plant:GetAttribute("SeedName")
-		local plantId = plant:GetAttribute("Id") or plant:GetAttribute("PlantId") or plant:GetAttribute("GUID")
-		if not seedName or not plantId then
+		local seedName = GetPlantSeedName(plant)
+		local plantId = GetPlantId(plant)
+		if not plantId then
+			DebugPrint("Skipping plant", plant.Name, "- no ID")
 			continue
 		end
 
 		plantMap[seedName] = { PlantId = plantId, Instance = plant }
 
-		-- Find fruits inside this plant
-		for _, child in ipairs(plant:GetDescendants()) do
-			if child:GetAttribute("IsFruit") or child.Name:lower():match("fruit") then
-				local fruitId = child:GetAttribute("FruitId") or child:GetAttribute("Id") or child.Name
-				if not fruitMap[seedName] then
-					fruitMap[seedName] = {}
-				end
-				table_insert(fruitMap[seedName], {
-					FruitId = fruitId,
-					PlantId = plantId,
-					Instance = child,
-					Ready = plant:GetAttribute("PlantGrowthReady") == true,
-				})
+		local fruitId, fruitObj = FindFruitInPlant(plant)
+		if fruitId then
+			local ready = IsPlantReady(plant)
+			if not fruitMap[seedName] then
+				fruitMap[seedName] = {}
 			end
+			table_insert(fruitMap[seedName], {
+				FruitId = fruitId,
+				PlantId = plantId,
+				Instance = fruitObj,
+				Ready = ready,
+			})
 		end
 	end
 
 	Cache.PlantIdBySeedName = plantMap
 	Cache.FruitIdBySeedName = fruitMap
+	DebugPrint("Scan complete. Plants:", #plantsFolder:GetChildren(), "Fruit types:", #fruitMap)
 	return plantMap, fruitMap
 end
-
--- ─── Get Available Seed Names ──────────────────────────────────────────
 
 function AutoFarmSystem.GetAvailableCollectNames()
 	local _, fruitMap = AutoFarmSystem.ScanPlotData()
 	local names = {}
 	for seedName, fruits in pairs(fruitMap) do
-		-- Only show if at least one fruit is ready
 		for _, f in ipairs(fruits) do
 			if f.Ready then
 				names[#names + 1] = seedName
@@ -1575,76 +1747,72 @@ end
 
 function AutoFarmSystem.StartCollect()
 	if State.AutoCollectThread then
+		DebugPrint("Already running")
 		return
 	end
 	if not CollectFruitRemote then
-		warn("[AutoFarm] CollectFruit remote not available")
+		NotificationSystem.Notify("Auto Farm", "CollectFruit remote not found", "Error", 3)
 		return
 	end
 
+	DebugPrint("Starting Auto Collect...")
+	NotificationSystem.Notify("Auto Farm", "Auto Collect started", "Success", 2)
+
 	State.AutoCollectThread = task_spawn(function()
-		while Persist.Config.EnableAutoCollect do
+		while Persist.Config.EnableAutoCollect and State.ScriptRunning do
 			local plot = PlotSystem.FindPlayerPlot()
 			if plot then
-				local plantsFolder = plot:FindFirstChild("Plants")
+				local plantsFolder = FindPlantsFolder(plot)
 				if plantsFolder then
 					for _, plant in ipairs(plantsFolder:GetChildren()) do
-						if not Persist.Config.EnableAutoCollect then
+						if not Persist.Config.EnableAutoCollect or not State.ScriptRunning then
 							break
 						end
 
-						local seedName = plant:GetAttribute("SeedName")
-						if not seedName or not Persist.Config.SelectedCollectFruits[seedName] then
+						local seedName = GetPlantSeedName(plant)
+						-- If selection is empty or seed is selected
+						local selected = Persist.Config.SelectedCollectFruits
+						local hasSelection = false
+						for _, _ in pairs(selected) do
+							hasSelection = true
+							break
+						end
+
+						if hasSelection and not selected[seedName] then
 							continue
 						end
 
-						local plantId = plant:GetAttribute("Id")
-							or plant:GetAttribute("PlantId")
-							or plant:GetAttribute("GUID")
-						if not plantId then
+						if not IsPlantReady(plant) then
 							continue
 						end
 
-						-- Check if ready to harvest
-						local isReady = plant:GetAttribute("PlantGrowthReady") == true
-
-						if isReady then
-							-- Find fruit ID
-							local fruitId = nil
-							for _, child in ipairs(plant:GetDescendants()) do
-								if child:GetAttribute("IsFruit") or child.Name:lower():match("fruit") then
-									fruitId = child:GetAttribute("FruitId") or child:GetAttribute("Id") or child.Name
-									break
-								end
-							end
-
-							if fruitId then
-								local ok = pcall(function()
-									CollectFruitRemote:Fire(plantId, fruitId)
-								end)
-								if ok then
-									print(
-										string_format(
-											"[AutoFarm] Collected %s (Plant: %s, Fruit: %s)",
-											seedName,
-											plantId:sub(1, 8),
-											tostring(fruitId):sub(1, 8)
-										)
-									)
-								end
-								task_wait(0.15)
-							end
+						local plantId = GetPlantId(plant)
+						local fruitId, _ = FindFruitInPlant(plant)
+						if not fruitId then
+							fruitId = plantId -- fallback
 						end
+
+						DebugPrint("Collecting:", seedName, "plantId=", plantId, "fruitId=", fruitId)
+
+						-- Try signatures: (plantId, fruitId) then (plantId)
+						local ok = SafeFireRemote(CollectFruitRemote, plantId, fruitId)
+						if not ok then
+							ok = SafeFireRemote(CollectFruitRemote, plantId)
+						end
+						if ok then
+							DebugPrint("  -> Success")
+						end
+						task_wait(0.12)
 					end
 				end
 			end
-			task_wait(0.5)
+			task_wait(0.4)
 		end
 		State.AutoCollectThread = nil
+		DebugPrint("Auto Collect loop ended")
 	end)
 
 	TrackThread(State.AutoCollectThread)
-	NotificationSystem.Notify("Auto Farm", "Auto Collect started!", "Success", 2)
 end
 
 function AutoFarmSystem.StopCollect()
@@ -1657,54 +1825,65 @@ end
 
 function AutoFarmSystem.StartShovel()
 	if State.AutoShovelThread then
+		DebugPrint("Already running")
 		return
 	end
 	if not UseShovelRemote then
-		warn("[AutoFarm] UseShovel remote not available")
+		NotificationSystem.Notify("Auto Farm", "UseShovel remote not found", "Error", 3)
 		return
 	end
 
+	DebugPrint("Starting Auto Shovel...")
+	NotificationSystem.Notify("Auto Farm", "Auto Shovel started", "Success", 2)
+
 	State.AutoShovelThread = task_spawn(function()
-		while Persist.Config.EnableAutoShovel do
+		while Persist.Config.EnableAutoShovel and State.ScriptRunning do
 			local plot = PlotSystem.FindPlayerPlot()
 			if plot then
-				local plantsFolder = plot:FindFirstChild("Plants")
+				local plantsFolder = FindPlantsFolder(plot)
 				if plantsFolder then
 					for _, plant in ipairs(plantsFolder:GetChildren()) do
-						if not Persist.Config.EnableAutoShovel then
+						if not Persist.Config.EnableAutoShovel or not State.ScriptRunning then
 							break
 						end
 
-						local seedName = plant:GetAttribute("SeedName")
-						if not seedName or not Persist.Config.SelectedShovelPlants[seedName] then
+						local seedName = GetPlantSeedName(plant)
+						local selected = Persist.Config.SelectedShovelPlants
+						local hasSelection = false
+						for _, _ in pairs(selected) do
+							hasSelection = true
+							break
+						end
+
+						if hasSelection and not selected[seedName] then
 							continue
 						end
 
-						local plantId = plant:GetAttribute("Id")
-							or plant:GetAttribute("PlantId")
-							or plant:GetAttribute("GUID")
-						if not plantId then
-							continue
-						end
+						local plantId = GetPlantId(plant)
+						DebugPrint("Shoveling:", seedName, "plantId=", plantId)
 
-						local ok = pcall(function()
-							-- UseShovel(action, plantId, empty, shovelToolInstance)
-							UseShovelRemote:Fire("Dig", plantId, "", nil)
-						end)
+						-- Try multiple signatures
+						local ok = SafeFireRemote(UseShovelRemote, "Dig", plantId, "", nil)
+						if not ok then
+							ok = SafeFireRemote(UseShovelRemote, "Dig", plantId)
+						end
+						if not ok then
+							ok = SafeFireRemote(UseShovelRemote, plantId)
+						end
 						if ok then
-							print(string_format("[AutoFarm] Shoveled %s (Id: %s)", seedName, plantId:sub(1, 8)))
+							DebugPrint("  -> Success")
 						end
-						task_wait(0.15)
+						task_wait(0.12)
 					end
 				end
 			end
-			task_wait(0.5)
+			task_wait(0.4)
 		end
 		State.AutoShovelThread = nil
+		DebugPrint("Auto Shovel loop ended")
 	end)
 
 	TrackThread(State.AutoShovelThread)
-	NotificationSystem.Notify("Auto Farm", "Auto Shovel started!", "Success", 2)
 end
 
 function AutoFarmSystem.StopShovel()
@@ -1712,7 +1891,6 @@ function AutoFarmSystem.StopShovel()
 	State.AutoShovelThread = nil
 	NotificationSystem.Notify("Auto Farm", "Auto Shovel stopped", "Info", 2)
 end
-
 -- ═══════════════════════════════════════════════════════════════════════
 -- SECTION 15: CONFIGURATION SYSTEM
 -- ═══════════════════════════════════════════════════════════════════════
