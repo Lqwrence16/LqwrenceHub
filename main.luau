@@ -1790,9 +1790,6 @@ end
 
 -- ─── Auto Shovel ───────────────────────────────────────────────────────
 -- ─── Get Shovel Tool ───────────────────────────────────────────────────
-
--- ─── Get Shovel Tool ───────────────────────────────────────────────────
-
 local function GetShovelTool()
 	local character = Player.Character
 	if character then
@@ -1827,7 +1824,7 @@ local function IsTreePlant(plant)
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- AUTO SHOVEL TREES (plants with fruits)
+-- AUTO SHOVEL TREES (plants with a Fruits folder)
 -- ═══════════════════════════════════════════════════════════════════════
 
 function AutoFarmSystem.StartShovelTrees()
@@ -1876,7 +1873,7 @@ function AutoFarmSystem.StartShovelTrees()
 					break
 				end
 
-				-- ONLY trees (plants with fruits)
+				-- ONLY trees (plants that have a Fruits folder with children)
 				if not IsTreePlant(plant) then
 					continue
 				end
@@ -1899,24 +1896,21 @@ function AutoFarmSystem.StartShovelTrees()
 					continue
 				end
 
-				local fruitId = GetFruitId(plant)
-				if fruitId == "" then
-					DebugPrint("TREE SHOVEL SKIP (no fruitId):", seedName)
-					continue
-				end
-
-				DebugPrint("SHOVELING TREE:", seedName, "| plantId=", plantId, "| fruitId=", fruitId)
+				-- FIX: Always pass "" to delete the WHOLE tree, even if fruits are present
+				DebugPrint("SHOVELING TREE:", seedName, "| plantId=", plantId, "| fruitId=(empty -> whole tree)")
 
 				local ok = pcall(function()
 					if typeof(UseShovelRemote) == "table" and UseShovelRemote.Fire then
-						UseShovelRemote:Fire(plantId, fruitId, "Shovel", shovelTool)
+						UseShovelRemote:Fire(plantId, "", "Shovel", shovelTool)
 					elseif typeof(UseShovelRemote) == "Instance" and UseShovelRemote:IsA("RemoteEvent") then
-						UseShovelRemote:FireServer(plantId, fruitId, "Shovel", shovelTool)
+						UseShovelRemote:FireServer(plantId, "", "Shovel", shovelTool)
 					end
 				end)
 
 				if ok then
-					DebugPrint("  -> Tree shovel succeeded")
+					DebugPrint("  -> Tree shovel call sent")
+				else
+					DebugPrint("  -> Tree shovel call failed")
 				end
 
 				task_wait(0.2)
@@ -1988,7 +1982,7 @@ function AutoFarmSystem.StartShovelPlants()
 					break
 				end
 
-				-- ONLY single plants (no fruits)
+				-- ONLY single plants (no Fruits folder / empty)
 				if IsTreePlant(plant) then
 					continue
 				end
@@ -2013,7 +2007,6 @@ function AutoFarmSystem.StartShovelPlants()
 
 				DebugPrint("SHOVELING PLANT:", seedName, "| plantId=", plantId)
 
-				-- Single plants use empty string for fruitId
 				local ok = pcall(function()
 					if typeof(UseShovelRemote) == "table" and UseShovelRemote.Fire then
 						UseShovelRemote:Fire(plantId, "", "Shovel", shovelTool)
@@ -2023,7 +2016,7 @@ function AutoFarmSystem.StartShovelPlants()
 				end)
 
 				if ok then
-					DebugPrint("  -> Plant shovel succeeded")
+					DebugPrint("  -> Plant shovel call sent")
 				end
 
 				task_wait(0.2)
