@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════════════
---  LRX_Hub v4.0.0 - Production Refactor
+--  LRX_Hub v4.0.1 - Production Refactor
 --  Architecture: Modular, memory-safe, performance-oriented
 --  Purpose: Development automation tool for personal Roblox game
 -- ═══════════════════════════════════════════════════════════════════════
@@ -32,21 +32,25 @@ local CONSTANTS = {
 	SIDEBAR_WIDTH = 170,
 	TOPBAR_HEIGHT = 44,
 
+	-- Z-Index Layers
+	Z_BASE = 10,
+	Z_DROPDOWN = 50,
+	Z_NOTIFICATION = 700,
+	Z_MODAL_OVERLAY = 500,
+	Z_MODAL = 600,
+
 	-- Planting
 	DEFAULT_PLACE_AMOUNT = 10,
 	DEFAULT_PLANT_SPACING = 1,
 	DEFAULT_PLANT_DELAY = 0.05,
 	MAX_PLANT_AMOUNT = 1000,
 
-	-- Notifications
-	MAX_NOTIFICATIONS = 5,
-	NOTIFICATION_HEIGHT = 60,
-	NOTIFICATION_WIDTH = 260,
-	NOTIFICATION_DURATION = 3,
-
-	-- Dropdown
-	MAX_DROPDOWN_HEIGHT = 260,
+	-- Timing & Intervals
 	DROPDOWN_ANIMATION_SPEED = 0.2,
+	PLANT_CYCLE_INTERVAL = 0.2,
+	AUTO_BUY_INTERVAL = 0.2,
+	AUTO_SAVE_DEBOUNCE = 1,
+	YIELD_INTERVAL = 300,
 
 	-- Grid Dots
 	GRID_DOT_SIZE = 0.08,
@@ -59,25 +63,18 @@ local CONSTANTS = {
 	LASER_SWEEP_COUNT = 6,
 	LASER_BEAM_THICKNESS = 0.05,
 
-	-- Intervals
-	PLANT_CYCLE_INTERVAL = 0.2,
-	AUTO_BUY_INTERVAL = 0.2,
-	AUTO_SAVE_DEBOUNCE = 1,
-	YIELD_INTERVAL = 300,
-
-	-- Z-Index Layers
-	Z_BASE = 10,
-	Z_DROPDOWN = 50,
-	Z_NOTIFICATION = 700,
-	Z_MODAL_OVERLAY = 500,
-	Z_MODAL = 600,
+	-- Notifications
+	MAX_NOTIFICATIONS = 5,
+	NOTIFICATION_HEIGHT = 60,
+	NOTIFICATION_WIDTH = 260,
+	NOTIFICATION_DURATION = 3,
 
 	-- Mobile
 	MOBILE_PADDING_X = 20,
 	MOBILE_PADDING_Y = 40,
 	MOBILE_INIT_DELAY = 0.3,
 
-	-- Math
+	-- Math & Precision
 	POSITION_PRECISION = 100,
 	OCCUPIED_LOOKUP_PRECISION = 2,
 	OCCUPANCY_TOLERANCE = 0.5,
@@ -148,7 +145,6 @@ local tick = tick
 local task_wait = task.wait
 local task_delay = task.delay
 local task_spawn = task.spawn
-local task_defer = task.defer
 local task_cancel = task.cancel
 local string_format = string.format
 local table_insert = table.insert
@@ -159,7 +155,7 @@ local table_sort = table.sort
 local table_concat = table.concat
 local pairs = pairs
 local ipairs = ipairs
-local next = next
+
 -- Forward declarations for systems defined later (fixes closure capture)
 local PlotSystem, SeedPlacer
 
@@ -222,11 +218,13 @@ local State = {
 	ModalOverlay = nil,
 	IsDraggingWindow = false,
 	IsDraggingToggle = false,
+	IsResizing = false,
 	DragStartPos = nil,
 	FrameStartPos = nil,
 	ToggleStartPos = nil,
 	ToggleBtnStart = nil,
-	IsResizing = false,
+	ResizeStartSize = nil,
+	ResizeStartPos = nil,
 	AutoSaveDebounce = nil,
 	SidebarButtons = {},
 	SearchableItems = {},
@@ -244,8 +242,6 @@ local Cache = {
 	PlantPositions = nil,
 	CurrentPlantIndex = 1,
 	LastConfigHash = nil,
-	OccupiedLookup = nil,
-	PlantsFolder = nil,
 	FakePlot = nil,
 	TweenInfo = {},
 }
@@ -300,9 +296,7 @@ local function DisconnectAll()
 	for i = 1, #Connections do
 		local c = Connections[i]
 		if c and c.Connected then
-			pcall(function()
-				c:Disconnect()
-			end)
+			c:Disconnect()
 		end
 		Connections[i] = nil
 	end
@@ -337,9 +331,7 @@ end
 local function DestroyAllInstances()
 	for name, inst in pairs(Instances) do
 		if typeof(inst) == "Instance" and inst.Parent then
-			pcall(function()
-				inst:Destroy()
-			end)
+			inst:Destroy()
 		end
 		Instances[name] = nil
 	end
@@ -350,19 +342,6 @@ end
 -- ═══════════════════════════════════════════════════════════════════════
 
 local Utils = {}
-
-function Utils.Round(num, precision)
-	precision = precision or CONSTANTS.POSITION_PRECISION
-	return math_floor(num * precision + 0.5) / precision
-end
-
-function Utils.FormatPositionKey(pos, precision)
-	precision = precision or CONSTANTS.OCCUPIED_LOOKUP_PRECISION
-	local mult = precision * 10
-	local x = math_floor(pos.X * mult + 0.5) / mult
-	local z = math_floor(pos.Z * mult + 0.5) / mult
-	return string_format("%.1f,%.1f", x, z)
-end
 
 function Utils.Clamp(value, min, max)
 	return value < min and min or (value > max and max or value)
@@ -424,29 +403,12 @@ function Utils.FormatPrice(price)
 	return "$" .. tostring(price)
 end
 
-function Utils.IsPointInPart(point, part)
-	local localPos = part.CFrame:PointToObjectSpace(point)
-	local halfSize = part.Size / 2
-	return math_abs(localPos.X) <= halfSize.X + 0.1
-		and math_abs(localPos.Y) <= halfSize.Y + 0.1
-		and math_abs(localPos.Z) <= halfSize.Z + 0.1
-end
-
-function Utils.GetWorldBoundsXZ(part)
-	local cf = part.CFrame
-	local hs = part.Size / 2
-	local minX, maxX = math_huge, -math_huge
-	local minZ, maxZ = math_huge, -math_huge
-	for dx = -1, 1, 2 do
-		for dz = -1, 1, 2 do
-			local corner = cf * Vector3.new(dx * hs.X, 0, dz * hs.Z)
-			minX = math_min(minX, corner.X)
-			maxX = math_max(maxX, corner.X)
-			minZ = math_min(minZ, corner.Z)
-			maxZ = math_max(maxZ, corner.Z)
-		end
-	end
-	return minX, maxX, minZ, maxZ
+function Utils.FormatPositionKey(pos, precision)
+	precision = precision or CONSTANTS.OCCUPIED_LOOKUP_PRECISION
+	local mult = precision * 10
+	local x = math_floor(pos.X * mult + 0.5) / mult
+	local z = math_floor(pos.Z * mult + 0.5) / mult
+	return string_format("%.1f,%.1f", x, z)
 end
 
 function Utils.GetPlayerPosition()
@@ -458,28 +420,16 @@ function Utils.GetPlayerPosition()
 	return hrp and hrp.Position or nil
 end
 
-function Utils.DebugPlotInfo()
-	local plot = PlotSystem.FindPlayerPlot()
-	if not plot then
-		warn("[Debug] No plot found")
-		return
+function Utils.IsPointInGui(screenPoint, guiObject)
+	if not guiObject or not guiObject.Parent then
+		return false
 	end
-
-	local parts = PlotSystem.DetectPlotParts(plot)
-	warn("[Debug] Found", #parts, "PlantAreaColumn parts")
-
-	for i, part in ipairs(parts) do
-		warn(
-			string_format(
-				"[Debug] Part %d: Name=%s | Size=%s | Pos=%s | Rot=%s",
-				i,
-				part.Name,
-				tostring(part.Size),
-				tostring(part.Position),
-				tostring(part.Orientation)
-			)
-		)
-	end
+	local ap = guiObject.AbsolutePosition
+	local as = guiObject.AbsoluteSize
+	return screenPoint.X >= ap.X
+		and screenPoint.X <= ap.X + as.X
+		and screenPoint.Y >= ap.Y
+		and screenPoint.Y <= ap.Y + as.Y
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
@@ -931,6 +881,7 @@ function GridSystem.Refresh()
 	end)
 
 	TrackThread(refreshThread)
+	State.GridRefreshThread = refreshThread
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
@@ -1126,6 +1077,8 @@ end
 
 SeedPlacer = {}
 
+-- ─── Configuration Hashing ─────────────────────────────────────────────
+
 local function GetConfigHash()
 	return string_format(
 		"%s|%s|%.2f",
@@ -1134,6 +1087,8 @@ local function GetConfigHash()
 		Persist.Config.PlantSpacing or CONSTANTS.DEFAULT_PLANT_SPACING
 	)
 end
+
+-- ─── Position Generation ───────────────────────────────────────────────
 
 local function GeneratePlantPositions(targetParts, spacing)
 	if #targetParts == 0 then
@@ -1151,22 +1106,14 @@ local function GeneratePlantPositions(targetParts, spacing)
 		local hs = size / 2
 
 		-- The TOP surface in local space is Y = +hs.Y
-		-- Transform to world space to get exact height
 		local topSurfaceLocal = Vector3.new(0, hs.Y, 0)
 		local topSurfaceWorld = cf * topSurfaceLocal
 
-		-- For a Y-rotated part (-90°), the local axes map to world axes as:
-		-- local X → world Z (RightVector)
-		-- local Z → world X (LookVector, but inverted due to -90° rotation)
-		-- So we need to work in LOCAL space and transform each point to world
-
 		-- Calculate grid dimensions in local space
-		-- Size.X = 44 (width in local X), Size.Z = 50 (depth in local Z)
 		local cellsX = math_max(1, math_floor(size.X / spacing))
 		local cellsZ = math_max(1, math_floor(size.Z / spacing))
 
 		-- Center the grid within the part's local space
-		-- Start from -hs.X + spacing/2 to hs.X - spacing/2
 		local startX = -hs.X + spacing / 2
 		local startZ = -hs.Z + spacing / 2
 		local endX = hs.X - spacing / 2
@@ -1191,14 +1138,12 @@ local function GeneratePlantPositions(targetParts, spacing)
 					task_wait()
 				end
 
-				-- Create position in LOCAL space (on top surface)
+				-- Generate in local space then transform to world space via CFrame.
+				-- This correctly handles rotated parts.
 				local localPos = Vector3.new(localX, hs.Y, localZ)
-
-				-- Transform to WORLD space using the part's CFrame
-				-- This properly handles rotation (-90° Y)
 				local worldPos = cf * localPos
 
-				-- Round to match game's grid precision (plants are at whole numbers)
+				-- Round to match game's grid precision
 				local finalPos =
 					Vector3.new(math_floor(worldPos.X + 0.5), topSurfaceWorld.Y, math_floor(worldPos.Z + 0.5))
 
@@ -1224,6 +1169,8 @@ local function GeneratePlantPositions(targetParts, spacing)
 
 	return positions
 end
+
+-- ─── Pattern Application ───────────────────────────────────────────────
 
 local function ApplyPattern(positions, pattern)
 	local count = #positions
@@ -1352,6 +1299,8 @@ local function ApplyPattern(positions, pattern)
 	return positions
 end
 
+-- ─── Occupancy Lookup ──────────────────────────────────────────────────
+
 local function BuildOccupiedLookup()
 	local occupied = {}
 
@@ -1370,8 +1319,6 @@ local function BuildOccupiedLookup()
 	if not plantsFolder then
 		return occupied
 	end
-
-	Cache.PlantsFolder = plantsFolder
 
 	for _, plant in ipairs(plantsFolder:GetChildren()) do
 		local plantPos = nil
@@ -1402,6 +1349,8 @@ local function IsSpotEmpty(spotPosition, occupiedLookup)
 	local key = Utils.FormatPositionKey(spotPosition)
 	return not occupiedLookup[key]
 end
+
+-- ─── Public API ────────────────────────────────────────────────────────
 
 function SeedPlacer.GetPlantPositions()
 	local currentHash = GetConfigHash()
@@ -1720,6 +1669,8 @@ end
 
 local UI = {}
 
+-- ─── Core Helpers ──────────────────────────────────────────────────────
+
 function UI.Create(className, properties)
 	local instance = Instance.new(className)
 	if properties then
@@ -1744,6 +1695,8 @@ function UI.AddStroke(instance, color, thickness)
 	stroke.Parent = instance
 	return stroke
 end
+
+-- ─── Cards ─────────────────────────────────────────────────────────────
 
 function UI.CreateCard(parent, title, icon, iconColor)
 	local card = UI.Create("TextButton", {
@@ -1812,6 +1765,8 @@ function UI.CreateCard(parent, title, icon, iconColor)
 
 	return card
 end
+
+-- ─── Interactive Components ────────────────────────────────────────────
 
 function UI.CreateToggle(parent, text, defaultState, callback)
 	local container = UI.Create("Frame", {
@@ -1917,6 +1872,8 @@ function UI.CreateButton(parent, text, bgColor, width, height, callback)
 	return btn
 end
 
+-- ─── Labels ────────────────────────────────────────────────────────────
+
 function UI.CreateLabel(parent, text, textColor, fontSize)
 	return UI.Create("TextLabel", {
 		Parent = parent,
@@ -1930,47 +1887,6 @@ function UI.CreateLabel(parent, text, textColor, fontSize)
 		TextXAlignment = Enum.TextXAlignment.Left,
 		ZIndex = 120,
 	})
-end
-
-function UI.CreateInput(parent, title, defaultText, callback)
-	local container = UI.Create("Frame", {
-		Parent = parent,
-		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -8, 0, 50),
-	})
-
-	UI.Create("TextLabel", {
-		Parent = container,
-		BackgroundTransparency = 1,
-		Size = UDim2.new(1, 0, 0, 16),
-		Font = Enum.Font.Gotham,
-		Text = title,
-		TextColor3 = Theme.TextPrimary,
-		TextSize = 12,
-		TextXAlignment = Enum.TextXAlignment.Left,
-	})
-
-	local box = UI.Create("TextBox", {
-		Parent = container,
-		BackgroundColor3 = Theme.Card,
-		BorderSizePixel = 0,
-		Position = UDim2.new(0, 0, 0, 20),
-		Size = UDim2.new(1, 0, 0, 26),
-		Font = Enum.Font.Gotham,
-		Text = defaultText or "",
-		PlaceholderText = "Enter value...",
-		TextColor3 = Theme.TextPrimary,
-		PlaceholderColor3 = Theme.TextMuted,
-		TextSize = 12,
-		ClearTextOnFocus = false,
-	})
-	UI.AddCorner(box, 4)
-
-	TrackConnection(box.FocusLost:Connect(function()
-		callback(box.Text)
-	end))
-
-	return container, box
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
@@ -2767,6 +2683,8 @@ end
 -- SECTION 22: PAGE DEFINITIONS
 -- ═══════════════════════════════════════════════════════════════════════
 
+-- ─── Home Page ─────────────────────────────────────────────────────────
+
 function Pages.Home()
 	PageSystem.SwitchTo("Home", "Home", "Game Version: ----", function()
 		local seedPlacerCard = UI.CreateCard(Instances.ContentScroll, "Seed Placer", "🏠", Theme.Accent)
@@ -3089,6 +3007,8 @@ function Pages.Home()
 	end)
 end
 
+-- ─── Shop Page ─────────────────────────────────────────────────────────
+
 function Pages.Shop()
 	PageSystem.SwitchTo("Shop", "Shop", "ShopFeatures", function()
 		local seedShopCard = UI.CreateCard(Instances.ContentScroll, "Seed Shop", "🌱", Theme.Accent)
@@ -3164,6 +3084,8 @@ function Pages.Shop()
 	end)
 end
 
+-- ─── Account Page ──────────────────────────────────────────────────────
+
 function Pages.Account()
 	PageSystem.SwitchTo("Account", "Account", "User Profile", function()
 		local card = UI.CreateCard(Instances.ContentScroll, "Account Info", "👤", Theme.Accent)
@@ -3176,9 +3098,13 @@ function Pages.Account()
 	end)
 end
 
+-- ─── Premium Page ──────────────────────────────────────────────────────
+
 function Pages.Premium()
 	PageSystem.SwitchTo("Premium", "Premium", "Premium Features", function() end)
 end
+
+-- ─── Settings Page ─────────────────────────────────────────────────────
 
 function Pages.Settings()
 	PageSystem.SwitchTo("Settings", "Settings", "Preferences", function()
@@ -3217,6 +3143,8 @@ end
 -- ═══════════════════════════════════════════════════════════════════════
 
 local UIInit = {}
+
+-- ─── ScreenGui & Main Frame ────────────────────────────────────────────
 
 function UIInit.CreateScreenGui()
 	local screenGui = Instance.new("ScreenGui")
@@ -3264,6 +3192,8 @@ function UIInit.CreateMainFrame(screenGui)
 	TrackInstance("MainFrame", mainFrame)
 	return mainFrame
 end
+
+-- ─── Toggle Button ─────────────────────────────────────────────────────
 
 function UIInit.CreateToggleButton(screenGui)
 	local btn = UI.Create("TextButton", {
@@ -3333,6 +3263,8 @@ function UIInit.CreateToggleButton(screenGui)
 	TrackInstance("MainIcon", btn)
 	return btn
 end
+
+-- ─── Top Bar ───────────────────────────────────────────────────────────
 
 function UIInit.CreateTopBar(mainFrame, screenGui)
 	local topBar = UI.Create("Frame", {
@@ -3470,7 +3402,16 @@ function UIInit.CreateTopBar(mainFrame, screenGui)
 	TrackInstance("SuggestFrame", suggestFrame)
 	TrackInstance("SuggestScroll", suggestScroll)
 
-	TrackConnection(searchBox:GetPropertyChangedSignal("Text"):Connect(SearchSystem.UpdateSuggestions))
+	local searchDebounceThread
+	TrackConnection(searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+		if searchDebounceThread then
+			task_cancel(searchDebounceThread)
+		end
+		searchDebounceThread = task_delay(0.12, function()
+			searchDebounceThread = nil
+			SearchSystem.UpdateSuggestions()
+		end)
+	end))
 	TrackConnection(searchBox.FocusLost:Connect(function()
 		if searchBox.Text == "" then
 			searchBox.Text = "Search"
@@ -3526,6 +3467,8 @@ function UIInit.CreateTopBar(mainFrame, screenGui)
 	return topBar
 end
 
+-- ─── Sidebar ─────────────────────────────────────────────────────────────
+
 function UIInit.CreateSidebar(mainFrame)
 	local sidebar = UI.Create("Frame", {
 		Name = "Sidebar",
@@ -3565,6 +3508,8 @@ function UIInit.CreateSidebar(mainFrame)
 
 	return sidebar, sidebarScroll, sidebarLayout
 end
+
+-- ─── Content Area ──────────────────────────────────────────────────────
 
 function UIInit.CreateContent(mainFrame)
 	local contentFrame = UI.Create("Frame", {
@@ -3608,6 +3553,8 @@ function UIInit.CreateContent(mainFrame)
 	return contentFrame, contentScroll
 end
 
+-- ─── Resize Handle ─────────────────────────────────────────────────────
+
 function UIInit.CreateResizeHandle(mainFrame)
 	local resizeHandle = UI.Create("Frame", {
 		Name = "ResizeHandle",
@@ -3649,38 +3596,17 @@ function UIInit.CreateResizeHandle(mainFrame)
 			input.UserInputType == Enum.UserInputType.MouseButton1
 			or input.UserInputType == Enum.UserInputType.Touch
 		then
-			local startSize = mainFrame.Size
-			local startPos = input.Position
-			local resizeConnection
-
-			resizeConnection = TrackConnection(Services.RunService.RenderStepped:Connect(function()
-				if not resizeConnection then
-					return
-				end
-				local mouse = Services.UserInputService:GetMouseLocation()
-				local delta = mouse - Vector2.new(startPos.X, startPos.Y)
-				mainFrame.Size = UDim2.new(
-					0,
-					math_max(Persist.Config.MinWindowWidth, startSize.X.Offset + delta.X),
-					0,
-					math_max(Persist.Config.MinWindowHeight, startSize.Y.Offset + delta.Y)
-				)
-			end))
-
-			TrackConnection(input.Changed:Connect(function()
-				if input.UserInputState == Enum.UserInputState.End then
-					if resizeConnection then
-						resizeConnection:Disconnect()
-					end
-					resizeConnection = nil
-				end
-			end))
+			State.IsResizing = true
+			State.ResizeStartSize = mainFrame.Size
+			State.ResizeStartPos = input.Position
 		end
 	end))
 
 	TrackInstance("ResizeHandle", resizeHandle)
 	return resizeHandle
 end
+
+-- ─── Sidebar Setup ─────────────────────────────────────────────────────
 
 function UIInit.SetupSidebar(sidebarScroll)
 	local sidebarItems = {
@@ -3691,11 +3617,11 @@ function UIInit.SetupSidebar(sidebarScroll)
 		{ Name = "Settings", Icon = "⚙️", Color = Theme.AccentCyan, Page = Pages.Settings },
 	}
 
-	for itemIndex, item in ipairs(sidebarItems) do
+	for _, item in ipairs(sidebarItems) do
 		local sidebarBtn = UI.Create("TextButton", {
 			Name = item.Name,
 			Parent = sidebarScroll,
-			BackgroundColor3 = (itemIndex == 2) and Theme.Card or Theme.Sidebar,
+			BackgroundColor3 = (item.Name == "Home") and Theme.Card or Theme.Sidebar,
 			BorderSizePixel = 0,
 			Size = UDim2.new(1, -10, 0, 36),
 			Position = UDim2.new(0, 5, 0, 0),
@@ -3739,6 +3665,8 @@ function UIInit.SetupSidebar(sidebarScroll)
 	sidebarScroll.CanvasSize = UDim2.new(0, 0, 0, #sidebarItems * 39 + 10)
 end
 
+-- ─── Window Drag ───────────────────────────────────────────────────────
+
 function UIInit.SetupWindowDrag(mainFrame)
 	TrackConnection(mainFrame.InputBegan:Connect(function(input)
 		if State.ModalOpen then
@@ -3770,14 +3698,34 @@ function UIInit.SetupWindowDrag(mainFrame)
 				State.FrameStartPos.Y.Offset + delta.Y
 			)
 		end
+		if
+			State.IsResizing
+			and (
+				input.UserInputType == Enum.UserInputType.MouseMovement
+				or input.UserInputType == Enum.UserInputType.Touch
+			)
+		then
+			local delta = input.Position - State.ResizeStartPos
+			mainFrame.Size = UDim2.new(
+				0,
+				math_max(Persist.Config.MinWindowWidth, State.ResizeStartSize.X.Offset + delta.X),
+				0,
+				math_max(Persist.Config.MinWindowHeight, State.ResizeStartSize.Y.Offset + delta.Y)
+			)
+		end
 	end))
 
 	TrackConnection(Services.UserInputService.InputEnded:Connect(function(input)
 		if State.IsDraggingWindow then
 			State.IsDraggingWindow = false
 		end
+		if State.IsResizing then
+			State.IsResizing = false
+		end
 	end))
 end
+
+-- ─── Global Input ──────────────────────────────────────────────────────
 
 function UIInit.SetupGlobalInput()
 	TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -3792,34 +3740,27 @@ function UIInit.SetupGlobalInput()
 		end
 
 		local pos = input.Position
-		local function isInside(gui)
-			if not gui or not gui.Parent then
-				return false
-			end
-			local ap = gui.AbsolutePosition
-			local as = gui.AbsoluteSize
-			return pos.X >= ap.X and pos.X <= ap.X + as.X and pos.Y >= ap.Y and pos.Y <= ap.Y + as.Y
-		end
-
 		local suggestFrame = Instances.SuggestFrame
 		local searchFrame = Instances.SearchFrame
 		if suggestFrame and suggestFrame.Visible then
-			if not isInside(searchFrame) and not isInside(suggestFrame) then
+			if not Utils.IsPointInGui(pos, searchFrame) and not Utils.IsPointInGui(pos, suggestFrame) then
 				suggestFrame.Visible = false
 			end
 		end
 
 		if State.ActiveDropdownFrame and State.ActiveDropdownFrame.Parent then
-			if isInside(State.ActiveDropdownFrame) then
+			if Utils.IsPointInGui(pos, State.ActiveDropdownFrame) then
 				return
 			end
-			if State.ActiveDropdownCard and isInside(State.ActiveDropdownCard) then
+			if State.ActiveDropdownCard and Utils.IsPointInGui(pos, State.ActiveDropdownCard) then
 				return
 			end
 			DropdownSystem.Close()
 		end
 	end))
 end
+
+-- ─── Mobile Sizing ─────────────────────────────────────────────────────
 
 function UIInit.ApplyMobileSizing()
 	local success, err = pcall(function()
