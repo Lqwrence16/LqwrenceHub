@@ -2737,6 +2737,237 @@ end
 
 local SeedModalSystem = {}
 
+-- ─── Generic Item Selection Modal (looks like Seed Placer) ─────────────
+
+function SeedModalSystem.ShowItemSelection(title, itemNames, selectedTable, updateCallback)
+	-- itemNames: array of strings, e.g. {"Carrot", "Tomato", ...}
+	-- selectedTable: dictionary, e.g. {Carrot = true, Tomato = false}
+	table_sort(itemNames)
+
+	ModalSystem.Show(title, function(modalFrame, modalContent)
+		-- Search bar
+		local searchContainer = UI.Create("Frame", {
+			Parent = modalContent,
+			BackgroundColor3 = Theme.Content,
+			BorderSizePixel = 0,
+			Size = UDim2.new(1, 0, 0, 32),
+			Position = UDim2.new(0, 0, 0, 0),
+			ZIndex = CONSTANTS.Z_MODAL + 20,
+		})
+		UI.AddCorner(searchContainer, 4)
+
+		UI.Create("TextLabel", {
+			Parent = searchContainer,
+			BackgroundTransparency = 1,
+			Position = UDim2.new(0, 8, 0, 0),
+			Size = UDim2.new(0, 22, 1, 0),
+			Font = Enum.Font.GothamBold,
+			Text = "🔍",
+			TextColor3 = Theme.TextMuted,
+			TextSize = 12,
+			ZIndex = CONSTANTS.Z_MODAL + 21,
+		})
+
+		local searchBox = UI.Create("TextBox", {
+			Parent = searchContainer,
+			BackgroundTransparency = 1,
+			Position = UDim2.new(0, 32, 0, 0),
+			Size = UDim2.new(1, -44, 1, 0),
+			Font = Enum.Font.Gotham,
+			Text = "Search...",
+			TextColor3 = Theme.TextMuted,
+			TextSize = 12,
+			ZIndex = CONSTANTS.Z_MODAL + 21,
+			ClearTextOnFocus = true,
+			Active = true,
+		})
+
+		-- Action buttons (Select All / Clear All)
+		local actionFrame = UI.Create("Frame", {
+			Parent = modalContent,
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, 0, 0, 30),
+			Position = UDim2.new(0, 0, 0, 38),
+			ZIndex = CONSTANTS.Z_MODAL + 20,
+		})
+
+		local selectAllBtn = UI.CreateButton(actionFrame, "Select All", Theme.Accent, 100, 28, function()
+			for _, name in ipairs(itemNames) do
+				selectedTable[name] = true
+			end
+			ConfigSystem.AutoSave()
+			if updateCallback then
+				updateCallback()
+			end
+			-- Rebuild with current search
+			local filter = searchBox.Text
+			if filter == "Search..." then
+				filter = ""
+			end
+			buildRows(filter)
+		end)
+		selectAllBtn.Size = UDim2.new(0.5, -4, 1, 0)
+
+		local clearAllBtn = UI.CreateButton(actionFrame, "Clear All", Color3.fromRGB(185, 65, 65), 100, 28, function()
+			for _, name in ipairs(itemNames) do
+				selectedTable[name] = nil
+			end
+			ConfigSystem.AutoSave()
+			if updateCallback then
+				updateCallback()
+			end
+			local filter = searchBox.Text
+			if filter == "Search..." then
+				filter = ""
+			end
+			buildRows(filter)
+		end)
+		clearAllBtn.Position = UDim2.new(0.5, 4, 0, 0)
+		clearAllBtn.Size = UDim2.new(0.5, -4, 1, 0)
+
+		-- Scroll list
+		local scroll = UI.Create("ScrollingFrame", {
+			Parent = modalContent,
+			BackgroundTransparency = 1,
+			Position = UDim2.new(0, 0, 0, 74),
+			Size = UDim2.new(1, 0, 1, -118),
+			ScrollBarThickness = 3,
+			ScrollBarImageColor3 = Theme.ScrollBar,
+			CanvasSize = UDim2.new(0, 0, 0, 0),
+			ZIndex = CONSTANTS.Z_MODAL + 20,
+			ClipsDescendants = true,
+		})
+
+		local list = UI.Create("UIListLayout", {
+			Parent = scroll,
+			Padding = UDim.new(0, 3),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		})
+
+		UI.Create("UIPadding", {
+			Parent = scroll,
+			PaddingTop = UDim.new(0, 4),
+			PaddingBottom = UDim.new(0, 4),
+			PaddingLeft = UDim.new(0, 4),
+			PaddingRight = UDim.new(0, 4),
+		})
+
+		local function buildRows(filterText)
+			for _, child in pairs(scroll:GetChildren()) do
+				if child:IsA("TextButton") or child:IsA("TextLabel") then
+					child:Destroy()
+				end
+			end
+
+			local lowerFilter = (filterText or ""):lower()
+			if lowerFilter == "search..." then
+				lowerFilter = ""
+			end
+			local visibleCount = 0
+
+			for i, name in ipairs(itemNames) do
+				if lowerFilter ~= "" and not name:lower():find(lowerFilter, 1, true) then
+					continue
+				end
+
+				visibleCount += 1
+				local isSelected = selectedTable[name] == true
+
+				local row = UI.Create("TextButton", {
+					Parent = scroll,
+					BackgroundColor3 = isSelected and Color3.fromRGB(55, 45, 75) or Theme.Card,
+					BorderSizePixel = 0,
+					Size = UDim2.new(1, -8, 0, 34),
+					Position = UDim2.new(0, 4, 0, 0),
+					LayoutOrder = i,
+					Font = Enum.Font.Gotham,
+					Text = "",
+					ZIndex = CONSTANTS.Z_MODAL + 20,
+					Active = true,
+					AutoButtonColor = false,
+				})
+				UI.AddCorner(row, 4)
+
+				-- Name
+				UI.Create("TextLabel", {
+					Parent = row,
+					BackgroundTransparency = 1,
+					Position = UDim2.new(0, 10, 0, 0),
+					Size = UDim2.new(1, -40, 1, 0),
+					Font = Enum.Font.Gotham,
+					Text = name,
+					TextColor3 = Theme.TextPrimary,
+					TextSize = 12,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					ZIndex = CONSTANTS.Z_MODAL + 21,
+				})
+
+				-- Checkmark
+				if isSelected then
+					UI.Create("TextLabel", {
+						Parent = row,
+						BackgroundTransparency = 1,
+						Position = UDim2.new(1, -30, 0, 0),
+						Size = UDim2.new(0, 20, 1, 0),
+						Font = Enum.Font.GothamBold,
+						Text = "✓",
+						TextColor3 = Theme.Accent,
+						TextSize = 14,
+						ZIndex = CONSTANTS.Z_MODAL + 21,
+					})
+				end
+
+				TrackConnection(row.Activated:Connect(function()
+					selectedTable[name] = not selectedTable[name]
+					if not selectedTable[name] then
+						selectedTable[name] = nil
+					end
+					ConfigSystem.AutoSave()
+					if updateCallback then
+						updateCallback()
+					end
+					buildRows(searchBox.Text ~= "Search..." and searchBox.Text or "")
+				end))
+			end
+
+			scroll.CanvasSize = UDim2.new(0, 0, 0, visibleCount * 37)
+
+			if visibleCount == 0 and lowerFilter ~= "" then
+				UI.Create("TextLabel", {
+					Parent = scroll,
+					BackgroundTransparency = 1,
+					Size = UDim2.new(1, 0, 0, 60),
+					Font = Enum.Font.Gotham,
+					Text = 'No items found matching "' .. filterText .. '"',
+					TextColor3 = Theme.TextMuted,
+					TextSize = 12,
+					TextWrapped = true,
+					ZIndex = CONSTANTS.Z_MODAL + 20,
+				})
+				scroll.CanvasSize = UDim2.new(0, 0, 0, 70)
+			end
+		end
+
+		buildRows("")
+
+		TrackConnection(searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+			local text = searchBox.Text
+			if text == "Search..." then
+				text = ""
+			end
+			buildRows(text)
+		end))
+
+		-- Done button
+		local doneBtn = UI.CreateButton(modalContent, "Done", Theme.Accent, 80, 32, function()
+			ModalSystem.Close()
+		end)
+		doneBtn.Position = UDim2.new(1, -85, 1, -38)
+	end, 460, 380)
+end
+
+-- ─── Original Seed Modal (unchanged) ───────────────────────────────────
+
 function SeedModalSystem.Show(title, selectedTable, updateCallback)
 	local seedItems = {}
 	if SeedData then
@@ -2760,6 +2991,7 @@ function SeedModalSystem.Show(title, selectedTable, updateCallback)
 			Position = UDim2.new(0, 0, 0, 0),
 			ZIndex = CONSTANTS.Z_MODAL + 20,
 		})
+		UI.AddCorner(searchContainer, 4)
 
 		UI.Create("TextLabel", {
 			Parent = searchContainer,
@@ -2813,6 +3045,9 @@ function SeedModalSystem.Show(title, selectedTable, updateCallback)
 			end
 
 			local lowerFilter = filterText and filterText:lower() or ""
+			if lowerFilter == "search seeds..." then
+				lowerFilter = ""
+			end
 			local visibleCount = 0
 
 			for i, seedItem in ipairs(seedItems) do
@@ -2932,9 +3167,11 @@ function SeedModalSystem.Show(title, selectedTable, updateCallback)
 		local doneBtn = UI.CreateButton(modalContent, "Done", Theme.Accent, 80, 32, function()
 			ModalSystem.Close()
 		end)
-		doneBtn.Position = UDim2.new(1, -80, 1, -36)
+		doneBtn.Position = UDim2.new(1, -85, 1, -38)
 	end, 480, 400)
 end
+
+-- ─── Simple Selection Modal (for dropdown-style choices) ───────────────
 
 function SeedModalSystem.ShowSelection(title, options, currentValue, onSelect)
 	ModalSystem.Show(title, function(modalFrame, modalContent)
@@ -2988,7 +3225,7 @@ function SeedModalSystem.ShowSelection(title, options, currentValue, onSelect)
 		local doneBtn = UI.CreateButton(modalContent, "Done", Theme.Accent, 80, 32, function()
 			ModalSystem.Close()
 		end)
-		doneBtn.Position = UDim2.new(1, -80, 1, -36)
+		doneBtn.Position = UDim2.new(1, -85, 1, -38)
 	end, 400, 350)
 end
 
@@ -3447,51 +3684,15 @@ function Pages.Home()
 							)
 							return
 						end
-						local options = {}
-						for _, name in ipairs(available) do
-							options[#options + 1] = { Label = name, Value = name }
-						end
-						SeedModalSystem.ShowSelection("Select Fruits to Collect", options, nil, function(value)
-							-- Toggle selection
-							Persist.Config.SelectedCollectFruits[value] =
-								not Persist.Config.SelectedCollectFruits[value]
-							ConfigSystem.AutoSave()
-							UpdateSelectedLabel()
-						end)
+						SeedModalSystem.ShowItemSelection(
+							"Select Fruits to Collect",
+							available,
+							Persist.Config.SelectedCollectFruits,
+							UpdateSelectedLabel
+						)
 					end
 				)
 				selectBtn.Size = UDim2.new(1, -8, 0, 30)
-
-				local actionFrame = UI.Create("Frame", {
-					Parent = dropdownScroll,
-					BackgroundTransparency = 1,
-					Size = UDim2.new(1, -8, 0, 30),
-				})
-
-				local selectAllBtn = UI.CreateButton(actionFrame, "Select All", Theme.Accent, 100, 30, function()
-					local available = AutoFarmSystem.GetAvailableCollectNames()
-					for _, name in ipairs(available) do
-						Persist.Config.SelectedCollectFruits[name] = true
-					end
-					ConfigSystem.AutoSave()
-					UpdateSelectedLabel()
-				end)
-				selectAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
-
-				local clearAllBtn = UI.CreateButton(
-					actionFrame,
-					"Clear All",
-					Color3.fromRGB(185, 65, 65),
-					100,
-					30,
-					function()
-						table_clear(Persist.Config.SelectedCollectFruits)
-						ConfigSystem.AutoSave()
-						UpdateSelectedLabel()
-					end
-				)
-				clearAllBtn.Position = UDim2.new(0.5, 3, 0, 0)
-				clearAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
 
 				UI.CreateToggle(dropdownScroll, "Enable Auto Collect", Persist.Config.EnableAutoCollect, function(state)
 					Persist.Config.EnableAutoCollect = state
@@ -3530,49 +3731,15 @@ function Pages.Home()
 							NotificationSystem.Notify("Auto Shovel", "No plants found in your plot!", "Warning", 3)
 							return
 						end
-						local options = {}
-						for _, name in ipairs(available) do
-							options[#options + 1] = { Label = name, Value = name }
-						end
-						SeedModalSystem.ShowSelection("Select Plants to Shovel", options, nil, function(value)
-							Persist.Config.SelectedShovelPlants[value] = not Persist.Config.SelectedShovelPlants[value]
-							ConfigSystem.AutoSave()
-							UpdateSelectedLabel()
-						end)
+						SeedModalSystem.ShowItemSelection(
+							"Select Plants to Shovel",
+							available,
+							Persist.Config.SelectedShovelPlants,
+							UpdateSelectedLabel
+						)
 					end
 				)
 				selectBtn.Size = UDim2.new(1, -8, 0, 30)
-
-				local actionFrame = UI.Create("Frame", {
-					Parent = dropdownScroll,
-					BackgroundTransparency = 1,
-					Size = UDim2.new(1, -8, 0, 30),
-				})
-
-				local selectAllBtn = UI.CreateButton(actionFrame, "Select All", Theme.Accent, 100, 30, function()
-					local available = AutoFarmSystem.GetAvailableShovelNames()
-					for _, name in ipairs(available) do
-						Persist.Config.SelectedShovelPlants[name] = true
-					end
-					ConfigSystem.AutoSave()
-					UpdateSelectedLabel()
-				end)
-				selectAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
-
-				local clearAllBtn = UI.CreateButton(
-					actionFrame,
-					"Clear All",
-					Color3.fromRGB(185, 65, 65),
-					100,
-					30,
-					function()
-						table_clear(Persist.Config.SelectedShovelPlants)
-						ConfigSystem.AutoSave()
-						UpdateSelectedLabel()
-					end
-				)
-				clearAllBtn.Position = UDim2.new(0.5, 3, 0, 0)
-				clearAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
 
 				UI.CreateToggle(dropdownScroll, "Enable Auto Shovel", Persist.Config.EnableAutoShovel, function(state)
 					Persist.Config.EnableAutoShovel = state
