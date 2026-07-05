@@ -41,7 +41,7 @@ local CONSTANTS = {
 
 	-- Planting
 	DEFAULT_PLACE_AMOUNT = 10,
-	DEFAULT_PLANT_SPACING = 1,
+	DEFAULT_PLANT_SPACING = 0.5,
 	DEFAULT_PLANT_DELAY = 0.05,
 	MAX_PLANT_AMOUNT = 1000,
 
@@ -56,10 +56,11 @@ local CONSTANTS = {
 	MAX_DROPDOWN_HEIGHT = 300,
 
 	-- Grid Dots
-	GRID_DOT_SIZE = 0.08,
+	GRID_DOT_SIZE = 0.18,
 	GRID_DOT_BATCH_SIZE = 400,
 	GRID_DOT_BATCH_DELAY = 0.03,
-	GRID_DOT_Y_OFFSET = 0.0,
+	GRID_DOT_Y_OFFSET = 0.08,
+	GRID_VISUAL_SPACING = 0.5,
 
 	-- Laser
 	LASER_SCAN_DURATION = 1.5,
@@ -193,9 +194,9 @@ local ConfigSchema = {
 	PlantDelay = { type = "number", min = 0, max = 5, default = CONSTANTS.DEFAULT_PLANT_DELAY },
 	SelectedCollectFruits = { type = "table", default = {} },
 	EnableAutoShovelTrees = { type = "boolean", default = false },
-	EnableAutoShovelPlants = { type = "boolean", default = false },
+	EnableAutoShovelFruits = { type = "boolean", default = false },
 	SelectedShovelTrees = { type = "table", default = {} },
-	SelectedShovelPlants = { type = "table", default = {} },
+	SelectedShovelFruits = { type = "table", default = {} },
 	ShowGridDots = { type = "boolean", default = false },
 	ReduceEffects = { type = "boolean", default = false },
 	Keybinds = { type = "table", default = { ToggleUI = "F" } },
@@ -242,7 +243,7 @@ local State = {
 	GridRefreshThread = nil,
 	AutoCollectThread = nil,
 	AutoShovelTreesThread = nil,
-	AutoShovelPlantsThread = nil,
+	AutoShovelFruitsThread = nil,
 }
 
 -- ═══════════════════════════════════════════════════════════════════════
@@ -446,6 +447,55 @@ function Utils.IsPointInGui(screenPoint, guiObject)
 		and screenPoint.X <= ap.X + as.X
 		and screenPoint.Y >= ap.Y
 		and screenPoint.Y <= ap.Y + as.Y
+end
+
+function Utils.BuildOccupiedLookup()
+	local occupied = {}
+
+	if not Cache.FakePlot or not Cache.FakePlot.Parent then
+		local controllers = Player:FindFirstChild("PlayerScripts")
+		local seedInspect = controllers and controllers:FindFirstChild("SeedInspectController")
+		Cache.FakePlot = seedInspect and seedInspect:FindFirstChild("FakePlot")
+	end
+
+	local plantsFolder = Cache.FakePlot and Cache.FakePlot:FindFirstChild("Plants")
+	if not plantsFolder then
+		local plot = PlotSystem.FindPlayerPlot()
+		plantsFolder = plot and plot:FindFirstChild("Plants")
+	end
+
+	if not plantsFolder then
+		return occupied
+	end
+
+	for _, plant in ipairs(plantsFolder:GetChildren()) do
+		local plantPos = nil
+		if plant:IsA("BasePart") then
+			plantPos = plant.Position
+		elseif plant:IsA("Model") then
+			if plant.PrimaryPart then
+				plantPos = plant.PrimaryPart.Position
+			else
+				for _, child in ipairs(plant:GetDescendants()) do
+					if child:IsA("BasePart") then
+						plantPos = child.Position
+						break
+					end
+				end
+			end
+		end
+		if plantPos then
+			local key = Utils.FormatPositionKey(plantPos)
+			occupied[key] = true
+		end
+	end
+
+	return occupied
+end
+
+function Utils.IsSpotEmpty(spotPosition, occupiedLookup)
+	local key = Utils.FormatPositionKey(spotPosition)
+	return not occupiedLookup[key]
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
@@ -779,13 +829,12 @@ function LaserSystem.ScanPlot(plot, scanDuration)
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SECTION 12: GRID DOTS VISUALIZATION
+-- SECTION 12: GRID DOTS VISUALIZATION (ExoFarm-Compatible)
 -- ═══════════════════════════════════════════════════════════════════════
 
 local GridSystem = {}
 
 function GridSystem.Clear()
-	-- Cancel any in-progress refresh so old dots don't leak after clear
 	if State.GridRefreshThread and type(State.GridRefreshThread) == "thread" then
 		local t = State.GridRefreshThread
 		State.GridRefreshThread = nil
@@ -793,25 +842,26 @@ function GridSystem.Clear()
 			task_cancel(t)
 		end)
 	end
-	local dots = Instances.GridDots
-	if dots then
-		for i = 1, #dots do
-			local dot = dots[i]
-			if dot then
-				pcall(function()
-					dot:Destroy()
-				end)
-			end
-			dots[i] = nil
+
+	local plot = PlotSystem.FindPlayerPlot()
+	if plot then
+		local lrxFolder = plot:FindFirstChild("LRX_GridDebug")
+		if lrxFolder then
+			pcall(function()
+				lrxFolder:Destroy()
+			end)
 		end
 	end
-	local folder = Instances.DotsFolder
-	if folder then
+
+	local oldFolder = Services.Workspace:FindFirstChild("LRX_GridDots")
+	if oldFolder then
 		pcall(function()
-			folder:Destroy()
+			oldFolder:Destroy()
 		end)
-		Instances.DotsFolder = nil
 	end
+
+	Instances.GridDots = nil
+	Instances.DotsFolder = nil
 end
 
 function GridSystem.Refresh()
@@ -826,16 +876,16 @@ function GridSystem.Refresh()
 		return
 	end
 
-	local positions = SeedPlacer.GetPlantPositions()
-	if not positions or #positions == 0 then
-		warn("[GridDots] No plant positions generated.")
+	local parts = PlotSystem.DetectPlotParts(plot)
+	if #parts == 0 then
+		warn("[GridDots] No plot parts found.")
 		return
 	end
 
-	local folder = Instance.new("Folder")
-	folder.Name = "LRX_GridDots"
-	folder.Parent = Services.Workspace
-	Instances.DotsFolder = folder
+	local lrxFolder = Instance.new("Folder")
+	lrxFolder.Name = "LRX_GridDebug"
+	lrxFolder.Parent = plot
+	Instances.DotsFolder = lrxFolder
 
 	local colors = CONSTANTS.GRID_DOT_COLORS
 	local colorCount = #colors
@@ -843,15 +893,18 @@ function GridSystem.Refresh()
 	local yOffset = Vector3.new(0, CONSTANTS.GRID_DOT_Y_OFFSET, 0)
 	local batchSize = CONSTANTS.GRID_DOT_BATCH_SIZE
 	local batchDelay = CONSTANTS.GRID_DOT_BATCH_DELAY
+
+	local positions = PlotSystem.GenerateGridPositions(parts, CONSTANTS.GRID_VISUAL_SPACING)
 	local total = #positions
+
+	-- Build occupancy lookup for visual coloring
+	local occupiedLookup = Utils.BuildOccupiedLookup()
 
 	local dots = {}
 	Instances.GridDots = dots
 
-	-- Single tracked thread so it can be cancelled on cleanup/toggle-off
 	local refreshThread = task_spawn(function()
 		for batchStart = 1, total, batchSize do
-			-- Abort if script stopped or user toggled off
 			if not State.ScriptRunning or not Persist.Config.ShowGridDots then
 				break
 			end
@@ -862,34 +915,46 @@ function GridSystem.Refresh()
 				end
 
 				local posData = positions[i]
+				local worldPos = posData.Pos + yOffset
+				local partIndex = posData.PartIndex
+
+				-- Check if this spot is occupied
+				local isOccupied = not IsSpotEmpty(worldPos, occupiedLookup)
+
+				local color
+				if isOccupied then
+					color = Color3.fromRGB(255, 0, 0) -- Red = occupied
+				else
+					color = colors[((partIndex - 1) % colorCount) + 1]
+				end
+
 				local dot = Instance.new("Part")
-				dot.Name = "GridDot"
+				dot.Name = string_format("GridDot_%04d", i)
 				dot.Anchored = true
 				dot.CanCollide = false
 				dot.CanQuery = false
 				dot.CanTouch = false
 				dot.CastShadow = false
 				dot.Material = Enum.Material.Neon
-				dot.Color = colors[((i - 1) % colorCount) + 1]
+				dot.Color = color
 				dot.Shape = Enum.PartType.Ball
 				dot.Size = dotSize
-				dot.Position = posData.Pos + yOffset
-				dot.Parent = folder
-				dot.Transparency = 0.15
+				dot.Position = worldPos
+				dot.Parent = lrxFolder
+				dot.Transparency = isOccupied and 0.7 or 0
+
 				dots[#dots + 1] = dot
 			end
 
-			-- Yield between batches to keep frame rate stable
 			if batchStart + batchSize - 1 < total then
 				task_wait(batchDelay)
 			end
 		end
 
-		-- Only notify if we actually finished while still enabled
 		if Persist.Config.ShowGridDots and State.ScriptRunning then
 			NotificationSystem.Notify(
 				"Plot Visualizer",
-				string_format("Showing %d grid dots (all spots)", #dots),
+				string_format("Showing %d grid dots in %s.LRX_GridDebug", #dots, plot.Name),
 				"Success",
 				2
 			)
@@ -1086,6 +1151,70 @@ function PlotSystem.GetDetectionInfo()
 		PlotInstance = plot,
 	}
 end
+function PlotSystem.GenerateGridPositions(targetParts, spacing)
+	if #targetParts == 0 then
+		return {}
+	end
+	spacing = math_max(0.1, spacing)
+
+	local positions = {}
+	local seenKeys = {}
+	local iterationCount = 0
+	local yieldInterval = CONSTANTS.YIELD_INTERVAL
+
+	for partIndex, part in ipairs(targetParts) do
+		local cf = part.CFrame
+		local size = part.Size
+		local hs = size / 2
+		local topY = cf.Position.Y + hs.Y
+
+		-- World-space bounds
+		local corners = {
+			cf * Vector3.new(-hs.X, hs.Y, -hs.Z),
+			cf * Vector3.new(hs.X, hs.Y, -hs.Z),
+			cf * Vector3.new(hs.X, hs.Y, hs.Z),
+			cf * Vector3.new(-hs.X, hs.Y, hs.Z),
+		}
+
+		local minX, maxX = math_huge, -math_huge
+		local minZ, maxZ = math_huge, -math_huge
+		for _, corner in ipairs(corners) do
+			minX = math_min(minX, corner.X)
+			maxX = math_max(maxX, corner.X)
+			minZ = math_min(minZ, corner.Z)
+			maxZ = math_max(maxZ, corner.Z)
+		end
+
+		-- Snap to world grid
+		local startX = math_floor(minX / spacing) * spacing
+		local startZ = math_floor(minZ / spacing) * spacing
+		local endX = math_ceil(maxX / spacing) * spacing
+		local endZ = math_ceil(maxZ / spacing) * spacing
+
+		for wx = startX, endX + 0.001, spacing do
+			for wz = startZ, endZ + 0.001, spacing do
+				iterationCount += 1
+				if iterationCount % yieldInterval == 0 then
+					task_wait()
+				end
+
+				local worldPos = Vector3.new(wx, topY, wz)
+				local localPos = cf:PointToObjectSpace(worldPos)
+
+				-- Permissive edge containment
+				if math_abs(localPos.X) <= hs.X + 0.001 and math_abs(localPos.Z) <= hs.Z + 0.001 then
+					local key = Utils.FormatPositionKey(worldPos)
+					if not seenKeys[key] then
+						seenKeys[key] = true
+						positions[#positions + 1] = { Pos = worldPos, Part = part, PartIndex = partIndex }
+					end
+				end
+			end
+		end
+	end
+
+	return positions
+end
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- SECTION 14: SEED PLACER
@@ -1102,88 +1231,6 @@ local function GetConfigHash()
 		Persist.Config.PlantingPattern or "LeftToRight",
 		Persist.Config.PlantSpacing or CONSTANTS.DEFAULT_PLANT_SPACING
 	)
-end
-
--- ─── Position Generation ───────────────────────────────────────────────
-
-local function GeneratePlantPositions(targetParts, spacing)
-	if #targetParts == 0 then
-		return {}
-	end
-	spacing = math_max(0.1, spacing)
-	local positions = {}
-	local seenKeys = {}
-	local iterationCount = 0
-	local yieldInterval = CONSTANTS.YIELD_INTERVAL
-
-	for _, part in ipairs(targetParts) do
-		local cf = part.CFrame
-		local size = part.Size
-		local hs = size / 2
-
-		-- The TOP surface in local space is Y = +hs.Y
-		local topSurfaceLocal = Vector3.new(0, hs.Y, 0)
-		local topSurfaceWorld = cf * topSurfaceLocal
-
-		-- Calculate grid dimensions in local space
-		local cellsX = math_max(1, math_floor(size.X / spacing))
-		local cellsZ = math_max(1, math_floor(size.Z / spacing))
-
-		-- Center the grid within the part's local space
-		local startX = -hs.X + spacing / 2
-		local startZ = -hs.Z + spacing / 2
-		local endX = hs.X - spacing / 2
-		local endZ = hs.Z - spacing / 2
-
-		-- Edge case: if part is smaller than spacing, place one dot in center
-		if startX > endX then
-			startX = 0
-			endX = 0
-		end
-		if startZ > endZ then
-			startZ = 0
-			endZ = 0
-		end
-
-		local localX = startX
-		while localX <= endX + 0.001 do
-			local localZ = startZ
-			while localZ <= endZ + 0.001 do
-				iterationCount += 1
-				if iterationCount % yieldInterval == 0 then
-					task_wait()
-				end
-
-				-- Generate in local space then transform to world space via CFrame.
-				-- This correctly handles rotated parts.
-				local localPos = Vector3.new(localX, hs.Y, localZ)
-				local worldPos = cf * localPos
-
-				-- Round to match game's grid precision
-				local finalPos =
-					Vector3.new(math_floor(worldPos.X + 0.5), topSurfaceWorld.Y, math_floor(worldPos.Z + 0.5))
-
-				local key = Utils.FormatPositionKey(finalPos)
-
-				if not seenKeys[key] then
-					seenKeys[key] = true
-					positions[#positions + 1] = { Pos = finalPos, Part = part }
-				end
-
-				if localZ >= endZ - 0.001 then
-					break
-				end
-				localZ = localZ + spacing
-			end
-
-			if localX >= endX - 0.001 then
-				break
-			end
-			localX = localX + spacing
-		end
-	end
-
-	return positions
 end
 
 -- ─── Pattern Application ───────────────────────────────────────────────
@@ -1315,57 +1362,6 @@ local function ApplyPattern(positions, pattern)
 	return positions
 end
 
--- ─── Occupancy Lookup ──────────────────────────────────────────────────
-
-local function BuildOccupiedLookup()
-	local occupied = {}
-
-	if not Cache.FakePlot or not Cache.FakePlot.Parent then
-		local controllers = Player:FindFirstChild("PlayerScripts")
-		local seedInspect = controllers and controllers:FindFirstChild("SeedInspectController")
-		Cache.FakePlot = seedInspect and seedInspect:FindFirstChild("FakePlot")
-	end
-
-	local plantsFolder = Cache.FakePlot and Cache.FakePlot:FindFirstChild("Plants")
-	if not plantsFolder then
-		local plot = PlotSystem.FindPlayerPlot()
-		plantsFolder = plot and plot:FindFirstChild("Plants")
-	end
-
-	if not plantsFolder then
-		return occupied
-	end
-
-	for _, plant in ipairs(plantsFolder:GetChildren()) do
-		local plantPos = nil
-		if plant:IsA("BasePart") then
-			plantPos = plant.Position
-		elseif plant:IsA("Model") then
-			if plant.PrimaryPart then
-				plantPos = plant.PrimaryPart.Position
-			else
-				for _, child in ipairs(plant:GetDescendants()) do
-					if child:IsA("BasePart") then
-						plantPos = child.Position
-						break
-					end
-				end
-			end
-		end
-		if plantPos then
-			local key = Utils.FormatPositionKey(plantPos)
-			occupied[key] = true
-		end
-	end
-
-	return occupied
-end
-
-local function IsSpotEmpty(spotPosition, occupiedLookup)
-	local key = Utils.FormatPositionKey(spotPosition)
-	return not occupiedLookup[key]
-end
-
 -- ─── Public API ────────────────────────────────────────────────────────
 
 function SeedPlacer.GetPlantPositions()
@@ -1403,7 +1399,7 @@ function SeedPlacer.GetPlantPositions()
 	end
 
 	local positions =
-		GeneratePlantPositions(targetParts, Persist.Config.PlantSpacing or CONSTANTS.DEFAULT_PLANT_SPACING)
+		PlotSystem.GenerateGridPositions(targetParts, Persist.Config.PlantSpacing or CONSTANTS.DEFAULT_PLANT_SPACING)
 	positions = ApplyPattern(positions, Persist.Config.PlantingPattern or "LeftToRight")
 
 	Cache.PlantPositions = positions
@@ -1413,7 +1409,6 @@ end
 
 function SeedPlacer.ClearCache()
 	Cache.PlantPositions = nil
-	Cache.CurrentPlantIndex = 1
 	Cache.LastConfigHash = nil
 end
 
@@ -1438,51 +1433,67 @@ function SeedPlacer.RunCycle()
 		return
 	end
 
-	local occupiedLookup = BuildOccupiedLookup()
+	local occupiedLookup = Utils.BuildOccupiedLookup()
 	local totalSpots = #allSpots
 	local maxPlantAmount =
 		math_min(Persist.Config.PlaceAmount or CONSTANTS.DEFAULT_PLACE_AMOUNT, CONSTANTS.MAX_PLANT_AMOUNT)
 	local plantedCount = 0
 	local seedIndex = 1
-	local checkedCount = 0
 	local delay = math_max(0, Persist.Config.PlantDelay or CONSTANTS.DEFAULT_PLANT_DELAY)
-	local idx = Cache.CurrentPlantIndex or 1
 
-	while plantedCount < maxPlantAmount and checkedCount < totalSpots do
-		if not Persist.Config.EnableSeedPlacer then
-			break
-		end
+	-- ─── PRIORITY 1: Fill empty spots near the current index first ─────
+	local startIdx = Cache.CurrentPlantIndex or 1
+	local emptySpots = {}
 
-		local spot = allSpots[idx]
-		if not spot or not spot.Part then
-			idx = 1
-			break
-		end
-
-		checkedCount += 1
-		if IsSpotEmpty(spot.Pos, occupiedLookup) then
-			local seedName = enabledSeeds[seedIndex]
-			seedIndex = seedIndex % #enabledSeeds + 1
-
-			local success, err = pcall(function()
-				PlantRemote:Fire(spot.Pos, seedName, spot.Part)
-			end)
-			if not success then
-				warn("[SeedPlacer] PlantSeed failed at spot " .. tostring(idx) .. ":", err)
+	-- Scan all spots to find empty ones, ordered by distance from startIdx
+	for i = 1, totalSpots do
+		local spot = allSpots[i]
+		if spot and spot.Part then
+			if Utils.IsSpotEmpty(spot.Pos, occupiedLookup) then
+				-- Calculate distance in the pattern sequence (wrapping around)
+				local dist = i - startIdx
+				if dist < 0 then
+					dist = dist + totalSpots
+				end
+				emptySpots[#emptySpots + 1] = { Index = i, Spot = spot, Distance = dist }
 			end
-			plantedCount += 1
-			if plantedCount < maxPlantAmount then
-				task_wait(delay)
-			end
-		end
-
-		idx += 1
-		if idx > totalSpots then
-			idx = 1
 		end
 	end
 
-	Cache.CurrentPlantIndex = idx
+	-- Sort by distance from current position (nearest first)
+	table_sort(emptySpots, function(a, b)
+		return a.Distance < b.Distance
+	end)
+
+	-- Plant the nearest empty spots first
+	for _, emptyData in ipairs(emptySpots) do
+		if not Persist.Config.EnableSeedPlacer then
+			break
+		end
+		if plantedCount >= maxPlantAmount then
+			break
+		end
+
+		local spot = emptyData.Spot
+		local idx = emptyData.Index
+
+		local seedName = enabledSeeds[seedIndex]
+		seedIndex = seedIndex % #enabledSeeds + 1
+
+		local success, err = pcall(function()
+			PlantRemote:Fire(spot.Pos, seedName, spot.Part)
+		end)
+		if not success then
+			warn("[SeedPlacer] PlantSeed failed at spot " .. tostring(idx) .. ":", err)
+		end
+
+		plantedCount += 1
+		Cache.CurrentPlantIndex = idx -- Resume from here next cycle
+
+		if plantedCount < maxPlantAmount then
+			task_wait(delay)
+		end
+	end
 
 	if plantedCount > 0 then
 		print(string_format("[SeedPlacer] Planted %d seeds this cycle.", plantedCount))
@@ -1788,8 +1799,8 @@ function AutoFarmSystem.StopCollect()
 	NotificationSystem.Notify("Auto Farm", "Auto Collect stopped", "Info", 2)
 end
 
--- ─── Auto Shovel ───────────────────────────────────────────────────────
--- ─── Get Shovel Tool ───────────────────────────────────────────────────
+-- ─── Helpers ───────────────────────────────────────────────────────────
+
 local function GetShovelTool()
 	local character = Player.Character
 	if character then
@@ -1810,8 +1821,6 @@ local function GetShovelTool()
 	return nil
 end
 
--- ─── Is Tree Plant ─────────────────────────────────────────────────────
-
 local function IsTreePlant(plant)
 	if not plant then
 		return false
@@ -1824,7 +1833,7 @@ local function IsTreePlant(plant)
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- AUTO SHOVEL TREES (plants with a Fruits folder)
+-- AUTO SHOVEL TREES (removes the ENTIRE tree, fruits or no fruits)
 -- ═══════════════════════════════════════════════════════════════════════
 
 function AutoFarmSystem.StartShovelTrees()
@@ -1873,7 +1882,7 @@ function AutoFarmSystem.StartShovelTrees()
 					break
 				end
 
-				-- ONLY trees (plants that have a Fruits folder with children)
+				-- ONLY trees (plants with a Fruits folder)
 				if not IsTreePlant(plant) then
 					continue
 				end
@@ -1896,8 +1905,8 @@ function AutoFarmSystem.StartShovelTrees()
 					continue
 				end
 
-				-- FIX: Always pass "" to delete the WHOLE tree, even if fruits are present
-				DebugPrint("SHOVELING TREE:", seedName, "| plantId=", plantId, "| fruitId=(empty -> whole tree)")
+				-- Pass "" to delete the WHOLE tree
+				DebugPrint("SHOVELING TREE:", seedName, "| plantId=", plantId, "| mode=whole tree")
 
 				local ok = pcall(function()
 					if typeof(UseShovelRemote) == "table" and UseShovelRemote.Fire then
@@ -1908,9 +1917,7 @@ function AutoFarmSystem.StartShovelTrees()
 				end)
 
 				if ok then
-					DebugPrint("  -> Tree shovel call sent")
-				else
-					DebugPrint("  -> Tree shovel call failed")
+					DebugPrint("  -> Whole tree shovel sent")
 				end
 
 				task_wait(0.2)
@@ -1930,6 +1937,136 @@ function AutoFarmSystem.StopShovelTrees()
 	Persist.Config.EnableAutoShovelTrees = false
 	State.AutoShovelTreesThread = nil
 	NotificationSystem.Notify("Auto Farm", "Auto Shovel Trees stopped", "Info", 2)
+end
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- AUTO SHOVEL FRUITS (removes ONLY fruits, keeps the tree alive)
+-- ═══════════════════════════════════════════════════════════════════════
+
+function AutoFarmSystem.StartShovelFruits()
+	if State.AutoShovelFruitsThread then
+		DebugPrint("StartShovelFruits: Already running")
+		return
+	end
+
+	if not UseShovelRemote then
+		NotificationSystem.Notify("Auto Farm", "UseShovel remote not found", "Error", 3)
+		return
+	end
+
+	local shovelTool = GetShovelTool()
+	if not shovelTool then
+		NotificationSystem.Notify("Auto Farm", "Equip a Shovel first!", "Warning", 3)
+		return
+	end
+
+	DebugPrint("Starting Auto Shovel (Fruits)...")
+	NotificationSystem.Notify("Auto Farm", "Auto Shovel Fruits started", "Success", 2)
+
+	State.AutoShovelFruitsThread = task_spawn(function()
+		while Persist.Config.EnableAutoShovelFruits and State.ScriptRunning do
+			local plot = PlotSystem.FindPlayerPlot()
+			if not plot then
+				task_wait(0.5)
+				continue
+			end
+
+			local plantsFolder = FindPlantsFolder(plot)
+			if not plantsFolder then
+				task_wait(0.5)
+				continue
+			end
+
+			shovelTool = GetShovelTool()
+			if not shovelTool then
+				NotificationSystem.Notify("Auto Farm", "Shovel unequipped!", "Warning", 3)
+				task_wait(2)
+				continue
+			end
+
+			for _, plant in ipairs(plantsFolder:GetChildren()) do
+				if not Persist.Config.EnableAutoShovelFruits or not State.ScriptRunning then
+					break
+				end
+
+				-- ONLY trees
+				if not IsTreePlant(plant) then
+					continue
+				end
+
+				local seedName = GetPlantSeedName(plant)
+				local selected = Persist.Config.SelectedShovelFruits or {}
+				local hasSelection = false
+				for _, _ in pairs(selected) do
+					hasSelection = true
+					break
+				end
+
+				if hasSelection and not selected[seedName] then
+					DebugPrint("FRUIT SHOVEL SKIP (not selected):", seedName)
+					continue
+				end
+
+				local plantId = GetPlantId(plant)
+				if not plantId then
+					continue
+				end
+
+				local fruitsFolder = plant:FindFirstChild("Fruits")
+				local fruitChildren = fruitsFolder and fruitsFolder:GetChildren() or {}
+				if #fruitChildren == 0 then
+					continue
+				end
+
+				-- Shovel each fruit individually
+				for _, fruit in ipairs(fruitChildren) do
+					if not Persist.Config.EnableAutoShovelFruits or not State.ScriptRunning then
+						break
+					end
+
+					local fruitId = fruit:GetAttribute("FruitId")
+						or fruit:GetAttribute("Id")
+						or fruit:GetAttribute("ID")
+						or fruit.Name
+
+					if not fruitId or tostring(fruitId) == "" then
+						continue
+					end
+
+					DebugPrint("SHOVELING FRUIT:", seedName, "| plantId=", plantId, "| fruitId=", tostring(fruitId))
+
+					local ok = pcall(function()
+						if typeof(UseShovelRemote) == "table" and UseShovelRemote.Fire then
+							UseShovelRemote:Fire(plantId, tostring(fruitId), "Shovel", shovelTool)
+						elseif typeof(UseShovelRemote) == "Instance" and UseShovelRemote:IsA("RemoteEvent") then
+							UseShovelRemote:FireServer(plantId, tostring(fruitId), "Shovel", shovelTool)
+						end
+					end)
+
+					if ok then
+						DebugPrint("  -> Fruit shovel sent")
+					end
+
+					task_wait(0.15)
+				end
+
+				task_wait(0.1)
+			end
+
+			task_wait(0.5)
+		end
+
+		State.AutoShovelFruitsThread = nil
+		DebugPrint("Auto Shovel Fruits loop ended")
+	end)
+
+	TrackThread(State.AutoShovelFruitsThread)
+end
+
+function AutoFarmSystem.StopShovelFruits()
+	Persist.Config.EnableAutoShovelFruits = false
+	State.AutoShovelFruitsThread = nil
+	NotificationSystem.Notify("Auto Farm", "Auto Shovel Fruits stopped", "Info", 2)
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
@@ -2037,7 +2174,7 @@ function AutoFarmSystem.StopShovelPlants()
 	State.AutoShovelPlantsThread = nil
 	NotificationSystem.Notify("Auto Farm", "Auto Shovel Plants stopped", "Info", 2)
 end
--- ═══════════════════════════════════════════════════════════════════════
+-- ═════════════════════════════════════════��══════����═══════���══════════════
 -- SECTION 15: CONFIGURATION SYSTEM
 -- ═══════════════════════════════════════════════════════════════════════
 
@@ -3862,40 +3999,35 @@ function Pages.Home()
 				Persist.Config.SelectedShovelTrees = Persist.Config.SelectedShovelTrees or {}
 
 				UI.CreateLabel(dropdownScroll, "Auto Shovel Trees", Color3.fromRGB(200, 100, 100), 12)
+				UI.CreateLabel(dropdownScroll, "Removes the ENTIRE tree (whole plant)", Theme.TextMuted, 10)
+
 				local selectedLabel = UI.CreateLabel(dropdownScroll, "Selected: None", Theme.TextMuted, 10)
 				local function UpdateSelectedLabel()
 					selectedLabel.Text = Utils.FormatSelectedSeeds(Persist.Config.SelectedShovelTrees, 10)
 				end
 				UpdateSelectedLabel()
 
-				local selectBtn = UI.CreateButton(
-					dropdownScroll,
-					"Select Trees to Shovel...",
-					Theme.Card,
-					100,
-					30,
-					function()
-						local seedNames = {}
-						if SeedData then
-							for _, seed in ipairs(SeedData) do
-								if seed.SeedName then
-									table.insert(seedNames, seed.SeedName)
-								end
+				local selectBtn = UI.CreateButton(dropdownScroll, "Select Trees...", Theme.Card, 100, 30, function()
+					local seedNames = {}
+					if SeedData then
+						for _, seed in ipairs(SeedData) do
+							if seed.SeedName then
+								table.insert(seedNames, seed.SeedName)
 							end
 						end
-						table.sort(seedNames)
-						if #seedNames == 0 then
-							NotificationSystem.Notify("Auto Shovel", "No seed data available!", "Error", 3)
-							return
-						end
-						SeedModalSystem.ShowItemSelection(
-							"Select Trees to Shovel",
-							seedNames,
-							Persist.Config.SelectedShovelTrees,
-							UpdateSelectedLabel
-						)
 					end
-				)
+					table.sort(seedNames)
+					if #seedNames == 0 then
+						NotificationSystem.Notify("Auto Shovel", "No seed data available!", "Error", 3)
+						return
+					end
+					SeedModalSystem.ShowItemSelection(
+						"Select Trees to Shovel",
+						seedNames,
+						Persist.Config.SelectedShovelTrees,
+						UpdateSelectedLabel
+					)
+				end)
 				selectBtn.Size = UDim2.new(1, -8, 0, 30)
 
 				UI.CreateToggle(
@@ -3915,22 +4047,24 @@ function Pages.Home()
 			end)
 		end))
 
-		local autoShovelPlantsCard =
-			UI.CreateCard(Instances.ContentScroll, "Auto Shovel Plants", "🥕", Color3.fromRGB(200, 120, 80))
-		TrackConnection(autoShovelPlantsCard.Activated:Connect(function()
-			DropdownSystem.Toggle(autoShovelPlantsCard, function(dropdownScroll)
-				Persist.Config.SelectedShovelPlants = Persist.Config.SelectedShovelPlants or {}
+		local autoShovelFruitsCard =
+			UI.CreateCard(Instances.ContentScroll, "Auto Shovel Fruits", "🍓", Color3.fromRGB(255, 120, 80))
+		TrackConnection(autoShovelFruitsCard.Activated:Connect(function()
+			DropdownSystem.Toggle(autoShovelFruitsCard, function(dropdownScroll)
+				Persist.Config.SelectedShovelFruits = Persist.Config.SelectedShovelFruits or {}
 
-				UI.CreateLabel(dropdownScroll, "Auto Shovel Plants", Color3.fromRGB(200, 120, 80), 12)
+				UI.CreateLabel(dropdownScroll, "Auto Shovel Fruits", Color3.fromRGB(255, 120, 80), 12)
+				UI.CreateLabel(dropdownScroll, "Removes ONLY fruits, keeps the tree alive", Theme.TextMuted, 10)
+
 				local selectedLabel = UI.CreateLabel(dropdownScroll, "Selected: None", Theme.TextMuted, 10)
 				local function UpdateSelectedLabel()
-					selectedLabel.Text = Utils.FormatSelectedSeeds(Persist.Config.SelectedShovelPlants, 10)
+					selectedLabel.Text = Utils.FormatSelectedSeeds(Persist.Config.SelectedShovelFruits, 10)
 				end
 				UpdateSelectedLabel()
 
 				local selectBtn = UI.CreateButton(
 					dropdownScroll,
-					"Select Plants to Shovel...",
+					"Select Trees to Fruit-Shovel...",
 					Theme.Card,
 					100,
 					30,
@@ -3949,9 +4083,9 @@ function Pages.Home()
 							return
 						end
 						SeedModalSystem.ShowItemSelection(
-							"Select Plants to Shovel",
+							"Select Trees for Fruit Shovel",
 							seedNames,
-							Persist.Config.SelectedShovelPlants,
+							Persist.Config.SelectedShovelFruits,
 							UpdateSelectedLabel
 						)
 					end
@@ -3960,15 +4094,15 @@ function Pages.Home()
 
 				UI.CreateToggle(
 					dropdownScroll,
-					"Enable Auto Shovel Plants",
-					Persist.Config.EnableAutoShovelPlants,
+					"Enable Auto Shovel Fruits",
+					Persist.Config.EnableAutoShovelFruits,
 					function(state)
-						Persist.Config.EnableAutoShovelPlants = state
+						Persist.Config.EnableAutoShovelFruits = state
 						ConfigSystem.AutoSave()
 						if state then
-							AutoFarmSystem.StartShovelPlants()
+							AutoFarmSystem.StartShovelFruits()
 						else
-							AutoFarmSystem.StopShovelPlants()
+							AutoFarmSystem.StopShovelFruits()
 						end
 					end
 				)
@@ -4234,7 +4368,7 @@ function UIInit.CreateToggleButton(screenGui)
 	return btn
 end
 
--- ─── Top Bar ───────────────────────────────────────────────────────────
+-- ─── Top Bar ─────────────────����─────────────────────────────────────────
 
 function UIInit.CreateTopBar(mainFrame, screenGui)
 	local topBar = UI.Create("Frame", {
@@ -4824,6 +4958,16 @@ function FullCleanup()
 	CancelAllThreads()
 	DestroyAllInstances()
 
+	-- Clear LRX_GridDebug from plot
+	local plot = PlotSystem.FindPlayerPlot()
+	if plot then
+		local lrxFolder = plot:FindFirstChild("LRX_GridDebug")
+		if lrxFolder then
+			pcall(function()
+				lrxFolder:Destroy()
+			end)
+		end
+	end
 	-- Clear caches
 	for key in pairs(Cache) do
 		if key ~= "TweenInfo" then
