@@ -1,38 +1,96 @@
 -- ═══════════════════════════════════════════════════════════════════════
---  LRX_Hub v3.0.0 - Production Refactor
---  Architecture: Modular, Performance-Optimized, Memory-Safe
+--  LRX_Hub v3.1.0 - Global Namespace Refactor
+--  Architecture: getgenv() namespace, modular, performant, memory-safe
+--  Purpose: Development automation tool for personal Roblox game
 -- ═══════════════════════════════════════════════════════════════════════
 
---[[
-    ARCHITECTURE OVERVIEW:
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 0: GLOBAL NAMESPACE & LOAD PROTECTION
+-- ═══════════════════════════════════════════════════════════════════════
 
-    1. CONSTANTS        - Immutable configuration values
-    2. SERVICES         - Cached Roblox service references
-    3. STATE            - Runtime mutable state (separated from Config)
-    4. CONFIG           - User-persistent settings with validation
-    5. THEMES           - Visual styling definitions
-    6. UTILITIES        - Reusable helper functions
-    7. MEMORY           - Connection & task lifecycle management
-    8. NOTIFICATIONS    - Toast system with queue management
-    9. LASER SYSTEM     - Visual plot scanning effects
-    10. GRID SYSTEM     - Planting position visualization
-    11. PLOT SYSTEM     - Plot detection & bed management
-    12. SEED PLACER     - Plant placement automation
-    13. CONFIG SYSTEM   - Save/load with serialization
-    14. UI SYSTEM       - Component factory & page management
-    15. INITIALIZATION  - Boot sequence & error recovery
+local genv = (typeof(getgenv) == "function" and getgenv()) or _G
+
+-- Initialize single global namespace (never pollute with multiple globals)
+genv.LRX = genv.LRX
+	or {
+		Loaded = false,
+
+		Config = {},
+		State = {},
+		Cache = {},
+		UI = {},
+
+		Connections = {},
+		Threads = {},
+		Objects = {},
+
+		Debug = {},
+		Functions = {},
+	}
+
+local LRX = genv.LRX
+
+--[[
+    Reload Protection & Cleanup
+    On duplicate execution, gracefully teardown old instance before rebuilding.
 --]]
+if LRX.Loaded then
+	-- 1. Execute structured cleanup if available
+	if LRX.Functions and LRX.Functions.FullCleanup then
+		pcall(LRX.Functions.FullCleanup)
+	else
+		-- Fallback: brute-force teardown
+		for _, conn in pairs(LRX.Connections) do
+			if typeof(conn) == "RBXScriptConnection" and conn.Connected then
+				pcall(function()
+					conn:Disconnect()
+				end)
+			end
+		end
+		for _, thr in pairs(LRX.Threads) do
+			if type(thr) == "thread" then
+				pcall(function()
+					task.cancel(thr)
+				end)
+			end
+		end
+		if LRX.UI and LRX.UI.ScreenGui then
+			pcall(function()
+				LRX.UI.ScreenGui:Destroy()
+			end)
+		end
+		for _, obj in pairs(LRX.Objects) do
+			if typeof(obj) == "Instance" and obj.Parent then
+				pcall(function()
+					obj:Destroy()
+				end)
+			end
+		end
+	end
+
+	-- 2. Purge all persistent tables (except Config, which we keep)
+	local savedConfig = LRX.Config
+	table.clear(LRX.State)
+	table.clear(LRX.Cache)
+	table.clear(LRX.UI)
+	table.clear(LRX.Connections)
+	table.clear(LRX.Threads)
+	table.clear(LRX.Objects)
+	table.clear(LRX.Debug)
+	table.clear(LRX.Functions)
+	LRX.Config = savedConfig
+end
+
+LRX.Loaded = true
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- SECTION 1: CONSTANTS
 -- ═══════════════════════════════════════════════════════════════════════
 
 local CONSTANTS = {
-	-- File & attribute names
 	CONFIG_FILE = "LRX_Hub_Config.json",
 	CONFIG_ATTRIBUTE = "LRX_Hub_Config",
 
-	-- UI dimensions
 	DEFAULT_WINDOW_WIDTH = 600,
 	DEFAULT_WINDOW_HEIGHT = 400,
 	MIN_WINDOW_WIDTH = 320,
@@ -40,12 +98,10 @@ local CONSTANTS = {
 	SIDEBAR_WIDTH = 170,
 	TOPBAR_HEIGHT = 44,
 
-	-- Planting defaults
 	DEFAULT_PLACE_AMOUNT = 10,
 	DEFAULT_PLANT_SPACING = 1,
 	DEFAULT_PLANT_DELAY = 0.05,
 
-	-- Visual
 	MAX_NOTIFICATIONS = 5,
 	NOTIFICATION_HEIGHT = 70,
 	NOTIFICATION_WIDTH = 280,
@@ -53,43 +109,34 @@ local CONSTANTS = {
 	MAX_DROPDOWN_HEIGHT = 260,
 	DROPDOWN_ANIMATION_SPEED = 0.2,
 
-	-- Grid dots
 	GRID_DOT_SIZE = 0.08,
 	GRID_DOT_BATCH_SIZE = 500,
 	GRID_DOT_BATCH_DELAY = 0.05,
 	GRID_DOT_Y_OFFSET = 0.05,
 
-	-- Laser scan
 	LASER_SCAN_DURATION = 1.5,
 	LASER_SWEEP_COUNT = 6,
 	LASER_BEAM_THICKNESS = 0.05,
 
-	-- Performance
 	PLANT_CYCLE_INTERVAL = 0.2,
 	AUTO_BUY_INTERVAL = 0.2,
 	AUTO_SAVE_DEBOUNCE = 1,
 	YIELD_INTERVAL = 200,
 
-	-- Z-Index layers
 	Z_BASE = 10,
 	Z_DROPDOWN = 50,
 	Z_NOTIFICATION = 700,
 	Z_MODAL_OVERLAY = 500,
 	Z_MODAL = 600,
 
-	-- Mobile
 	MOBILE_PADDING_X = 20,
 	MOBILE_PADDING_Y = 40,
 	MOBILE_INIT_DELAY = 0.5,
 
-	-- Position rounding
 	POSITION_PRECISION = 100,
 	OCCUPIED_LOOKUP_PRECISION = 2,
-
-	-- Occupancy
 	OCCUPANCY_TOLERANCE = 0.5,
 
-	-- Rarity colors
 	RARITY_COLORS = {
 		Common = Color3.fromRGB(169, 169, 169),
 		Uncommon = Color3.fromRGB(50, 205, 50),
@@ -99,7 +146,6 @@ local CONSTANTS = {
 		Mythic = Color3.fromRGB(255, 69, 0),
 	},
 
-	-- Notification type colors
 	NOTIF_COLORS = {
 		Success = Color3.fromRGB(50, 205, 50),
 		Warning = Color3.fromRGB(255, 165, 0),
@@ -107,7 +153,6 @@ local CONSTANTS = {
 		Info = Color3.fromRGB(100, 150, 255),
 	},
 
-	-- Grid dot colors
 	GRID_DOT_COLORS = {
 		Color3.fromRGB(50, 205, 50),
 		Color3.fromRGB(255, 215, 0),
@@ -140,135 +185,40 @@ pcall(function()
 	SeedData = require(Services.ReplicatedStorage.SharedModules:WaitForChild("SeedData"))
 end)
 
--- Cache PlantRemote reference
 local PlantRemote = Networking and Networking.Plant and Networking.Plant.PlantSeed
 
--- ═══════════════════════════════════════════════════════════════════════
--- SECTION 3: STATE (runtime-only, not persisted)
--- ═══════════════════════════════════════════════════════════════════════
-
-local State = {
-	ScriptRunning = true,
-	ActiveNotifs = 0,
-	CurrentPage = "Home",
-	ModalOpen = false,
-	CardOrder = 0,
-
-	-- Dropdown state
-	ActiveDropdownCard = nil,
-	ActiveDropdownFrame = nil,
-	DropdownDebounce = false,
-
-	-- Modal state
-	ActiveModal = nil,
-	ModalOverlay = nil,
-
-	-- Drag state
-	IsDraggingWindow = false,
-	IsDraggingToggle = false,
-	DragStartPos = nil,
-	FrameStartPos = nil,
-	ToggleStartPos = nil,
-	ToggleBtnStart = nil,
-
-	-- Resize state
-	IsResizing = false,
-
-	-- Auto-save debounce handle
-	AutoSaveDebounce = nil,
-
-	-- Cached plot reference
-	CachedPlot = nil,
-	CachedPlotParts = nil,
-	CachedPartOptions = nil,
-
-	-- UI references (populated during init)
-	ScreenGui = nil,
-	MainFrame = nil,
-	ContentScroll = nil,
-	SidebarScroll = nil,
-	SearchFrame = nil,
-	SuggestFrame = nil,
-	SuggestScroll = nil,
-	SearchBox = nil,
-	PageTitle = nil,
-	PageSubtitle = nil,
-	MainIcon = nil,
-	ResizeHandle = nil,
-
-	-- Collections
-	Connections = {},
-	Tasks = {},
-	SidebarButtons = {},
-	SearchableItems = {},
-	GridDots = {},
-	LaserBeams = {},
-
-	-- Folders
-	DotsFolder = nil,
-	LaserFolder = nil,
-}
+-- Performance: localize frequently used global functions
+local math_floor = math.floor
+local math_min = math.min
+local math_max = math.max
+local math_abs = math.abs
+local math_random = math.random
+local math_ceil = math.ceil
+local math_huge = math.huge
+local math_clamp = math.clamp
+local typeof = typeof
+local pcall = pcall
+local tick = tick
+local task_wait = task.wait
+local task_delay = task.delay
+local task_spawn = task.spawn
+local task_cancel = task.cancel
+local string_format = string.format
+local table_insert = table.insert
+local table_clear = table.clear
+local table_create = table.create
+local table_clone = table.clone
+local table_sort = table.sort
+local pairs = pairs
+local ipairs = ipairs
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SECTION 4: CONFIG (user-persistent settings)
+-- SECTION 3: CONFIG (persistent user settings — never overwrite existing)
 -- ═══════════════════════════════════════════════════════════════════════
 
-local Config = {
-	-- Window
-	WindowWidth = CONSTANTS.DEFAULT_WINDOW_WIDTH,
-	WindowHeight = CONSTANTS.DEFAULT_WINDOW_HEIGHT,
-	MinWindowWidth = CONSTANTS.MIN_WINDOW_WIDTH,
-	MinWindowHeight = CONSTANTS.MIN_WINDOW_HEIGHT,
-	SidebarWidth = CONSTANTS.SIDEBAR_WIDTH,
-	WindowPosition = nil,
-	WindowSize = nil,
-
-	-- Appearance
-	ToggleButtonText = "LRX",
-	Theme = "Dark",
-	AnimationSpeed = 0.2,
-	DisableAnimations = false,
-	NotificationDuration = CONSTANTS.NOTIFICATION_DURATION,
-	ModalDarkening = 0.5,
-	UIScale = 1.0,
-
-	-- Shop
-	SelectedSeeds = {},
-	EnableSeedShop = false,
-
-	-- Seed Placer
-	SelectedPlaceSeeds = {},
-	EnableSeedPlacer = false,
-	PlaceAmount = CONSTANTS.DEFAULT_PLACE_AMOUNT,
-	PlantingArea = "All",
-	PlantingPattern = "LeftToRight",
-	PlantSpacing = CONSTANTS.DEFAULT_PLANT_SPACING,
-	PlantDelay = CONSTANTS.DEFAULT_PLANT_DELAY,
-
-	-- Visualizer
-	ShowGridDots = false,
-
-	-- Performance
-	ReduceEffects = false,
-
-	-- Input
-	Keybinds = { ToggleUI = "F" },
-}
-
--- Config validation & defaults
 local ConfigSchema = {
-	WindowWidth = {
-		type = "number",
-		min = CONSTANTS.MIN_WINDOW_WIDTH,
-		max = 2000,
-		default = CONSTANTS.DEFAULT_WINDOW_WIDTH,
-	},
-	WindowHeight = {
-		type = "number",
-		min = CONSTANTS.MIN_WINDOW_HEIGHT,
-		max = 1500,
-		default = CONSTANTS.DEFAULT_WINDOW_HEIGHT,
-	},
+	WindowWidth = { type = "number", min = 320, max = 2000, default = CONSTANTS.DEFAULT_WINDOW_WIDTH },
+	WindowHeight = { type = "number", min = 240, max = 1500, default = CONSTANTS.DEFAULT_WINDOW_HEIGHT },
 	MinWindowWidth = { type = "number", min = 200, max = 800, default = CONSTANTS.MIN_WINDOW_WIDTH },
 	MinWindowHeight = { type = "number", min = 150, max = 600, default = CONSTANTS.MIN_WINDOW_HEIGHT },
 	SidebarWidth = { type = "number", min = 120, max = 300, default = CONSTANTS.SIDEBAR_WIDTH },
@@ -293,8 +243,58 @@ local ConfigSchema = {
 	Keybinds = { type = "table", default = { ToggleUI = "F" } },
 }
 
+-- Apply defaults without overwriting existing values
+for key, schema in pairs(ConfigSchema) do
+	if LRX.Config[key] == nil then
+		if schema.type == "table" then
+			LRX.Config[key] = table_clone(schema.default)
+		else
+			LRX.Config[key] = schema.default
+		end
+	end
+end
+
 -- ═══════════════════════════════════════════════════════════════════════
--- SECTION 5: THEMES
+-- SECTION 4: STATE (runtime-only, reset on reload)
+-- ═══════════════════════════════════════════════════════════════════════
+
+LRX.State.ScriptRunning = true
+LRX.State.ActiveNotifs = 0
+LRX.State.CurrentPage = "Home"
+LRX.State.ModalOpen = false
+LRX.State.CardOrder = 0
+LRX.State.ActiveDropdownCard = nil
+LRX.State.ActiveDropdownFrame = nil
+LRX.State.DropdownDebounce = false
+LRX.State.ActiveModal = nil
+LRX.State.ModalOverlay = nil
+LRX.State.IsDraggingWindow = false
+LRX.State.IsDraggingToggle = false
+LRX.State.DragStartPos = nil
+LRX.State.FrameStartPos = nil
+LRX.State.ToggleStartPos = nil
+LRX.State.ToggleBtnStart = nil
+LRX.State.IsResizing = false
+LRX.State.AutoSaveDebounce = nil
+LRX.State.SidebarButtons = {}
+LRX.State.SearchableItems = {}
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 5: CACHE (expensive computed data, invalidated when stale)
+-- ═══════════════════════════════════════════════════════════════════════
+
+LRX.Cache.CachedPlot = nil
+LRX.Cache.CachedPlotParts = nil
+LRX.Cache.CachedPartOptions = nil
+LRX.Cache.PlantPositions = nil
+LRX.Cache.CurrentPlantIndex = 1
+LRX.Cache.LastConfigHash = nil
+LRX.Cache.OccupiedLookup = nil
+LRX.Cache.PlantsFolder = nil -- cached path to Plants folder
+LRX.Cache.FakePlot = nil -- cached path to FakePlot
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 6: THEMES
 -- ═══════════════════════════════════════════════════════════════════════
 
 local Themes = {
@@ -322,38 +322,27 @@ local Themes = {
 	},
 }
 
-local Theme = Themes[Config.Theme] or Themes.Dark
+local Theme = Themes[LRX.Config.Theme] or Themes.Dark
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SECTION 6: UTILITY FUNCTIONS
+-- SECTION 7: UTILITY FUNCTIONS
 -- ═══════════════════════════════════════════════════════════════════════
 
 local Utils = {}
 
---[[
-    Rounds a number to specified decimal places.
-    More efficient than string formatting for position calculations.
---]]
 function Utils.Round(num, precision)
 	precision = precision or CONSTANTS.POSITION_PRECISION
-	return math.floor(num * precision + 0.5) / precision
+	return math_floor(num * precision + 0.5) / precision
 end
 
---[[
-    Formats a position vector for deduplication keys.
-    Uses cached precision for consistent occupancy lookups.
---]]
 function Utils.FormatPositionKey(pos, precision)
 	precision = precision or CONSTANTS.OCCUPIED_LOOKUP_PRECISION
 	local mult = precision * 10
-	local x = math.floor(pos.X * mult + 0.5) / mult
-	local z = math.floor(pos.Z * mult + 0.5) / mult
-	return string.format("%.1f,%.1f", x, z)
+	local x = math_floor(pos.X * mult + 0.5) / mult
+	local z = math_floor(pos.Z * mult + 0.5) / mult
+	return string_format("%.1f,%.1f", x, z)
 end
 
---[[
-    Clamps a value between min and max.
---]]
 function Utils.Clamp(value, min, max)
 	if value < min then
 		return min
@@ -364,16 +353,11 @@ function Utils.Clamp(value, min, max)
 	return value
 end
 
---[[
-    Validates and coerces a config value against its schema.
-    Returns the validated value (or default if invalid).
---]]
 function Utils.ValidateConfigValue(key, value)
 	local schema = ConfigSchema[key]
 	if not schema then
-		return value -- Unknown key, pass through
+		return value
 	end
-
 	local valueType = typeof(value)
 
 	if schema.type == "number" then
@@ -393,101 +377,72 @@ function Utils.ValidateConfigValue(key, value)
 		return value
 	elseif schema.type == "table" then
 		if valueType ~= "table" then
-			return table.clone(schema.default)
+			return table_clone(schema.default)
 		end
 		return value
 	end
-
 	return schema.default
 end
 
---[[
-    Formats selected seeds for display with truncation.
---]]
 function Utils.FormatSelectedSeeds(selectedTable, maxDisplay)
 	maxDisplay = maxDisplay or 10
 	local names = {}
-
 	for seedName, selected in pairs(selectedTable) do
 		if selected then
-			table.insert(names, seedName)
+			table_insert(names, seedName)
 		end
 	end
-
-	table.sort(names)
-
+	table_sort(names)
 	local count = #names
 	if count == 0 then
 		return "Selected (0): None"
 	end
-
 	local shown = {}
-	for i = 1, math.min(count, maxDisplay) do
-		table.insert(shown, names[i])
+	for i = 1, math_min(count, maxDisplay) do
+		table_insert(shown, names[i])
 	end
-
 	local text = table.concat(shown, ", ")
 	if count > maxDisplay then
 		text = text .. "..."
 	end
-
-	return string.format("Selected (%d): %s", count, text)
+	return string_format("Selected (%d): %s", count, text)
 end
 
---[[
-    Formats price with K suffix for large values.
---]]
 function Utils.FormatPrice(price)
 	if not price or price <= 0 then
 		return "$0"
 	end
 	if price >= 1000 then
-		return string.format("$%.2fK", price / 1000)
+		return string_format("$%.2fK", price / 1000)
 	end
 	return "$" .. tostring(price)
 end
 
---[[
-    Checks if a point is inside a BasePart using object-space coordinates.
-    More efficient than world-space distance checks.
---]]
 function Utils.IsPointInPart(point, part)
 	local localPos = part.CFrame:PointToObjectSpace(point)
 	local halfSize = part.Size / 2
-	return math.abs(localPos.X) <= halfSize.X + 0.1
-		and math.abs(localPos.Y) <= halfSize.Y + 0.1
-		and math.abs(localPos.Z) <= halfSize.Z + 0.1
+	return math_abs(localPos.X) <= halfSize.X + 0.1
+		and math_abs(localPos.Y) <= halfSize.Y + 0.1
+		and math_abs(localPos.Z) <= halfSize.Z + 0.1
 end
 
---[[
-    Gets the world-space bounds of a part.
-    Returns minX, maxX, minZ, maxZ.
---]]
 function Utils.GetWorldBoundsXZ(part)
 	local cf = part.CFrame
 	local hs = part.Size / 2
-
-	local minX, maxX = math.huge, -math.huge
-	local minZ, maxZ = math.huge, -math.huge
-
-	-- Only check the 4 corners on the XZ plane (Y doesn't matter for planting)
+	local minX, maxX = math_huge, -math_huge
+	local minZ, maxZ = math_huge, -math_huge
 	for dx = -1, 1, 2 do
 		for dz = -1, 1, 2 do
 			local corner = cf * Vector3.new(dx * hs.X, 0, dz * hs.Z)
-			minX = math.min(minX, corner.X)
-			maxX = math.max(maxX, corner.X)
-			minZ = math.min(minZ, corner.Z)
-			maxZ = math.max(maxZ, corner.Z)
+			minX = math_min(minX, corner.X)
+			maxX = math_max(maxX, corner.X)
+			minZ = math_min(minZ, corner.Z)
+			maxZ = math_max(maxZ, corner.Z)
 		end
 	end
-
 	return minX, maxX, minZ, maxZ
 end
 
---[[
-    Gets player position from HumanoidRootPart.
-    Returns nil if character not ready.
---]]
 function Utils.GetPlayerPosition()
 	local character = Player.Character
 	if not character then
@@ -498,143 +453,89 @@ function Utils.GetPlayerPosition()
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SECTION 7: MEMORY MANAGEMENT
+-- SECTION 8: MEMORY MANAGEMENT
 -- ═══════════════════════════════════════════════════════════════════════
 
 local Memory = {}
 
---[[
-    Tracks a connection for automatic cleanup.
-    Returns the connection for chaining.
---]]
 function Memory.TrackConnection(connection)
-	table.insert(State.Connections, connection)
+	table_insert(LRX.Connections, connection)
 	return connection
 end
 
---[[
-    Disconnects all tracked connections and clears the table.
-    Safe to call multiple times.
---]]
 function Memory.DisconnectAll()
-	for _, connection in ipairs(State.Connections) do
-		if connection and connection.Connected then
+	for i = 1, #LRX.Connections do
+		local c = LRX.Connections[i]
+		if c and typeof(c) == "RBXScriptConnection" and c.Connected then
 			pcall(function()
-				connection:Disconnect()
+				c:Disconnect()
 			end)
 		end
+		LRX.Connections[i] = nil
 	end
-	table.clear(State.Connections)
 end
 
---[[
-    Cancels all tracked tasks.
---]]
-function Memory.CancelAllTasks()
-	for _, taskHandle in ipairs(State.Tasks) do
-		if taskHandle then
+function Memory.TrackThread(thread)
+	table_insert(LRX.Threads, thread)
+	return thread
+end
+
+function Memory.CancelAllThreads()
+	for i = 1, #LRX.Threads do
+		local t = LRX.Threads[i]
+		if t and type(t) == "thread" then
 			pcall(function()
-				task.cancel(taskHandle)
+				task_cancel(t)
 			end)
 		end
+		LRX.Threads[i] = nil
 	end
-	table.clear(State.Tasks)
 end
 
---[[
-    Destroys all instances in a table and clears it.
---]]
 function Memory.DestroyTableInstances(instanceTable)
-	for _, instance in ipairs(instanceTable) do
-		if instance then
+	for i = 1, #instanceTable do
+		local inst = instanceTable[i]
+		if inst then
 			pcall(function()
-				instance:Destroy()
+				inst:Destroy()
 			end)
 		end
+		instanceTable[i] = nil
 	end
-	table.clear(instanceTable)
 end
 
---[[
-    Ensures a folder exists in workspace, creating if necessary.
-    Returns the folder.
---]]
-function Memory.EnsureWorkspaceFolder(folderName, stateKey)
-	local folder = State[stateKey]
+function Memory.EnsureWorkspaceFolder(folderName, cacheKey)
+	local folder = LRX.Objects[cacheKey]
 	if folder and folder.Parent then
 		return folder
 	end
-
 	folder = Instance.new("Folder")
 	folder.Name = folderName
 	folder.Parent = Services.Workspace
-	State[stateKey] = folder
+	LRX.Objects[cacheKey] = folder
 	return folder
 end
 
---[[
-    Full cleanup on script shutdown.
---]]
-function Memory.FullCleanup()
-	State.ScriptRunning = false
-	Memory.DisconnectAll()
-	Memory.CancelAllTasks()
-	Memory.DestroyTableInstances(State.GridDots)
-	Memory.DestroyTableInstances(State.LaserBeams)
-
-	if State.DotsFolder then
-		pcall(function()
-			State.DotsFolder:Destroy()
-		end)
-		State.DotsFolder = nil
-	end
-
-	if State.LaserFolder then
-		pcall(function()
-			State.LaserFolder:Destroy()
-		end)
-		State.LaserFolder = nil
-	end
-
-	if State.ScreenGui then
-		pcall(function()
-			State.ScreenGui:Destroy()
-		end)
-	end
-end
-
 -- ═══════════════════════════════════════════════════════════════════════
--- SECTION 8: TWEEN SYSTEM
+-- SECTION 9: TWEEN SYSTEM
 -- ═══════════════════════════════════════════════════════════════════════
 
 local TweenSystem = {}
-
---[[
-    Cached TweenInfo for common animation patterns.
-    Reduces GC pressure from creating many TweenInfo objects.
---]]
 local TweenInfoCache = {}
 
 function TweenSystem.GetTweenInfo(duration, style, direction)
 	style = style or Enum.EasingStyle.Quad
 	direction = direction or Enum.EasingDirection.Out
-	duration = duration or Config.AnimationSpeed
-
-	local key = string.format("%.2f_%s_%s", duration, tostring(style), tostring(direction))
-
+	duration = duration or LRX.Config.AnimationSpeed
+	local key = string_format("%.2f_%s_%s", duration, tostring(style), tostring(direction))
 	if not TweenInfoCache[key] then
 		TweenInfoCache[key] = TweenInfo.new(duration, style, direction)
 	end
-
 	return TweenInfoCache[key]
 end
 
---[[
-    Applies a tween to an instance.
-    If animations are disabled, applies properties instantly.
---]]
 function TweenSystem.Tween(instance, properties, duration, callback)
-	if Config.DisableAnimations then
+	if LRX.Config.DisableAnimations then
 		for key, value in pairs(properties) do
 			instance[key] = value
 		end
@@ -643,44 +544,36 @@ function TweenSystem.Tween(instance, properties, duration, callback)
 		end
 		return nil
 	end
-
 	local tweenInfo = TweenSystem.GetTweenInfo(duration)
 	local tween = Services.TweenService:Create(instance, tweenInfo, properties)
-
 	if callback then
 		Memory.TrackConnection(tween.Completed:Connect(callback))
 	end
-
 	tween:Play()
 	return tween
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SECTION 9: NOTIFICATION SYSTEM
+-- SECTION 10: NOTIFICATION SYSTEM
 -- ═══════════════════════════════════════════════════════════════════════
 
 local NotificationSystem = {}
 
---[[
-    Shows a notification toast.
-    Manages a queue to prevent overflow.
---]]
 function NotificationSystem.Notify(title, message, notifType, duration)
 	notifType = notifType or "Info"
-	duration = duration or Config.NotificationDuration
+	duration = duration or LRX.Config.NotificationDuration
 	local accent = CONSTANTS.NOTIF_COLORS[notifType] or CONSTANTS.NOTIF_COLORS.Info
 
-	-- Wait if queue is full
-	while State.ActiveNotifs >= CONSTANTS.MAX_NOTIFICATIONS do
-		task.wait(0.1)
+	while LRX.State.ActiveNotifs >= CONSTANTS.MAX_NOTIFICATIONS do
+		task_wait(0.1)
 	end
 
-	State.ActiveNotifs += 1
-	local notifIndex = State.ActiveNotifs
+	LRX.State.ActiveNotifs += 1
+	local notifIndex = LRX.State.ActiveNotifs
 
 	local frame = Instance.new("Frame")
 	frame.Name = "Notification_" .. notifIndex
-	frame.Parent = State.ScreenGui
+	frame.Parent = LRX.UI.ScreenGui
 	frame.BackgroundColor3 = Theme.Card
 	frame.BorderSizePixel = 0
 	frame.Position = UDim2.new(1, 20, 0, 20 + (notifIndex - 1) * CONSTANTS.NOTIFICATION_HEIGHT)
@@ -728,18 +621,15 @@ function NotificationSystem.Notify(title, message, notifType, duration)
 	messageLabel.TextXAlignment = Enum.TextXAlignment.Left
 	messageLabel.ZIndex = CONSTANTS.Z_NOTIFICATION + 1
 
-	-- Slide in
 	TweenSystem.Tween(frame, {
 		Position = UDim2.new(1, -CONSTANTS.NOTIFICATION_WIDTH - 20, 0, frame.Position.Y.Offset),
 	}, 0.3)
 
-	-- Auto-dismiss
-	task.delay(duration, function()
+	task_delay(duration, function()
 		if not frame or not frame.Parent then
-			State.ActiveNotifs = math.max(0, State.ActiveNotifs - 1)
+			LRX.State.ActiveNotifs = math_max(0, LRX.State.ActiveNotifs - 1)
 			return
 		end
-
 		TweenSystem.Tween(
 			frame,
 			{
@@ -750,31 +640,25 @@ function NotificationSystem.Notify(title, message, notifType, duration)
 				if frame and frame.Parent then
 					frame:Destroy()
 				end
-				State.ActiveNotifs = math.max(0, State.ActiveNotifs - 1)
+				LRX.State.ActiveNotifs = math_max(0, LRX.State.ActiveNotifs - 1)
 			end
 		)
 	end)
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SECTION 10: LASER VISUALIZATION SYSTEM
+-- SECTION 11: LASER VISUALIZATION SYSTEM
 -- ═══════════════════════════════════════════════════════════════════════
 
 local LaserSystem = {}
 
---[[
-    Clears all active laser beams.
---]]
 function LaserSystem.Clear()
-	Memory.DestroyTableInstances(State.LaserBeams)
+	Memory.DestroyTableInstances(LRX.Objects.LaserBeams or {})
+	LRX.Objects.LaserBeams = {}
 end
 
---[[
-    Creates a single laser beam between two points.
---]]
 function LaserSystem.CreateBeam(startPos, endPos, color, duration)
 	local folder = Memory.EnsureWorkspaceFolder("LRX_Lasers", "LaserFolder")
-
 	local beamPart = Instance.new("Part")
 	beamPart.Name = "LaserBeam"
 	beamPart.Anchored = true
@@ -797,10 +681,10 @@ function LaserSystem.CreateBeam(startPos, endPos, color, duration)
 	glow.Range = 6
 	glow.Parent = beamPart
 
-	table.insert(State.LaserBeams, beamPart)
+	table_insert(LRX.Objects.LaserBeams, beamPart)
 
 	if duration then
-		task.delay(duration, function()
+		task_delay(duration, function()
 			if beamPart and beamPart.Parent then
 				TweenSystem.Tween(beamPart, { Transparency = 1 }, 0.3, function()
 					if beamPart and beamPart.Parent then
@@ -810,76 +694,63 @@ function LaserSystem.CreateBeam(startPos, endPos, color, duration)
 			end
 		end)
 	end
-
 	return beamPart
 end
 
---[[
-    Performs a laser scan animation on a plot.
-    Uses task.delay for non-blocking sequential effects.
---]]
 function LaserSystem.ScanPlot(plot, scanDuration)
 	LaserSystem.Clear()
-
 	if not plot then
 		return
 	end
-
 	local visual = plot:FindFirstChild("Visual")
 	if not visual then
 		return
 	end
 
-	-- Collect PlantAreaColumn parts
 	local parts = {}
 	for _, child in ipairs(visual:GetChildren()) do
 		if child:IsA("BasePart") and child.Name:match("^PlantAreaColumn") then
-			table.insert(parts, child)
+			table_insert(parts, child)
 		end
 	end
-
 	if #parts == 0 then
 		return
 	end
 
 	scanDuration = scanDuration or CONSTANTS.LASER_SCAN_DURATION
 
-	-- Calculate bounds
-	local minY = math.huge
+	local minY = math_huge
 	local allCorners = {}
-
 	for _, part in ipairs(parts) do
-		minY = math.min(minY, part.Position.Y)
+		minY = math_min(minY, part.Position.Y)
 		local hs = part.Size / 2
 		local cf = part.CFrame
 		for dx = -1, 1, 2 do
 			for dz = -1, 1, 2 do
-				table.insert(allCorners, cf * Vector3.new(dx * hs.X, hs.Y, dz * hs.Z))
+				table_insert(allCorners, cf * Vector3.new(dx * hs.X, hs.Y, dz * hs.Z))
 			end
 		end
 	end
 
-	local minX, maxX = math.huge, -math.huge
-	local minZ, maxZ = math.huge, -math.huge
-
+	local minX, maxX = math_huge, -math_huge
+	local minZ, maxZ = math_huge, -math_huge
 	for _, corner in ipairs(allCorners) do
-		minX = math.min(minX, corner.X)
-		maxX = math.max(maxX, corner.X)
-		minZ = math.min(minZ, corner.Z)
-		maxZ = math.max(maxZ, corner.Z)
+		minX = math_min(minX, corner.X)
+		maxX = math_max(maxX, corner.X)
+		minZ = math_min(minZ, corner.Z)
+		maxZ = math_max(maxZ, corner.Z)
 	end
 
 	local sweepHeight = minY + 2
 	local sweepCount = CONSTANTS.LASER_SWEEP_COUNT
 	local stepDelay = scanDuration / sweepCount
 
-	-- Horizontal sweeps
 	for i = 1, sweepCount do
-		task.delay((i - 1) * stepDelay, function()
-			if not State.ScriptRunning then
+		task_delay((i - 1) * stepDelay, function()
+			if not LRX.State.ScriptRunning then
 				return
 			end
-			local t = (i - 1) / math.max(1, sweepCount - 1)
+			local t = (i - 1) / math_max(1, sweepCount - 1)
 			local z = minZ + (maxZ - minZ) * t
 			LaserSystem.CreateBeam(
 				Vector3.new(minX, sweepHeight, z),
@@ -890,13 +761,12 @@ function LaserSystem.ScanPlot(plot, scanDuration)
 		end)
 	end
 
-	-- Vertical sweeps
 	for i = 1, sweepCount do
-		task.delay((i - 1) * stepDelay + 0.05, function()
-			if not State.ScriptRunning then
+		task_delay((i - 1) * stepDelay + 0.05, function()
+			if not LRX.State.ScriptRunning then
 				return
 			end
-			local t = (i - 1) / math.max(1, sweepCount - 1)
+			local t = (i - 1) / math_max(1, sweepCount - 1)
 			local x = minX + (maxX - minX) * t
 			LaserSystem.CreateBeam(
 				Vector3.new(x, sweepHeight + 0.5, minZ),
@@ -907,9 +777,8 @@ function LaserSystem.ScanPlot(plot, scanDuration)
 		end)
 	end
 
-	-- Diagonal beams
-	task.delay(0.1, function()
-		if not State.ScriptRunning then
+	task_delay(0.1, function()
+		if not LRX.State.ScriptRunning then
 			return
 		end
 		local h = sweepHeight
@@ -917,9 +786,8 @@ function LaserSystem.ScanPlot(plot, scanDuration)
 		LaserSystem.CreateBeam(Vector3.new(minX, h, maxZ), Vector3.new(maxX, h, minZ), Color3.fromRGB(50, 205, 50), 0.6)
 	end)
 
-	-- Corner outline
-	task.delay(scanDuration * 0.5, function()
-		if not State.ScriptRunning then
+	task_delay(scanDuration * 0.5, function()
+		if not LRX.State.ScriptRunning then
 			return
 		end
 		local h = sweepHeight
@@ -936,31 +804,23 @@ function LaserSystem.ScanPlot(plot, scanDuration)
 		end
 	end)
 
-	-- Auto-cleanup
-	task.delay(scanDuration + 0.5, LaserSystem.Clear)
+	task_delay(scanDuration + 0.5, LaserSystem.Clear)
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SECTION 11: GRID DOTS VISUALIZATION SYSTEM
+-- SECTION 12: GRID DOTS VISUALIZATION SYSTEM
 -- ═══════════════════════════════════════════════════════════════════════
 
 local GridSystem = {}
 
---[[
-    Clears all grid dots.
---]]
 function GridSystem.Clear()
-	Memory.DestroyTableInstances(State.GridDots)
+	Memory.DestroyTableInstances(LRX.Objects.GridDots or {})
+	LRX.Objects.GridDots = {}
 end
 
---[[
-    Refreshes grid dots based on current planting positions.
-    Uses batched creation to prevent frame drops.
---]]
 function GridSystem.Refresh()
 	GridSystem.Clear()
-
-	if not Config.ShowGridDots then
+	if not LRX.Config.ShowGridDots then
 		return
 	end
 
@@ -972,7 +832,6 @@ function GridSystem.Refresh()
 
 	SeedPlacer.ClearCache()
 	local positions = SeedPlacer.GetPlantPositions()
-
 	if not positions or #positions == 0 then
 		warn("[GridDots] No plant positions generated.")
 		return
@@ -987,15 +846,12 @@ function GridSystem.Refresh()
 	local batchDelay = CONSTANTS.GRID_DOT_BATCH_DELAY
 	local total = #positions
 
-	-- Create dots in batches
 	for batchStart = 1, total, batchSize do
-		task.delay(math.floor((batchStart - 1) / batchSize) * batchDelay, function()
-			if not State.ScriptRunning or not Config.ShowGridDots then
+		task_delay(math_floor((batchStart - 1) / batchSize) * batchDelay, function()
+			if not LRX.State.ScriptRunning or not LRX.Config.ShowGridDots then
 				return
 			end
-
-			local batchEnd = math.min(batchStart + batchSize - 1, total)
-
+			local batchEnd = math_min(batchStart + batchSize - 1, total)
 			for i = batchStart, batchEnd do
 				local posData = positions[i]
 				local dot = Instance.new("Part")
@@ -1012,33 +868,23 @@ function GridSystem.Refresh()
 				dot.Position = posData.Pos + yOffset
 				dot.Parent = folder
 				dot.Transparency = 0.15
-
-				table.insert(State.GridDots, dot)
+				table_insert(LRX.Objects.GridDots, dot)
 			end
 		end)
 	end
 
-	NotificationSystem.Notify("Plot Visualizer", string.format("Showing %d grid dots", total), "Success", 2)
+	NotificationSystem.Notify("Plot Visualizer", string_format("Showing %d grid dots", total), "Success", 2)
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SECTION 12: PLOT DETECTION SYSTEM
+-- SECTION 13: PLOT DETECTION SYSTEM
 -- ═══════════════════════════════════════════════════════════════════════
 
 local PlotSystem = {}
 
---[[
-    Finds the player's plot using multiple strategies:
-    1. Owner attribute match (fastest)
-    2. OwnerUserId attribute match
-    3. Position-based detection (fallback)
-
-    Results are cached until explicitly cleared.
---]]
 function PlotSystem.FindPlayerPlot()
-	-- Return cached plot if still valid
-	if State.CachedPlot and State.CachedPlot.Parent then
-		return State.CachedPlot
+	if LRX.Cache.CachedPlot and LRX.Cache.CachedPlot.Parent then
+		return LRX.Cache.CachedPlot
 	end
 
 	local gardensFolder = Services.Workspace:FindFirstChild("Gardens")
@@ -1053,11 +899,10 @@ function PlotSystem.FindPlayerPlot()
 	for _, plot in ipairs(plots) do
 		local ownerName = plot:GetAttribute("Owner")
 		local ownerId = plot:GetAttribute("OwnerUserId")
-
 		if ownerName == Player.Name or ownerId == Player.UserId then
-			State.CachedPlot = plot
-			State.CachedPlotParts = nil -- Invalidate parts cache
-			State.CachedPartOptions = nil -- Invalidate options cache
+			LRX.Cache.CachedPlot = plot
+			LRX.Cache.CachedPlotParts = nil
+			LRX.Cache.CachedPartOptions = nil
 			return plot
 		end
 	end
@@ -1070,7 +915,6 @@ function PlotSystem.FindPlayerPlot()
 	end
 
 	local candidates = {}
-
 	for _, plot in ipairs(plots) do
 		local visual = plot:FindFirstChild("Visual")
 		if not visual then
@@ -1080,23 +924,21 @@ function PlotSystem.FindPlayerPlot()
 		local columns = {}
 		for _, child in ipairs(visual:GetChildren()) do
 			if child:IsA("BasePart") and child.Name:match("^PlantAreaColumn") then
-				table.insert(columns, child)
+				table_insert(columns, child)
 			end
 		end
-
 		if #columns == 0 then
 			continue
 		end
 
-		-- Check if player is inside any column
 		local inside = false
 		for _, col in ipairs(columns) do
 			local localPos = col.CFrame:PointToObjectSpace(playerPos)
 			local half = col.Size / 2
 			if
-				math.abs(localPos.X) <= half.X + CONSTANTS.OCCUPANCY_TOLERANCE
-				and math.abs(localPos.Y) <= half.Y + 10
-				and math.abs(localPos.Z) <= half.Z + CONSTANTS.OCCUPANCY_TOLERANCE
+				math_abs(localPos.X) <= half.X + CONSTANTS.OCCUPANCY_TOLERANCE
+				and math_abs(localPos.Y) <= half.Y + 10
+				and math_abs(localPos.Z) <= half.Z + CONSTANTS.OCCUPANCY_TOLERANCE
 			then
 				inside = true
 				break
@@ -1104,28 +946,22 @@ function PlotSystem.FindPlayerPlot()
 		end
 
 		if inside then
-			-- Calculate center distance for ranking
 			local center = Vector3.zero
 			for _, col in ipairs(columns) do
 				center += col.Position
 			end
 			center /= #columns
-
-			table.insert(candidates, {
-				Plot = plot,
-				Distance = (center - playerPos).Magnitude,
-			})
+			table_insert(candidates, { Plot = plot, Distance = (center - playerPos).Magnitude })
 		end
 	end
 
 	if #candidates > 0 then
-		table.sort(candidates, function(a, b)
+		table_sort(candidates, function(a, b)
 			return a.Distance < b.Distance
 		end)
-
-		State.CachedPlot = candidates[1].Plot
-		State.CachedPlotParts = nil
-		State.CachedPartOptions = nil
+		LRX.Cache.CachedPlot = candidates[1].Plot
+		LRX.Cache.CachedPlotParts = nil
+		LRX.Cache.CachedPartOptions = nil
 		return candidates[1].Plot
 	end
 
@@ -1133,18 +969,12 @@ function PlotSystem.FindPlayerPlot()
 	return nil
 end
 
---[[
-    Detects PlantAreaColumn parts within a plot's Visual folder.
-    Results are cached per-plot.
---]]
 function PlotSystem.DetectPlotParts(plot)
 	if not plot then
 		return {}
 	end
-
-	-- Return cached parts if available
-	if State.CachedPlotParts and State.CachedPlot and State.CachedPlot == plot then
-		return State.CachedPlotParts
+	if LRX.Cache.CachedPlotParts and LRX.Cache.CachedPlot and LRX.Cache.CachedPlot == plot then
+		return LRX.Cache.CachedPlotParts
 	end
 
 	local visual = plot:FindFirstChild("Visual")
@@ -1155,55 +985,41 @@ function PlotSystem.DetectPlotParts(plot)
 	local parts = {}
 	for _, child in ipairs(visual:GetChildren()) do
 		if child:IsA("BasePart") and child.Name:match("^PlantAreaColumn") then
-			table.insert(parts, child)
+			table_insert(parts, child)
 		end
 	end
 
-	State.CachedPlotParts = parts
+	LRX.Cache.CachedPlotParts = parts
 	return parts
 end
 
---[[
-    Builds display options for plot parts with deduplication labels.
---]]
 function PlotSystem.BuildPartOptions(parts)
-	if State.CachedPartOptions then
-		return State.CachedPartOptions
+	if LRX.Cache.CachedPartOptions then
+		return LRX.Cache.CachedPartOptions
 	end
 
 	local nameCounts = {}
 	local options = {}
-
 	for _, part in ipairs(parts) do
 		local name = part.Name
 		nameCounts[name] = (nameCounts[name] or 0) + 1
-
 		local displayName = name
 		local value = name
 		if nameCounts[name] > 1 then
 			displayName = name .. " #" .. nameCounts[name]
 			value = name .. "_" .. nameCounts[name]
 		end
-
-		table.insert(options, {
-			Label = displayName,
-			Value = value,
-			Part = part,
-		})
+		table_insert(options, { Label = displayName, Value = value, Part = part })
 	end
 
-	State.CachedPartOptions = options
+	LRX.Cache.CachedPartOptions = options
 	return options
 end
 
---[[
-    Finds a specific part by its option value.
---]]
 function PlotSystem.FindPartByValue(parts, value)
 	if value == "All" or not value then
 		return nil
 	end
-
 	local nameCounts = {}
 	for _, part in ipairs(parts) do
 		local name = part.Name
@@ -1216,40 +1032,26 @@ function PlotSystem.FindPartByValue(parts, value)
 			return part
 		end
 	end
-
 	return nil
 end
 
---[[
-    Clears all plot caches. Call when plot changes or config changes.
---]]
 function PlotSystem.ClearCache()
-	State.CachedPlot = nil
-	State.CachedPlotParts = nil
-	State.CachedPartOptions = nil
+	LRX.Cache.CachedPlot = nil
+	LRX.Cache.CachedPlotParts = nil
+	LRX.Cache.CachedPartOptions = nil
 end
 
---[[
-    Gets comprehensive detection info for UI display.
---]]
 function PlotSystem.GetDetectionInfo()
 	local plot = PlotSystem.FindPlayerPlot()
 	if not plot then
-		return {
-			Parts = {},
-			PartOptions = {},
-			PartNames = {},
-			PlotName = "None",
-			PlotInstance = nil,
-		}
+		return { Parts = {}, PartOptions = {}, PartNames = {}, PlotName = "None", PlotInstance = nil }
 	end
 
 	local parts = PlotSystem.DetectPlotParts(plot)
 	local options = PlotSystem.BuildPartOptions(parts)
 	local names = {}
-
 	for _, opt in ipairs(options) do
-		table.insert(names, opt.Label)
+		table_insert(names, opt.Label)
 	end
 
 	return {
@@ -1262,40 +1064,25 @@ function PlotSystem.GetDetectionInfo()
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SECTION 13: SEED PLACER SYSTEM
+-- SECTION 14: SEED PLACER SYSTEM
 -- ═══════════════════════════════════════════════════════════════════════
 
 local SeedPlacer = {}
 
--- Private state
-local PlantPositions = nil
-local CurrentPlantIndex = 1
-local LastConfigHash = nil
-
---[[
-    Generates a hash of current planting configuration.
-    Used to invalidate cached positions when settings change.
---]]
 local function GetConfigHash()
-	return string.format(
+	return string_format(
 		"%s|%s|%.2f",
-		Config.PlantingArea or "All",
-		Config.PlantingPattern or "LeftToRight",
-		Config.PlantSpacing or CONSTANTS.DEFAULT_PLANT_SPACING
+		LRX.Config.PlantingArea or "All",
+		LRX.Config.PlantingPattern or "LeftToRight",
+		LRX.Config.PlantSpacing or CONSTANTS.DEFAULT_PLANT_SPACING
 	)
 end
 
---[[
-    Generates planting positions within target parts.
-    Uses local-space iteration for accurate corner coverage.
-    Optimized with deduplication and yielding for large counts.
---]]
 local function GeneratePlantPositions(targetParts, spacing)
 	if #targetParts == 0 then
 		return {}
 	end
-
-	spacing = math.max(0.1, spacing)
+	spacing = math_max(0.1, spacing)
 	local positions = {}
 	local seenKeys = {}
 	local iterationCount = 0
@@ -1305,8 +1092,6 @@ local function GeneratePlantPositions(targetParts, spacing)
 		local halfSize = part.Size / 2
 		local cf = part.CFrame
 		local plantY = part.Position.Y
-
-		-- Iterate in local XZ space from edge to edge
 		local startX = -halfSize.X
 		local endX = halfSize.X
 		local startZ = -halfSize.Z
@@ -1318,22 +1103,16 @@ local function GeneratePlantPositions(targetParts, spacing)
 			while localZ <= endZ + 0.001 do
 				iterationCount += 1
 				if iterationCount % yieldInterval == 0 then
-					task.wait()
+					task_wait()
 				end
 
-				-- Transform to world space
 				local worldPos = cf * Vector3.new(localX, 0, localZ)
-
-				-- Round to reduce floating-point jitter
 				local finalPos = Vector3.new(Utils.Round(worldPos.X), plantY, Utils.Round(worldPos.Z))
-
-				-- Deduplicate across adjacent columns
 				local key = Utils.FormatPositionKey(finalPos)
 				if not seenKeys[key] then
 					seenKeys[key] = true
-					table.insert(positions, { Pos = finalPos, Part = part })
+					table_insert(positions, { Pos = finalPos, Part = part })
 				end
-
 				localZ += spacing
 			end
 			localX += spacing
@@ -1343,10 +1122,6 @@ local function GeneratePlantPositions(targetParts, spacing)
 	return positions
 end
 
---[[
-    Applies planting pattern to position array.
-    Patterns: LeftToRight, RightToLeft, OutsideToCenter, CenterToOutside, Middle, Random
---]]
 local function ApplyPattern(positions, pattern)
 	local count = #positions
 	if count == 0 then
@@ -1356,38 +1131,37 @@ local function ApplyPattern(positions, pattern)
 	if pattern == "LeftToRight" then
 		return positions
 	elseif pattern == "RightToLeft" then
-		local result = table.create(count)
+		local result = table_create(count)
 		for i = count, 1, -1 do
 			result[count - i + 1] = positions[i]
 		end
 		return result
 	elseif pattern == "OutsideToCenter" then
-		local result = table.create(count)
+		local result = table_create(count)
 		local left = 1
 		local right = count
 		while left <= right do
-			table.insert(result, positions[left])
+			table_insert(result, positions[left])
 			left += 1
 			if left <= right then
-				table.insert(result, positions[right])
+				table_insert(result, positions[right])
 				right -= 1
 			end
 		end
 		return result
 	elseif pattern == "CenterToOutside" then
-		local result = table.create(count)
-		local mid = math.ceil(count / 2)
-		table.insert(result, positions[mid])
-
+		local result = table_create(count)
+		local mid = math_ceil(count / 2)
+		table_insert(result, positions[mid])
 		local offset = 1
 		while true do
 			local added = false
 			if mid - offset >= 1 then
-				table.insert(result, positions[mid - offset])
+				table_insert(result, positions[mid - offset])
 				added = true
 			end
 			if mid + offset <= count then
-				table.insert(result, positions[mid + offset])
+				table_insert(result, positions[mid + offset])
 				added = true
 			end
 			if not added then
@@ -1397,45 +1171,39 @@ local function ApplyPattern(positions, pattern)
 		end
 		return result
 	elseif pattern == "Middle" then
-		-- Build a grid map for spiral ordering
-		local minX, maxX = math.huge, -math.huge
-		local minZ, maxZ = math.huge, -math.huge
-
+		local minX, maxX = math_huge, -math_huge
+		local minZ, maxZ = math_huge, -math_huge
 		for _, posData in ipairs(positions) do
 			local p = posData.Pos
-			minX = math.min(minX, p.X)
-			maxX = math.max(maxX, p.X)
-			minZ = math.min(minZ, p.Z)
-			maxZ = math.max(maxZ, p.Z)
+			minX = math_min(minX, p.X)
+			maxX = math_max(maxX, p.X)
+			minZ = math_min(minZ, p.Z)
+			maxZ = math_max(maxZ, p.Z)
 		end
+		local step = math_max(0.1, LRX.Config.PlantSpacing or CONSTANTS.DEFAULT_PLANT_SPACING)
+		local cols = math_max(1, math_floor((maxX - minX) / step + 0.5) + 1)
+		local rows = math_max(1, math_floor((maxZ - minZ) / step + 0.5) + 1)
 
-		local step = math.max(0.1, Config.PlantSpacing or CONSTANTS.DEFAULT_PLANT_SPACING)
-		local cols = math.max(1, math.floor((maxX - minX) / step + 0.5) + 1)
-		local rows = math.max(1, math.floor((maxZ - minZ) / step + 0.5) + 1)
-
-		-- Map positions to grid cells
-		local cellMap = table.create(rows)
+		local cellMap = table_create(rows)
 		for r = 1, rows do
-			cellMap[r] = table.create(cols)
+			cellMap[r] = table_create(cols)
 		end
 
 		for _, posData in ipairs(positions) do
 			local p = posData.Pos
-			local c = math.floor((p.X - minX) / step + 0.5) + 1
-			local r = math.floor((p.Z - minZ) / step + 0.5) + 1
-			c = math.clamp(c, 1, cols)
-			r = math.clamp(r, 1, rows)
-
+			local c = math_floor((p.X - minX) / step + 0.5) + 1
+			local r = math_floor((p.Z - minZ) / step + 0.5) + 1
+			c = math_clamp(c, 1, cols)
+			r = math_clamp(r, 1, rows)
 			if not cellMap[r][c] then
 				cellMap[r][c] = {}
 			end
-			table.insert(cellMap[r][c], posData)
+			table_insert(cellMap[r][c], posData)
 		end
 
-		-- Spiral from center
-		local result = table.create(count)
-		local centerR = math.ceil(rows / 2)
-		local centerC = math.ceil(cols / 2)
+		local result = table_create(count)
+		local centerR = math_ceil(rows / 2)
+		local centerC = math_ceil(cols / 2)
 		local dr = { 0, 1, 0, -1 }
 		local dc = { 1, 0, -1, 0 }
 		local dir = 0
@@ -1444,7 +1212,7 @@ local function ApplyPattern(positions, pattern)
 
 		if cellMap[r] and cellMap[r][c] then
 			for _, posData in ipairs(cellMap[r][c]) do
-				table.insert(result, posData)
+				table_insert(result, posData)
 			end
 		end
 
@@ -1456,7 +1224,7 @@ local function ApplyPattern(positions, pattern)
 					if r >= 1 and r <= rows and c >= 1 and c <= cols then
 						if cellMap[r] and cellMap[r][c] then
 							for _, posData in ipairs(cellMap[r][c]) do
-								table.insert(result, posData)
+								table_insert(result, posData)
 							end
 						end
 					end
@@ -1465,15 +1233,14 @@ local function ApplyPattern(positions, pattern)
 			end
 			steps += 1
 		end
-
 		return result
 	elseif pattern == "Random" then
-		local result = table.create(count)
+		local result = table_create(count)
 		for i = 1, count do
 			result[i] = positions[i]
 		end
 		for i = count, 2, -1 do
-			local j = math.random(1, i)
+			local j = math_random(1, i)
 			result[i], result[j] = result[j], result[i]
 		end
 		return result
@@ -1482,19 +1249,17 @@ local function ApplyPattern(positions, pattern)
 	return positions
 end
 
---[[
-    Builds an occupancy lookup table from existing plants.
-    Checks FakePlot first, then falls back to plot's Plants folder.
---]]
 local function BuildOccupiedLookup()
 	local occupied = {}
 
-	local controllers = Player:FindFirstChild("PlayerScripts")
-	local seedInspect = controllers and controllers:FindFirstChild("SeedInspectController")
-	local fakePlot = seedInspect and seedInspect:FindFirstChild("FakePlot")
+	-- Cache FakePlot path once
+	if not LRX.Cache.FakePlot or not LRX.Cache.FakePlot.Parent then
+		local controllers = Player:FindFirstChild("PlayerScripts")
+		local seedInspect = controllers and controllers:FindFirstChild("SeedInspectController")
+		LRX.Cache.FakePlot = seedInspect and seedInspect:FindFirstChild("FakePlot")
+	end
 
-	local plantsFolder = fakePlot and fakePlot:FindFirstChild("Plants")
-
+	local plantsFolder = LRX.Cache.FakePlot and LRX.Cache.FakePlot:FindFirstChild("Plants")
 	if not plantsFolder then
 		local plot = PlotSystem.FindPlayerPlot()
 		plantsFolder = plot and plot:FindFirstChild("Plants")
@@ -1504,9 +1269,10 @@ local function BuildOccupiedLookup()
 		return occupied
 	end
 
+	LRX.Cache.PlantsFolder = plantsFolder
+
 	for _, plant in ipairs(plantsFolder:GetChildren()) do
 		local plantPos = nil
-
 		if plant:IsA("BasePart") then
 			plantPos = plant.Position
 		elseif plant:IsA("Model") then
@@ -1521,7 +1287,6 @@ local function BuildOccupiedLookup()
 				end
 			end
 		end
-
 		if plantPos then
 			local key = Utils.FormatPositionKey(plantPos)
 			occupied[key] = true
@@ -1531,22 +1296,15 @@ local function BuildOccupiedLookup()
 	return occupied
 end
 
---[[
-    Checks if a planting spot is empty.
---]]
 local function IsSpotEmpty(spotPosition, occupiedLookup)
 	local key = Utils.FormatPositionKey(spotPosition)
 	return not occupiedLookup[key]
 end
 
---[[
-    Gets all plant positions for the current configuration.
-    Uses caching to avoid regenerating positions unnecessarily.
---]]
 function SeedPlacer.GetPlantPositions()
 	local currentHash = GetConfigHash()
-	if PlantPositions and LastConfigHash == currentHash then
-		return PlantPositions
+	if LRX.Cache.PlantPositions and LRX.Cache.LastConfigHash == currentHash then
+		return LRX.Cache.PlantPositions
 	end
 
 	local plot = PlotSystem.FindPlayerPlot()
@@ -1557,49 +1315,40 @@ function SeedPlacer.GetPlantPositions()
 	local allParts = PlotSystem.DetectPlotParts(plot)
 	local targetParts = {}
 
-	if Config.PlantingArea == "All" or not Config.PlantingArea or Config.PlantingArea == "" then
+	if LRX.Config.PlantingArea == "All" or not LRX.Config.PlantingArea or LRX.Config.PlantingArea == "" then
 		for _, part in ipairs(allParts) do
-			table.insert(targetParts, part)
+			table_insert(targetParts, part)
 		end
 	else
-		local selectedPart = PlotSystem.FindPartByValue(allParts, Config.PlantingArea)
+		local selectedPart = PlotSystem.FindPartByValue(allParts, LRX.Config.PlantingArea)
 		if selectedPart then
-			table.insert(targetParts, selectedPart)
+			table_insert(targetParts, selectedPart)
 		else
-			-- Fallback to all parts if specific part not found
 			for _, part in ipairs(allParts) do
-				table.insert(targetParts, part)
+				table_insert(targetParts, part)
 			end
 		end
 	end
 
 	if #targetParts == 0 then
-		warn("[SeedPlacer] No target parts found for area: " .. tostring(Config.PlantingArea))
+		warn("[SeedPlacer] No target parts found for area: " .. tostring(LRX.Config.PlantingArea))
 		return nil
 	end
 
-	local positions = GeneratePlantPositions(targetParts, Config.PlantSpacing or CONSTANTS.DEFAULT_PLANT_SPACING)
-	positions = ApplyPattern(positions, Config.PlantingPattern or "LeftToRight")
+	local positions = GeneratePlantPositions(targetParts, LRX.Config.PlantSpacing or CONSTANTS.DEFAULT_PLANT_SPACING)
+	positions = ApplyPattern(positions, LRX.Config.PlantingPattern or "LeftToRight")
 
-	PlantPositions = positions
-	LastConfigHash = currentHash
-
+	LRX.Cache.PlantPositions = positions
+	LRX.Cache.LastConfigHash = currentHash
 	return positions
 end
 
---[[
-    Clears cached plant positions. Call when config changes.
---]]
 function SeedPlacer.ClearCache()
-	PlantPositions = nil
-	CurrentPlantIndex = 1
-	LastConfigHash = nil
+	LRX.Cache.PlantPositions = nil
+	LRX.Cache.CurrentPlantIndex = 1
+	LRX.Cache.LastConfigHash = nil
 end
 
---[[
-    Runs a single planting cycle.
-    Plants up to Config.PlaceAmount seeds in empty spots.
---]]
 function SeedPlacer.RunCycle()
 	if not PlantRemote then
 		warn("[SeedPlacer] PlantSeed remote not available.")
@@ -1611,39 +1360,37 @@ function SeedPlacer.RunCycle()
 		return
 	end
 
-	-- Collect enabled seed names
 	local enabledSeeds = {}
-	for seedName, enabled in pairs(Config.SelectedPlaceSeeds or {}) do
+	for seedName, enabled in pairs(LRX.Config.SelectedPlaceSeeds or {}) do
 		if enabled then
-			table.insert(enabledSeeds, seedName)
+			table_insert(enabledSeeds, seedName)
 		end
 	end
-
 	if #enabledSeeds == 0 then
 		return
 	end
 
 	local occupiedLookup = BuildOccupiedLookup()
 	local totalSpots = #allSpots
-	local maxPlantAmount = Config.PlaceAmount or CONSTANTS.DEFAULT_PLACE_AMOUNT
+	local maxPlantAmount = LRX.Config.PlaceAmount or CONSTANTS.DEFAULT_PLACE_AMOUNT
 	local plantedCount = 0
 	local seedIndex = 1
 	local checkedCount = 0
-	local delay = math.max(0, Config.PlantDelay or CONSTANTS.DEFAULT_PLANT_DELAY)
+	local delay = math_max(0, LRX.Config.PlantDelay or CONSTANTS.DEFAULT_PLANT_DELAY)
+	local idx = LRX.Cache.CurrentPlantIndex or 1
 
 	while plantedCount < maxPlantAmount and checkedCount < totalSpots do
-		if not Config.EnableSeedPlacer then
+		if not LRX.Config.EnableSeedPlacer then
 			break
 		end
 
-		local spot = allSpots[CurrentPlantIndex]
+		local spot = allSpots[idx]
 		if not spot or not spot.Part then
-			CurrentPlantIndex = 1
+			idx = 1
 			break
 		end
 
 		checkedCount += 1
-
 		if IsSpotEmpty(spot.Pos, occupiedLookup) then
 			local seedName = enabledSeeds[seedIndex]
 			seedIndex = seedIndex % #enabledSeeds + 1
@@ -1651,51 +1398,43 @@ function SeedPlacer.RunCycle()
 			local success, err = pcall(function()
 				PlantRemote:Fire(spot.Pos, seedName, spot.Part)
 			end)
-
 			if not success then
-				warn("[SeedPlacer] PlantSeed failed at spot " .. tostring(CurrentPlantIndex) .. ":", err)
+				warn("[SeedPlacer] PlantSeed failed at spot " .. tostring(idx) .. ":", err)
 			end
-
 			plantedCount += 1
-
 			if plantedCount < maxPlantAmount then
-				task.wait(delay)
+				task_wait(delay)
 			end
 		end
 
-		CurrentPlantIndex += 1
-		if CurrentPlantIndex > totalSpots then
-			CurrentPlantIndex = 1
+		idx += 1
+		if idx > totalSpots then
+			idx = 1
 		end
 	end
 
+	LRX.Cache.CurrentPlantIndex = idx
+
 	if plantedCount > 0 then
-		print(string.format("[SeedPlacer] Planted %d seeds this cycle.", plantedCount))
+		print(string_format("[SeedPlacer] Planted %d seeds this cycle.", plantedCount))
 	end
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SECTION 14: CONFIGURATION SYSTEM
+-- SECTION 15: CONFIGURATION SYSTEM
 -- ═══════════════════════════════════════════════════════════════════════
 
 local ConfigSystem = {}
 
---[[
-    Checks if a value is JSON-serializable.
---]]
 local function IsSerializable(value)
 	local valueType = typeof(value)
 	return valueType == "nil" or valueType == "boolean" or valueType == "number" or valueType == "string"
 end
 
---[[
-    Recursively filters a table to only serializable values.
---]]
 local function FilterSerializable(data)
 	if typeof(data) ~= "table" then
 		return IsSerializable(data) and data or nil
 	end
-
 	local result = {}
 	for key, value in pairs(data) do
 		if typeof(key) == "string" or typeof(key) == "number" then
@@ -1709,48 +1448,33 @@ local function FilterSerializable(data)
 	return result
 end
 
---[[
-    Builds save data from current config.
---]]
 function ConfigSystem.BuildSaveData()
-	return FilterSerializable(Config)
+	return FilterSerializable(LRX.Config)
 end
 
---[[
-    Validates and applies loaded data to Config.
---]]
 function ConfigSystem.ApplyLoadedData(data)
 	if typeof(data) ~= "table" then
 		return false
 	end
-
 	for key, value in pairs(data) do
 		if typeof(key) == "string" and ConfigSchema[key] then
-			Config[key] = Utils.ValidateConfigValue(key, value)
+			LRX.Config[key] = Utils.ValidateConfigValue(key, value)
 		end
 	end
-
 	return true
 end
 
---[[
-    Saves configuration to file, attribute, or StringValue.
-    Tries methods in order of preference.
---]]
 function ConfigSystem.Save(silent)
 	local saveTable = ConfigSystem.BuildSaveData()
 	local jsonString
-
 	local success, errorMessage = pcall(function()
 		jsonString = Services.HttpService:JSONEncode(saveTable)
 	end)
-
 	if not success then
 		warn("[Config] JSON Encode failed:", errorMessage)
 		return false, "encode_failed"
 	end
 
-	-- Method 1: File
 	if writefile then
 		local fileOk = pcall(function()
 			writefile(CONSTANTS.CONFIG_FILE, jsonString)
@@ -1763,7 +1487,6 @@ function ConfigSystem.Save(silent)
 		end
 	end
 
-	-- Method 2: Player attribute
 	local attrOk = pcall(function()
 		Player:SetAttribute(CONSTANTS.CONFIG_ATTRIBUTE, jsonString)
 	end)
@@ -1774,7 +1497,6 @@ function ConfigSystem.Save(silent)
 		return true, "attribute"
 	end
 
-	-- Method 3: StringValue
 	local valOk = pcall(function()
 		local existing = PlayerGui:FindFirstChild(CONSTANTS.CONFIG_ATTRIBUTE)
 		if existing then
@@ -1796,14 +1518,10 @@ function ConfigSystem.Save(silent)
 	return false, "none"
 end
 
---[[
-    Loads configuration from file, attribute, or StringValue.
---]]
 function ConfigSystem.Load()
 	local jsonString = nil
 	local method = "none"
 
-	-- Method 1: File
 	if isfile and isfile(CONSTANTS.CONFIG_FILE) then
 		local success, result = pcall(readfile, CONSTANTS.CONFIG_FILE)
 		if success and result and #result > 0 then
@@ -1812,7 +1530,6 @@ function ConfigSystem.Load()
 		end
 	end
 
-	-- Method 2: Player attribute
 	if not jsonString then
 		local success, result = pcall(function()
 			return Player:GetAttribute(CONSTANTS.CONFIG_ATTRIBUTE)
@@ -1823,7 +1540,6 @@ function ConfigSystem.Load()
 		end
 	end
 
-	-- Method 3: StringValue
 	if not jsonString then
 		local success, result = pcall(function()
 			local val = PlayerGui:FindFirstChild(CONSTANTS.CONFIG_ATTRIBUTE)
@@ -1840,8 +1556,8 @@ function ConfigSystem.Load()
 			return Services.HttpService:JSONDecode(jsonString)
 		end)
 		if success and data and ConfigSystem.ApplyLoadedData(data) then
-			if Config.Theme and Themes[Config.Theme] then
-				Theme = Themes[Config.Theme]
+			if LRX.Config.Theme and Themes[LRX.Config.Theme] then
+				Theme = Themes[LRX.Config.Theme]
 			end
 			NotificationSystem.Notify("Config", "Loaded from " .. method, "Success", 2)
 			return true, method
@@ -1851,11 +1567,7 @@ function ConfigSystem.Load()
 	return false, "none"
 end
 
---[[
-    Resets configuration to defaults.
---]]
 function ConfigSystem.Reset()
-	-- Delete saved data
 	if delfile then
 		pcall(function()
 			delfile(CONSTANTS.CONFIG_FILE)
@@ -1871,44 +1583,39 @@ function ConfigSystem.Reset()
 		end
 	end)
 
-	-- Reset to defaults
 	for key, schema in pairs(ConfigSchema) do
-		Config[key] = schema.default
+		if schema.type == "table" then
+			LRX.Config[key] = table_clone(schema.default)
+		else
+			LRX.Config[key] = schema.default
+		end
 	end
 
 	Theme = Themes.Dark
 	SeedPlacer.ClearCache()
 	PlotSystem.ClearCache()
 	GridSystem.Refresh()
-
 	NotificationSystem.Notify("Config", "Reset to defaults", "Warning", 3)
 end
 
---[[
-    Debounced auto-save. Only saves after changes stop for 1 second.
---]]
 function ConfigSystem.AutoSave()
-	if State.AutoSaveDebounce then
+	if LRX.State.AutoSaveDebounce then
 		pcall(function()
-			task.cancel(State.AutoSaveDebounce)
+			task_cancel(LRX.State.AutoSaveDebounce)
 		end)
 	end
-
-	State.AutoSaveDebounce = task.delay(CONSTANTS.AUTO_SAVE_DEBOUNCE, function()
+	LRX.State.AutoSaveDebounce = task_delay(CONSTANTS.AUTO_SAVE_DEBOUNCE, function()
 		ConfigSystem.Save(true)
-		State.AutoSaveDebounce = nil
+		LRX.State.AutoSaveDebounce = nil
 	end)
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SECTION 15: UI COMPONENT FACTORY
+-- SECTION 16: UI COMPONENT FACTORY
 -- ═══════════════════════════════════════════════════════════════════════
 
 local UI = {}
 
---[[
-    Creates a base instance with properties.
---]]
 function UI.Create(className, properties)
 	local instance = Instance.new(className)
 	for property, value in pairs(properties or {}) do
@@ -1917,9 +1624,6 @@ function UI.Create(className, properties)
 	return instance
 end
 
---[[
-    Adds a UICorner to an instance.
---]]
 function UI.AddCorner(instance, radius)
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, radius or 6)
@@ -1927,9 +1631,6 @@ function UI.AddCorner(instance, radius)
 	return corner
 end
 
---[[
-    Adds a UIStroke to an instance.
---]]
 function UI.AddStroke(instance, color, thickness)
 	local stroke = Instance.new("UIStroke")
 	stroke.Color = color or Theme.Border
@@ -1938,9 +1639,6 @@ function UI.AddStroke(instance, color, thickness)
 	return stroke
 end
 
---[[
-    Creates a card component.
---]]
 function UI.CreateCard(parent, title, icon, iconColor)
 	local card = UI.Create("TextButton", {
 		Name = title,
@@ -1948,15 +1646,14 @@ function UI.CreateCard(parent, title, icon, iconColor)
 		BackgroundColor3 = Theme.Card,
 		BorderSizePixel = 0,
 		Size = UDim2.new(1, 0, 0, 42),
-		LayoutOrder = State.CardOrder * 2,
+		LayoutOrder = LRX.State.CardOrder * 2,
 		Font = Enum.Font.Gotham,
 		Text = "",
 		ZIndex = CONSTANTS.Z_DROPDOWN,
 		Active = true,
 		AutoButtonColor = false,
 	})
-
-	State.CardOrder += 1
+	LRX.State.CardOrder += 1
 	UI.AddCorner(card, 6)
 	UI.AddStroke(card, Theme.Border, 1)
 
@@ -2010,9 +1707,6 @@ function UI.CreateCard(parent, title, icon, iconColor)
 	return card
 end
 
---[[
-    Creates a toggle component.
---]]
 function UI.CreateToggle(parent, text, defaultState, callback)
 	local container = UI.Create("Frame", {
 		Parent = parent,
@@ -2063,14 +1757,12 @@ function UI.CreateToggle(parent, text, defaultState, callback)
 		state = not state
 		TweenSystem.Tween(toggleBg, { BackgroundColor3 = state and Theme.ToggleOn or Theme.ToggleBg }, 0.2)
 		TweenSystem.Tween(knob, { Position = state and UDim2.new(1, -18, 0, 2) or UDim2.new(0, 2, 0, 2) }, 0.2)
-
 		if callback then
 			local ok, err = pcall(callback, state)
 			if not ok then
 				warn("[Toggle Error]", err)
 			end
 		end
-
 		ConfigSystem.AutoSave()
 	end))
 
@@ -2079,9 +1771,6 @@ function UI.CreateToggle(parent, text, defaultState, callback)
 	end
 end
 
---[[
-    Creates a button component.
---]]
 function UI.CreateButton(parent, text, bgColor, width, height, callback)
 	bgColor = bgColor or Theme.Card
 	width = width or 70
@@ -2122,9 +1811,6 @@ function UI.CreateButton(parent, text, bgColor, width, height, callback)
 	return btn
 end
 
---[[
-    Creates a label component.
---]]
 function UI.CreateLabel(parent, text, textColor, fontSize)
 	return UI.Create("TextLabel", {
 		Parent = parent,
@@ -2140,9 +1826,6 @@ function UI.CreateLabel(parent, text, textColor, fontSize)
 	})
 end
 
---[[
-    Creates an input component.
---]]
 function UI.CreateInput(parent, title, defaultText, callback)
 	local container = UI.Create("Frame", {
 		Parent = parent,
@@ -2185,30 +1868,27 @@ function UI.CreateInput(parent, title, defaultText, callback)
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SECTION 16: DROPDOWN SYSTEM
+-- SECTION 17: DROPDOWN SYSTEM
 -- ═══════════════════════════════════════════════════════════════════════
 
 local DropdownSystem = {}
 
---[[
-    Closes the active dropdown.
---]]
 function DropdownSystem.Close()
-	if not State.ActiveDropdownFrame then
+	if not LRX.State.ActiveDropdownFrame then
 		return
 	end
 
-	if State.ActiveDropdownCard then
-		local arrow = State.ActiveDropdownCard:FindFirstChild("Arrow")
+	if LRX.State.ActiveDropdownCard then
+		local arrow = LRX.State.ActiveDropdownCard:FindFirstChild("Arrow")
 		if arrow then
 			arrow.Text = ">"
 		end
-		TweenSystem.Tween(State.ActiveDropdownCard, { BackgroundColor3 = Theme.Card }, 0.15)
-		State.ActiveDropdownCard = nil
+		TweenSystem.Tween(LRX.State.ActiveDropdownCard, { BackgroundColor3 = Theme.Card }, 0.15)
+		LRX.State.ActiveDropdownCard = nil
 	end
 
-	local frame = State.ActiveDropdownFrame
-	State.ActiveDropdownFrame = nil
+	local frame = LRX.State.ActiveDropdownFrame
+	LRX.State.ActiveDropdownFrame = nil
 
 	TweenSystem.Tween(frame, { Size = UDim2.new(1, 0, 0, 0) }, 0.15, function()
 		if frame and frame.Parent then
@@ -2217,23 +1897,19 @@ function DropdownSystem.Close()
 	end)
 end
 
---[[
-    Toggles a dropdown for a card.
---]]
 function DropdownSystem.Toggle(card, buildFunc)
-	if State.DropdownDebounce then
+	if LRX.State.DropdownDebounce then
 		return
 	end
-
-	if State.ActiveDropdownCard == card then
+	if LRX.State.ActiveDropdownCard == card then
 		DropdownSystem.Close()
 		return
 	end
 
-	State.DropdownDebounce = true
+	LRX.State.DropdownDebounce = true
 	DropdownSystem.Close()
 
-	State.ActiveDropdownCard = card
+	LRX.State.ActiveDropdownCard = card
 	TweenSystem.Tween(card, { BackgroundColor3 = Theme.CardHover }, 0.15)
 
 	local arrow = card:FindFirstChild("Arrow")
@@ -2243,7 +1919,7 @@ function DropdownSystem.Toggle(card, buildFunc)
 
 	local frame = UI.Create("Frame", {
 		Name = "Dropdown",
-		Parent = State.ContentScroll,
+		Parent = LRX.UI.ContentScroll,
 		BackgroundColor3 = Theme.DropdownBg,
 		BorderSizePixel = 0,
 		Size = UDim2.new(1, 0, 0, 0),
@@ -2288,82 +1964,70 @@ function DropdownSystem.Toggle(card, buildFunc)
 		warn("[Dropdown Build Error]", err)
 	end
 
-	task.wait()
-
+	task_wait()
 	local contentHeight = list.AbsoluteContentSize.Y + 16
-	local maxHeight = math.min(contentHeight, CONSTANTS.MAX_DROPDOWN_HEIGHT)
-
+	local maxHeight = math_min(contentHeight, CONSTANTS.MAX_DROPDOWN_HEIGHT)
 	scroll.CanvasSize = UDim2.new(0, 0, 0, contentHeight)
-	State.ActiveDropdownFrame = frame
+	LRX.State.ActiveDropdownFrame = frame
 
 	TweenSystem.Tween(frame, { Size = UDim2.new(1, 0, 0, maxHeight) }, CONSTANTS.DROPDOWN_ANIMATION_SPEED)
 
-	task.delay(0.25, function()
-		State.DropdownDebounce = false
+	task_delay(0.25, function()
+		LRX.State.DropdownDebounce = false
 	end)
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SECTION 17: MODAL SYSTEM
+-- SECTION 18: MODAL SYSTEM
 -- ═══════════════════════════════════════════════════════════════════════
 
 local ModalSystem = {}
 
---[[
-    Sets modal interaction state (disables background UI).
---]]
 function ModalSystem.SetState(isOpen)
-	State.ModalOpen = isOpen
-	State.MainFrame.Active = not isOpen
-	State.SidebarScroll.ScrollingEnabled = not isOpen
-	State.ContentScroll.ScrollingEnabled = not isOpen
+	LRX.State.ModalOpen = isOpen
+	LRX.UI.MainFrame.Active = not isOpen
+	LRX.UI.SidebarScroll.ScrollingEnabled = not isOpen
+	LRX.UI.ContentScroll.ScrollingEnabled = not isOpen
 end
 
---[[
-    Closes the active modal.
---]]
 function ModalSystem.Close()
-	if State.ActiveModal then
+	if LRX.State.ActiveModal then
 		TweenSystem.Tween(
-			State.ActiveModal,
+			LRX.State.ActiveModal,
 			{
 				Position = UDim2.new(
 					0.5,
-					-State.ActiveModal.Size.X.Offset / 2,
+					-LRX.State.ActiveModal.Size.X.Offset / 2,
 					0.5,
-					-State.ActiveModal.Size.Y.Offset / 2 + 20
+					-LRX.State.ActiveModal.Size.Y.Offset / 2 + 20
 				),
 			},
 			0.2,
 			function()
-				if State.ActiveModal then
-					State.ActiveModal:Destroy()
-					State.ActiveModal = nil
+				if LRX.State.ActiveModal then
+					LRX.State.ActiveModal:Destroy()
+					LRX.State.ActiveModal = nil
 				end
 			end
 		)
 	end
 
-	if State.ModalOverlay then
-		TweenSystem.Tween(State.ModalOverlay, { BackgroundTransparency = 1 }, 0.2, function()
-			State.ModalOverlay.Visible = false
+	if LRX.State.ModalOverlay then
+		TweenSystem.Tween(LRX.State.ModalOverlay, { BackgroundTransparency = 1 }, 0.2, function()
+			LRX.State.ModalOverlay.Visible = false
 			ModalSystem.SetState(false)
 		end)
 	end
 end
 
---[[
-    Shows a modal with the given title and content builder.
---]]
 function ModalSystem.Show(title, buildFunc, width, height)
 	width = width or 520
 	height = height or 420
 
-	-- Create overlay if needed
-	if not State.ModalOverlay then
-		State.ModalOverlay = UI.Create("Frame", {
+	if not LRX.State.ModalOverlay then
+		LRX.State.ModalOverlay = UI.Create("Frame", {
 			Name = "ModalOverlay",
-			Parent = State.ScreenGui,
+			Parent = LRX.UI.ScreenGui,
 			BackgroundColor3 = Theme.Overlay,
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
@@ -2374,7 +2038,7 @@ function ModalSystem.Show(title, buildFunc, width, height)
 		})
 
 		local blocker = UI.Create("TextButton", {
-			Parent = State.ModalOverlay,
+			Parent = LRX.State.ModalOverlay,
 			BackgroundTransparency = 1,
 			Size = UDim2.new(1, 0, 1, 0),
 			Text = "",
@@ -2385,16 +2049,16 @@ function ModalSystem.Show(title, buildFunc, width, height)
 	end
 
 	ModalSystem.SetState(true)
-	State.ModalOverlay.Visible = true
-	TweenSystem.Tween(State.ModalOverlay, { BackgroundTransparency = Config.ModalDarkening }, 0.2)
+	LRX.State.ModalOverlay.Visible = true
+	TweenSystem.Tween(LRX.State.ModalOverlay, { BackgroundTransparency = LRX.Config.ModalDarkening }, 0.2)
 
-	if State.ActiveModal then
-		State.ActiveModal:Destroy()
+	if LRX.State.ActiveModal then
+		LRX.State.ActiveModal:Destroy()
 	end
 
 	local modalFrame = UI.Create("Frame", {
 		Name = "ModalFrame",
-		Parent = State.ModalOverlay,
+		Parent = LRX.State.ModalOverlay,
 		BackgroundColor3 = Theme.Background,
 		BorderSizePixel = 0,
 		Position = UDim2.new(0.5, -width / 2, 0.5, -height / 2),
@@ -2451,7 +2115,7 @@ function ModalSystem.Show(title, buildFunc, width, height)
 		ClipsDescendants = true,
 	})
 
-	State.ActiveModal = modalFrame
+	LRX.State.ActiveModal = modalFrame
 	TweenSystem.Tween(modalFrame, { Position = UDim2.new(0.5, -width / 2, 0.5, -height / 2) }, 0.3)
 
 	if buildFunc then
@@ -2463,16 +2127,13 @@ function ModalSystem.Show(title, buildFunc, width, height)
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SECTION 18: SEARCH SYSTEM
+-- SECTION 19: SEARCH SYSTEM
 -- ═══════════════════════════════════════════════════════════════════════
 
 local SearchSystem = {}
 
---[[
-    Registers an item for search.
---]]
 function SearchSystem.Register(itemName, targetPage, itemIcon, itemAction)
-	table.insert(State.SearchableItems, {
+	table_insert(LRX.State.SearchableItems, {
 		Name = itemName,
 		Page = targetPage,
 		Icon = itemIcon,
@@ -2480,54 +2141,44 @@ function SearchSystem.Register(itemName, targetPage, itemIcon, itemAction)
 	})
 end
 
---[[
-    Performs a search query.
---]]
 function SearchSystem.Query(searchQuery)
 	local results = {}
 	local lowerQuery = searchQuery:lower()
-
-	for _, item in ipairs(State.SearchableItems) do
+	for _, item in ipairs(LRX.State.SearchableItems) do
 		if item.Name:lower():find(lowerQuery, 1, true) then
-			table.insert(results, item)
+			table_insert(results, item)
 		end
 	end
-
 	return results
 end
 
---[[
-    Updates search suggestions UI.
---]]
 function SearchSystem.UpdateSuggestions()
-	-- Clear existing suggestions
-	for _, child in pairs(State.SuggestScroll:GetChildren()) do
+	for _, child in pairs(LRX.UI.SuggestScroll:GetChildren()) do
 		if child:IsA("TextButton") then
 			child:Destroy()
 		end
 	end
 
-	local searchText = State.SearchBox.Text:lower()
+	local searchText = LRX.UI.SearchBox.Text:lower()
 	if searchText == "" or searchText == "search" then
-		State.SuggestFrame.Visible = false
+		LRX.UI.SuggestFrame.Visible = false
 		return
 	end
 
 	local matches = SearchSystem.Query(searchText)
 	if #matches == 0 then
-		State.SuggestFrame.Visible = false
+		LRX.UI.SuggestFrame.Visible = false
 		return
 	end
 
-	-- Position suggestion frame below search box
-	local searchAbsPos = State.SearchFrame.AbsolutePosition
-	local searchAbsSize = State.SearchFrame.AbsoluteSize
-	State.SuggestFrame.Position = UDim2.new(0, searchAbsPos.X, 0, searchAbsPos.Y + searchAbsSize.Y + 4)
-	State.SuggestFrame.Size = UDim2.new(0, searchAbsSize.X, 0, math.min(#matches * 34 + 10, 220))
+	local searchAbsPos = LRX.UI.SearchFrame.AbsolutePosition
+	local searchAbsSize = LRX.UI.SearchFrame.AbsoluteSize
+	LRX.UI.SuggestFrame.Position = UDim2.new(0, searchAbsPos.X, 0, searchAbsPos.Y + searchAbsSize.Y + 4)
+	LRX.UI.SuggestFrame.Size = UDim2.new(0, searchAbsSize.X, 0, math_min(#matches * 34 + 10, 220))
 
 	for _, item in ipairs(matches) do
 		local btn = UI.Create("TextButton", {
-			Parent = State.SuggestScroll,
+			Parent = LRX.UI.SuggestScroll,
 			BackgroundColor3 = Theme.Card,
 			BorderSizePixel = 0,
 			Size = UDim2.new(1, -10, 0, 32),
@@ -2551,8 +2202,8 @@ function SearchSystem.UpdateSuggestions()
 		end))
 
 		Memory.TrackConnection(btn.Activated:Connect(function()
-			State.SuggestFrame.Visible = false
-			State.SearchBox.Text = "Search"
+			LRX.UI.SuggestFrame.Visible = false
+			LRX.UI.SearchBox.Text = "Search"
 			if item.Action then
 				local ok, err = pcall(item.Action)
 				if not ok then
@@ -2562,40 +2213,34 @@ function SearchSystem.UpdateSuggestions()
 		end))
 	end
 
-	State.SuggestScroll.CanvasSize = UDim2.new(0, 0, 0, #matches * 34)
-	State.SuggestFrame.Visible = true
+	LRX.UI.SuggestScroll.CanvasSize = UDim2.new(0, 0, 0, #matches * 34)
+	LRX.UI.SuggestFrame.Visible = true
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SECTION 19: PAGE SYSTEM
+-- SECTION 20: PAGE SYSTEM
 -- ═══════════════════════════════════════════════════════════════════════
 
 local PageSystem = {}
 local Pages = {}
 
---[[
-    Clears the content area.
---]]
 function PageSystem.ClearContent()
-	State.ContentScroll.CanvasPosition = Vector2.new(0, 0)
+	LRX.UI.ContentScroll.CanvasPosition = Vector2.new(0, 0)
 	DropdownSystem.Close()
 
-	for _, child in pairs(State.ContentScroll:GetChildren()) do
+	for _, child in pairs(LRX.UI.ContentScroll:GetChildren()) do
 		if child:IsA("Frame") or child:IsA("TextButton") or child:IsA("TextLabel") or child:IsA("UIPadding") then
 			child:Destroy()
 		end
 	end
 
-	State.CardOrder = 0
+	LRX.State.CardOrder = 0
 end
 
---[[
-    Switches to a page.
---]]
 function PageSystem.SwitchTo(targetPage, pageTitle, pageSubtitle, pageBuilder)
-	State.CurrentPage = targetPage
-	State.PageTitle.Text = pageTitle
-	State.PageSubtitle.Text = pageSubtitle or ""
+	LRX.State.CurrentPage = targetPage
+	LRX.UI.PageTitle.Text = pageTitle
+	LRX.UI.PageSubtitle.Text = pageSubtitle or ""
 	PageSystem.ClearContent()
 
 	local ok, err = pcall(pageBuilder)
@@ -2605,21 +2250,17 @@ function PageSystem.SwitchTo(targetPage, pageTitle, pageSubtitle, pageBuilder)
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SECTION 20: SEED SELECTION MODAL
+-- SECTION 21: SEED SELECTION MODAL
 -- ═══════════════════════════════════════════════════════════════════════
 
 local SeedModalSystem = {}
 
---[[
-    Shows a seed selection modal.
---]]
 function SeedModalSystem.Show(title, selectedTable, updateCallback)
 	local seedItems = {}
-
 	if SeedData then
 		for _, seed in ipairs(SeedData) do
 			if seed.SeedName then
-				table.insert(seedItems, {
+				table_insert(seedItems, {
 					Name = seed.SeedName,
 					Price = seed.PurchasePrice,
 					Rarity = seed.Rarity or "Common",
@@ -2629,7 +2270,6 @@ function SeedModalSystem.Show(title, selectedTable, updateCallback)
 	end
 
 	ModalSystem.Show(title, function(modalFrame, modalContent)
-		-- Search bar
 		local searchContainer = UI.Create("Frame", {
 			Parent = modalContent,
 			BackgroundColor3 = Theme.Content,
@@ -2665,7 +2305,6 @@ function SeedModalSystem.Show(title, selectedTable, updateCallback)
 			Active = true,
 		})
 
-		-- Scroll area
 		local scroll = UI.Create("ScrollingFrame", {
 			Parent = modalContent,
 			BackgroundTransparency = 1,
@@ -2815,9 +2454,6 @@ function SeedModalSystem.Show(title, selectedTable, updateCallback)
 	end, 480, 400)
 end
 
---[[
-    Shows a generic selection modal.
---]]
 function SeedModalSystem.ShowSelection(title, options, currentValue, onSelect)
 	ModalSystem.Show(title, function(modalFrame, modalContent)
 		local scroll = UI.Create("ScrollingFrame", {
@@ -2874,15 +2510,11 @@ function SeedModalSystem.ShowSelection(title, options, currentValue, onSelect)
 	end, 400, 350)
 end
 
---[[
-    Shows the seed placer configuration modal.
---]]
 function SeedModalSystem.ShowPlacerConfig()
 	local info = PlotSystem.GetDetectionInfo()
 	local partOptions = { { Label = "All (every detected column)", Value = "All" } }
-
 	for _, opt in ipairs(info.PartOptions or {}) do
-		table.insert(partOptions, { Label = opt.Label, Value = opt.Value })
+		table_insert(partOptions, { Label = opt.Label, Value = opt.Value })
 	end
 
 	local patternOptions = {
@@ -2900,7 +2532,6 @@ function SeedModalSystem.ShowPlacerConfig()
 		local labelHeight = 18
 		local gap = 8
 
-		-- Area selection
 		UI.CreateLabel(modalContent, "Planting Area", Theme.Accent, 13).Position = UDim2.new(0, 4, 0, yOffset)
 		yOffset += labelHeight + 2
 
@@ -2911,7 +2542,7 @@ function SeedModalSystem.ShowPlacerConfig()
 			Size = UDim2.new(1, -10, 0, rowHeight),
 			Position = UDim2.new(0, 5, 0, yOffset),
 			Font = Enum.Font.Gotham,
-			Text = "  " .. (Config.PlantingArea or "All") .. "  >",
+			Text = "  " .. (LRX.Config.PlantingArea or "All") .. "  >",
 			TextColor3 = Theme.TextPrimary,
 			TextSize = 12,
 			TextXAlignment = Enum.TextXAlignment.Left,
@@ -2926,11 +2557,11 @@ function SeedModalSystem.ShowPlacerConfig()
 			SeedModalSystem.ShowSelection(
 				"Select Planting Area",
 				partOptions,
-				Config.PlantingArea or "All",
+				LRX.Config.PlantingArea or "All",
 				function(value)
-					Config.PlantingArea = value
+					LRX.Config.PlantingArea = value
 					SeedPlacer.ClearCache()
-					if Config.ShowGridDots then
+					if LRX.Config.ShowGridDots then
 						GridSystem.Refresh()
 					end
 					ConfigSystem.AutoSave()
@@ -2939,7 +2570,6 @@ function SeedModalSystem.ShowPlacerConfig()
 		end))
 		yOffset += rowHeight + gap
 
-		-- Pattern selection
 		UI.CreateLabel(modalContent, "Planting Pattern", Theme.Accent, 13).Position = UDim2.new(0, 4, 0, yOffset)
 		yOffset += labelHeight + 2
 
@@ -2950,7 +2580,7 @@ function SeedModalSystem.ShowPlacerConfig()
 			Size = UDim2.new(1, -10, 0, rowHeight),
 			Position = UDim2.new(0, 5, 0, yOffset),
 			Font = Enum.Font.Gotham,
-			Text = "  " .. (Config.PlantingPattern or "LeftToRight") .. "  >",
+			Text = "  " .. (LRX.Config.PlantingPattern or "LeftToRight") .. "  >",
 			TextColor3 = Theme.TextPrimary,
 			TextSize = 12,
 			TextXAlignment = Enum.TextXAlignment.Left,
@@ -2965,11 +2595,11 @@ function SeedModalSystem.ShowPlacerConfig()
 			SeedModalSystem.ShowSelection(
 				"Select Pattern",
 				patternOptions,
-				Config.PlantingPattern or "LeftToRight",
+				LRX.Config.PlantingPattern or "LeftToRight",
 				function(value)
-					Config.PlantingPattern = value
+					LRX.Config.PlantingPattern = value
 					SeedPlacer.ClearCache()
-					if Config.ShowGridDots then
+					if LRX.Config.ShowGridDots then
 						GridSystem.Refresh()
 					end
 					ConfigSystem.AutoSave()
@@ -2986,37 +2616,29 @@ function SeedModalSystem.ShowPlacerConfig()
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SECTION 21: PAGE DEFINITIONS
+-- SECTION 22: PAGE DEFINITIONS
 -- ═══════════════════════════════════════════════════════════════════════
 
---[[
-    Home page - Seed Placer, Plot Visualizer, Auto Collect
---]]
 function Pages.Home()
 	PageSystem.SwitchTo("Home", "Home", "Game Version: ----", function()
-		-- Seed Placer Card
-		local seedPlacerCard = UI.CreateCard(State.ContentScroll, "Seed Placer", "🏠", Theme.Accent)
-
+		local seedPlacerCard = UI.CreateCard(LRX.UI.ContentScroll, "Seed Placer", "🏠", Theme.Accent)
 		Memory.TrackConnection(seedPlacerCard.Activated:Connect(function()
 			DropdownSystem.Toggle(seedPlacerCard, function(dropdownScroll)
-				Config.SelectedPlaceSeeds = Config.SelectedPlaceSeeds or {}
-				Config.PlaceAmount = Config.PlaceAmount or CONSTANTS.DEFAULT_PLACE_AMOUNT
-				Config.PlantingArea = Config.PlantingArea or "All"
-				Config.PlantingPattern = Config.PlantingPattern or "LeftToRight"
-				Config.PlantSpacing = Config.PlantSpacing or CONSTANTS.DEFAULT_PLANT_SPACING
-				Config.PlantDelay = Config.PlantDelay or CONSTANTS.DEFAULT_PLANT_DELAY
-				if Config.EnableSeedPlacer == nil then
-					Config.EnableSeedPlacer = false
+				LRX.Config.SelectedPlaceSeeds = LRX.Config.SelectedPlaceSeeds or {}
+				LRX.Config.PlaceAmount = LRX.Config.PlaceAmount or CONSTANTS.DEFAULT_PLACE_AMOUNT
+				LRX.Config.PlantingArea = LRX.Config.PlantingArea or "All"
+				LRX.Config.PlantingPattern = LRX.Config.PlantingPattern or "LeftToRight"
+				LRX.Config.PlantSpacing = LRX.Config.PlantSpacing or CONSTANTS.DEFAULT_PLANT_SPACING
+				LRX.Config.PlantDelay = LRX.Config.PlantDelay or CONSTANTS.DEFAULT_PLANT_DELAY
+				if LRX.Config.EnableSeedPlacer == nil then
+					LRX.Config.EnableSeedPlacer = false
 				end
 
 				UI.CreateLabel(dropdownScroll, "Seed Placer", Theme.Accent, 12)
-
 				local selectedLabel = UI.CreateLabel(dropdownScroll, "Selected: None", Theme.TextMuted, 10)
-
 				local function UpdateSelectedLabel()
-					selectedLabel.Text = Utils.FormatSelectedSeeds(Config.SelectedPlaceSeeds, 10)
+					selectedLabel.Text = Utils.FormatSelectedSeeds(LRX.Config.SelectedPlaceSeeds, 10)
 				end
-
 				UpdateSelectedLabel()
 
 				local selectSeedsBtn = UI.CreateButton(
@@ -3026,7 +2648,7 @@ function Pages.Home()
 					100,
 					30,
 					function()
-						SeedModalSystem.Show("Select Seeds", Config.SelectedPlaceSeeds, UpdateSelectedLabel)
+						SeedModalSystem.Show("Select Seeds", LRX.Config.SelectedPlaceSeeds, UpdateSelectedLabel)
 					end
 				)
 				selectSeedsBtn.Size = UDim2.new(1, -8, 0, 30)
@@ -3040,7 +2662,7 @@ function Pages.Home()
 				local selectAllBtn = UI.CreateButton(actionFrame, "Select All", Theme.Accent, 100, 30, function()
 					for _, seed in ipairs(SeedData or {}) do
 						if seed.SeedName then
-							Config.SelectedPlaceSeeds[seed.SeedName] = true
+							LRX.Config.SelectedPlaceSeeds[seed.SeedName] = true
 						end
 					end
 					ConfigSystem.AutoSave()
@@ -3055,7 +2677,7 @@ function Pages.Home()
 					100,
 					30,
 					function()
-						table.clear(Config.SelectedPlaceSeeds)
+						table_clear(LRX.Config.SelectedPlaceSeeds)
 						ConfigSystem.AutoSave()
 						UpdateSelectedLabel()
 					end
@@ -3090,10 +2712,15 @@ function Pages.Home()
 				end
 
 				UI.CreateLabel(dropdownScroll, "Current Settings:", Theme.Accent, 12)
-				UI.CreateLabel(dropdownScroll, "  Area: " .. (Config.PlantingArea or "All"), Theme.TextSecondary, 11)
 				UI.CreateLabel(
 					dropdownScroll,
-					"  Pattern: " .. (Config.PlantingPattern or "LeftToRight"),
+					"  Area: " .. (LRX.Config.PlantingArea or "All"),
+					Theme.TextSecondary,
+					11
+				)
+				UI.CreateLabel(
+					dropdownScroll,
+					"  Pattern: " .. (LRX.Config.PlantingPattern or "LeftToRight"),
 					Theme.TextSecondary,
 					11
 				)
@@ -3117,7 +2744,6 @@ function Pages.Home()
 					Size = UDim2.new(1, -8, 0, 50),
 				})
 
-				-- Spacing input
 				local spacingContainer = UI.Create("Frame", {
 					Parent = settingsRow,
 					BackgroundTransparency = 1,
@@ -3140,7 +2766,7 @@ function Pages.Home()
 					Position = UDim2.new(0, 0, 0, 18),
 					Size = UDim2.new(1, 0, 0, 26),
 					Font = Enum.Font.Gotham,
-					Text = tostring(Config.PlantSpacing),
+					Text = tostring(LRX.Config.PlantSpacing),
 					PlaceholderText = "1",
 					TextColor3 = Theme.TextPrimary,
 					PlaceholderColor3 = Theme.TextMuted,
@@ -3151,16 +2777,15 @@ function Pages.Home()
 				Memory.TrackConnection(spacingBox.FocusLost:Connect(function()
 					local val = tonumber(spacingBox.Text)
 					if val and val >= 0.1 then
-						Config.PlantSpacing = val
+						LRX.Config.PlantSpacing = val
 						SeedPlacer.ClearCache()
-						if Config.ShowGridDots then
+						if LRX.Config.ShowGridDots then
 							GridSystem.Refresh()
 						end
 						ConfigSystem.AutoSave()
 					end
 				end))
 
-				-- Delay input
 				local delayContainer = UI.Create("Frame", {
 					Parent = settingsRow,
 					BackgroundTransparency = 1,
@@ -3184,7 +2809,7 @@ function Pages.Home()
 					Position = UDim2.new(0, 0, 0, 18),
 					Size = UDim2.new(1, 0, 0, 26),
 					Font = Enum.Font.Gotham,
-					Text = tostring(Config.PlantDelay),
+					Text = tostring(LRX.Config.PlantDelay),
 					PlaceholderText = "0.05",
 					TextColor3 = Theme.TextPrimary,
 					PlaceholderColor3 = Theme.TextMuted,
@@ -3195,12 +2820,11 @@ function Pages.Home()
 				Memory.TrackConnection(delayBox.FocusLost:Connect(function()
 					local val = tonumber(delayBox.Text)
 					if val and val >= 0 then
-						Config.PlantDelay = val
+						LRX.Config.PlantDelay = val
 						ConfigSystem.AutoSave()
 					end
 				end))
 
-				-- Amount input
 				local amountContainer = UI.Create("Frame", {
 					Parent = settingsRow,
 					BackgroundTransparency = 1,
@@ -3224,7 +2848,7 @@ function Pages.Home()
 					Position = UDim2.new(0, 0, 0, 18),
 					Size = UDim2.new(1, 0, 0, 26),
 					Font = Enum.Font.Gotham,
-					Text = tostring(Config.PlaceAmount),
+					Text = tostring(LRX.Config.PlaceAmount),
 					PlaceholderText = "10",
 					TextColor3 = Theme.TextPrimary,
 					PlaceholderColor3 = Theme.TextMuted,
@@ -3235,25 +2859,22 @@ function Pages.Home()
 				Memory.TrackConnection(amountBox.FocusLost:Connect(function()
 					local val = tonumber(amountBox.Text)
 					if val and val > 0 then
-						Config.PlaceAmount = math.floor(val)
+						LRX.Config.PlaceAmount = math_floor(val)
 						ConfigSystem.AutoSave()
 					end
 				end))
 
-				UI.CreateToggle(dropdownScroll, "Enable Seed Placer", Config.EnableSeedPlacer, function(state)
-					Config.EnableSeedPlacer = state
+				UI.CreateToggle(dropdownScroll, "Enable Seed Placer", LRX.Config.EnableSeedPlacer, function(state)
+					LRX.Config.EnableSeedPlacer = state
 					ConfigSystem.AutoSave()
 				end)
 			end)
 		end))
 
-		-- Plot Visualizer Card
-		local plotVisualizerCard = UI.CreateCard(State.ContentScroll, "Plot Visualizer", "✨", Theme.AccentCyan)
-
+		local plotVisualizerCard = UI.CreateCard(LRX.UI.ContentScroll, "Plot Visualizer", "✨", Theme.AccentCyan)
 		Memory.TrackConnection(plotVisualizerCard.Activated:Connect(function()
 			DropdownSystem.Toggle(plotVisualizerCard, function(dropdownScroll)
 				UI.CreateLabel(dropdownScroll, "Plot Visualizer", Theme.AccentCyan, 12)
-
 				local info = PlotSystem.GetDetectionInfo()
 				UI.CreateLabel(
 					dropdownScroll,
@@ -3285,8 +2906,8 @@ function Pages.Home()
 				)
 				laserBtn.Size = UDim2.new(1, -8, 0, 32)
 
-				UI.CreateToggle(dropdownScroll, "Show Grid Dots", Config.ShowGridDots, function(state)
-					Config.ShowGridDots = state
+				UI.CreateToggle(dropdownScroll, "Show Grid Dots", LRX.Config.ShowGridDots, function(state)
+					LRX.Config.ShowGridDots = state
 					ConfigSystem.AutoSave()
 					if state then
 						GridSystem.Refresh()
@@ -3304,7 +2925,7 @@ function Pages.Home()
 					function()
 						LaserSystem.Clear()
 						GridSystem.Clear()
-						Config.ShowGridDots = false
+						LRX.Config.ShowGridDots = false
 						ConfigSystem.AutoSave()
 						NotificationSystem.Notify("Plot Visualizer", "All visuals cleared", "Info", 2)
 					end
@@ -3313,37 +2934,31 @@ function Pages.Home()
 			end)
 		end))
 
-		-- Auto Collect Fruits Card (placeholder)
-		local autoCollectCard = UI.CreateCard(State.ContentScroll, "Auto Collect Fruits", "🍎", Theme.Accent)
+		local autoCollectCard = UI.CreateCard(LRX.UI.ContentScroll, "Auto Collect Fruits", "🍎", Theme.Accent)
 		Memory.TrackConnection(autoCollectCard.Activated:Connect(function()
 			-- Placeholder for future implementation
 		end))
 	end)
 end
 
---[[
-    Shop page - Auto Buy Seeds
---]]
 function Pages.Shop()
 	PageSystem.SwitchTo("Shop", "Shop", "ShopFeatures", function()
-		local seedShopCard = UI.CreateCard(State.ContentScroll, "Seed Shop", "🌱", Theme.Accent)
-
+		local seedShopCard = UI.CreateCard(LRX.UI.ContentScroll, "Seed Shop", "🌱", Theme.Accent)
 		Memory.TrackConnection(seedShopCard.Activated:Connect(function()
 			DropdownSystem.Toggle(seedShopCard, function(dropdownScroll)
 				UI.CreateLabel(dropdownScroll, "Auto Buy Seeds", Theme.Accent, 12)
 
 				local selectedLabel = UI.CreateLabel(
 					dropdownScroll,
-					"Selected: " .. Utils.FormatSelectedSeeds(Config.SelectedSeeds, 10),
+					"Selected: " .. Utils.FormatSelectedSeeds(LRX.Config.SelectedSeeds, 10),
 					Theme.TextMuted,
 					10
 				)
 				selectedLabel.Name = "SelectedLabel"
 
 				local function UpdateSelectedLabel()
-					selectedLabel.Text = Utils.FormatSelectedSeeds(Config.SelectedSeeds, 10)
+					selectedLabel.Text = Utils.FormatSelectedSeeds(LRX.Config.SelectedSeeds, 10)
 				end
-
 				UpdateSelectedLabel()
 
 				local selectSeedsBtn = UI.CreateButton(
@@ -3353,7 +2968,7 @@ function Pages.Shop()
 					100,
 					30,
 					function()
-						SeedModalSystem.Show("Select Seeds", Config.SelectedSeeds, UpdateSelectedLabel)
+						SeedModalSystem.Show("Select Seeds", LRX.Config.SelectedSeeds, UpdateSelectedLabel)
 					end
 				)
 				selectSeedsBtn.Size = UDim2.new(1, -8, 0, 30)
@@ -3368,7 +2983,7 @@ function Pages.Shop()
 					if SeedData then
 						for _, seed in ipairs(SeedData) do
 							if seed.SeedName then
-								Config.SelectedSeeds[seed.SeedName] = true
+								LRX.Config.SelectedSeeds[seed.SeedName] = true
 							end
 						end
 					end
@@ -3384,7 +2999,7 @@ function Pages.Shop()
 					100,
 					30,
 					function()
-						table.clear(Config.SelectedSeeds)
+						table_clear(LRX.Config.SelectedSeeds)
 						ConfigSystem.AutoSave()
 						UpdateSelectedLabel()
 					end
@@ -3392,8 +3007,8 @@ function Pages.Shop()
 				clearAllBtn.Position = UDim2.new(0.5, 3, 0, 0)
 				clearAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
 
-				UI.CreateToggle(dropdownScroll, "Enable Auto Buy", Config.EnableSeedShop, function(state)
-					Config.EnableSeedShop = state
+				UI.CreateToggle(dropdownScroll, "Enable Auto Buy", LRX.Config.EnableSeedShop, function(state)
+					LRX.Config.EnableSeedShop = state
 					ConfigSystem.AutoSave()
 				end)
 			end)
@@ -3401,12 +3016,9 @@ function Pages.Shop()
 	end)
 end
 
---[[
-    Account page - User Profile
---]]
 function Pages.Account()
 	PageSystem.SwitchTo("Account", "Account", "User Profile", function()
-		local card = UI.CreateCard(State.ContentScroll, "Account Info", "👤", Theme.Accent)
+		local card = UI.CreateCard(LRX.UI.ContentScroll, "Account Info", "👤", Theme.Accent)
 		Memory.TrackConnection(card.Activated:Connect(function()
 			DropdownSystem.Toggle(card, function(dropdownScroll)
 				UI.CreateLabel(dropdownScroll, "Username: " .. Player.Name, Theme.TextPrimary, 12)
@@ -3416,57 +3028,48 @@ function Pages.Account()
 	end)
 end
 
---[[
-    Premium page - Placeholder
---]]
 function Pages.Premium()
 	PageSystem.SwitchTo("Premium", "Premium", "Premium Features", function() end)
 end
 
---[[
-    Settings page - Preferences
---]]
 function Pages.Settings()
 	PageSystem.SwitchTo("Settings", "Settings", "Preferences", function()
-		UI.CreateLabel(State.ContentScroll, "UI Settings", Theme.Accent, 14)
+		UI.CreateLabel(LRX.UI.ContentScroll, "UI Settings", Theme.Accent, 14)
 
-		UI.CreateToggle(State.ContentScroll, "Disable Animations", Config.DisableAnimations, function(state)
-			Config.DisableAnimations = state
+		UI.CreateToggle(LRX.UI.ContentScroll, "Disable Animations", LRX.Config.DisableAnimations, function(state)
+			LRX.Config.DisableAnimations = state
 			ConfigSystem.AutoSave()
 		end)
 
-		UI.CreateToggle(State.ContentScroll, "Reduce Effects", Config.ReduceEffects, function(state)
-			Config.ReduceEffects = state
+		UI.CreateToggle(LRX.UI.ContentScroll, "Reduce Effects", LRX.Config.ReduceEffects, function(state)
+			LRX.Config.ReduceEffects = state
 			ConfigSystem.AutoSave()
 		end)
 
-		UI.CreateLabel(State.ContentScroll, " ", Theme.TextSecondary, 8)
+		UI.CreateLabel(LRX.UI.ContentScroll, " ", Theme.TextSecondary, 8)
 
-		UI.CreateButton(State.ContentScroll, "Save Now", Theme.AccentGreen, 120, 32, function()
+		UI.CreateButton(LRX.UI.ContentScroll, "Save Now", Theme.AccentGreen, 120, 32, function()
 			ConfigSystem.Save()
 		end)
 
-		UI.CreateButton(State.ContentScroll, "Load Config", Theme.Accent, 120, 32, function()
+		UI.CreateButton(LRX.UI.ContentScroll, "Load Config", Theme.Accent, 120, 32, function()
 			ConfigSystem.Load()
 		end)
 
-		UI.CreateLabel(State.ContentScroll, " ", Theme.TextSecondary, 8)
+		UI.CreateLabel(LRX.UI.ContentScroll, " ", Theme.TextSecondary, 8)
 
-		UI.CreateButton(State.ContentScroll, "Reset Config", Theme.AccentRed, 120, 32, function()
+		UI.CreateButton(LRX.UI.ContentScroll, "Reset Config", Theme.AccentRed, 120, 32, function()
 			ConfigSystem.Reset()
 		end)
 	end)
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SECTION 22: UI INITIALIZATION
+-- SECTION 23: UI INITIALIZATION
 -- ═══════════════════════════════════════════════════════════════════════
 
 local UIInit = {}
 
---[[
-    Creates the ScreenGui.
---]]
 function UIInit.CreateScreenGui()
 	local screenGui = Instance.new("ScreenGui")
 	screenGui.Name = "LRX_Hub"
@@ -3474,22 +3077,18 @@ function UIInit.CreateScreenGui()
 	screenGui.ResetOnSpawn = false
 	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	screenGui.DisplayOrder = 999
-
-	State.ScreenGui = screenGui
+	LRX.UI.ScreenGui = screenGui
 	return screenGui
 end
 
---[[
-    Creates the main frame.
---]]
 function UIInit.CreateMainFrame(screenGui)
 	local mainFrame = UI.Create("Frame", {
 		Name = "MainFrame",
 		Parent = screenGui,
 		BackgroundColor3 = Theme.Background,
 		BorderSizePixel = 0,
-		Position = UDim2.new(0.5, -Config.WindowWidth / 2, 0.5, -Config.WindowHeight / 2),
-		Size = UDim2.new(0, Config.WindowWidth, 0, Config.WindowHeight),
+		Position = UDim2.new(0.5, -LRX.Config.WindowWidth / 2, 0.5, -LRX.Config.WindowHeight / 2),
+		Size = UDim2.new(0, LRX.Config.WindowWidth, 0, LRX.Config.WindowHeight),
 		ClipsDescendants = false,
 		Active = true,
 		ZIndex = CONSTANTS.Z_BASE,
@@ -3497,27 +3096,27 @@ function UIInit.CreateMainFrame(screenGui)
 	UI.AddCorner(mainFrame, 8)
 	UI.AddStroke(mainFrame, Theme.Border, 2)
 
-	-- Restore saved position/size
-	if Config.WindowPosition then
+	if LRX.Config.WindowPosition then
 		mainFrame.Position = UDim2.new(
-			Config.WindowPosition[1],
-			Config.WindowPosition[2],
-			Config.WindowPosition[3],
-			Config.WindowPosition[4]
+			LRX.Config.WindowPosition[1],
+			LRX.Config.WindowPosition[2],
+			LRX.Config.WindowPosition[3],
+			LRX.Config.WindowPosition[4]
 		)
 	end
-	if Config.WindowSize then
-		mainFrame.Size =
-			UDim2.new(Config.WindowSize[1], Config.WindowSize[2], Config.WindowSize[3], Config.WindowSize[4])
+	if LRX.Config.WindowSize then
+		mainFrame.Size = UDim2.new(
+			LRX.Config.WindowSize[1],
+			LRX.Config.WindowSize[2],
+			LRX.Config.WindowSize[3],
+			LRX.Config.WindowSize[4]
+		)
 	end
 
-	State.MainFrame = mainFrame
+	LRX.UI.MainFrame = mainFrame
 	return mainFrame
 end
 
---[[
-    Creates the toggle button.
---]]
 function UIInit.CreateToggleButton(screenGui)
 	local btn = UI.Create("TextButton", {
 		Name = "MainIcon",
@@ -3527,7 +3126,7 @@ function UIInit.CreateToggleButton(screenGui)
 		Position = UDim2.new(0, 8, 0, 8),
 		Size = UDim2.new(0, 60, 0, 32),
 		Font = Enum.Font.GothamBold,
-		Text = Config.ToggleButtonText,
+		Text = LRX.Config.ToggleButtonText,
 		TextColor3 = Theme.AccentYellow,
 		TextSize = 13,
 		ZIndex = CONSTANTS.Z_BASE,
@@ -3537,57 +3136,53 @@ function UIInit.CreateToggleButton(screenGui)
 	UI.AddCorner(btn, 6)
 	UI.AddStroke(btn, Theme.Border, 1)
 
-	-- Dragging
 	Memory.TrackConnection(btn.InputBegan:Connect(function(input)
 		if
 			input.UserInputType == Enum.UserInputType.MouseButton1
 			or input.UserInputType == Enum.UserInputType.Touch
 		then
-			State.IsDraggingToggle = true
-			State.ToggleStartPos = input.Position
-			State.ToggleBtnStart = btn.Position
+			LRX.State.IsDraggingToggle = true
+			LRX.State.ToggleStartPos = input.Position
+			LRX.State.ToggleBtnStart = btn.Position
 		end
 	end))
 
 	Memory.TrackConnection(Services.UserInputService.InputChanged:Connect(function(input)
 		if
-			State.IsDraggingToggle
+			LRX.State.IsDraggingToggle
 			and (
 				input.UserInputType == Enum.UserInputType.MouseMovement
 				or input.UserInputType == Enum.UserInputType.Touch
 			)
 		then
-			local delta = input.Position - State.ToggleStartPos
+			local delta = input.Position - LRX.State.ToggleStartPos
 			btn.Position = UDim2.new(
-				State.ToggleBtnStart.X.Scale,
-				State.ToggleBtnStart.X.Offset + delta.X,
-				State.ToggleBtnStart.Y.Scale,
-				State.ToggleBtnStart.Y.Offset + delta.Y
+				LRX.State.ToggleBtnStart.X.Scale,
+				LRX.State.ToggleBtnStart.X.Offset + delta.X,
+				LRX.State.ToggleBtnStart.Y.Scale,
+				LRX.State.ToggleBtnStart.Y.Offset + delta.Y
 			)
 		end
 	end))
 
 	Memory.TrackConnection(Services.UserInputService.InputEnded:Connect(function(input)
-		if State.IsDraggingToggle then
-			local delta = input.Position - State.ToggleStartPos
-			State.IsDraggingToggle = false
-			if math.abs(delta.X) <= 8 and math.abs(delta.Y) <= 8 then
-				State.MainFrame.Visible = not State.MainFrame.Visible
+		if LRX.State.IsDraggingToggle then
+			local delta = input.Position - LRX.State.ToggleStartPos
+			LRX.State.IsDraggingToggle = false
+			if math_abs(delta.X) <= 8 and math_abs(delta.Y) <= 8 then
+				LRX.UI.MainFrame.Visible = not LRX.UI.MainFrame.Visible
 				TweenSystem.Tween(btn, {
-					BackgroundColor3 = State.MainFrame.Visible and Color3.fromRGB(15, 15, 15)
+					BackgroundColor3 = LRX.UI.MainFrame.Visible and Color3.fromRGB(15, 15, 15)
 						or Color3.fromRGB(30, 30, 30),
 				}, 0.2)
 			end
 		end
 	end))
 
-	State.MainIcon = btn
+	LRX.UI.MainIcon = btn
 	return btn
 end
 
---[[
-    Creates the top bar.
---]]
 function UIInit.CreateTopBar(mainFrame, screenGui)
 	local topBar = UI.Create("Frame", {
 		Name = "TopBar",
@@ -3640,10 +3235,9 @@ function UIInit.CreateTopBar(mainFrame, screenGui)
 		ZIndex = CONSTANTS.Z_BASE + 1,
 	})
 
-	State.PageTitle = pageTitle
-	State.PageSubtitle = pageSubtitle
+	LRX.UI.PageTitle = pageTitle
+	LRX.UI.PageSubtitle = pageSubtitle
 
-	-- Search bar
 	local searchFrame = UI.Create("Frame", {
 		Name = "SearchFrame",
 		Parent = topBar,
@@ -3684,10 +3278,9 @@ function UIInit.CreateTopBar(mainFrame, screenGui)
 		Active = true,
 	})
 
-	State.SearchFrame = searchFrame
-	State.SearchBox = searchBox
+	LRX.UI.SearchFrame = searchFrame
+	LRX.UI.SearchBox = searchBox
 
-	-- Suggestions frame
 	local suggestFrame = UI.Create("Frame", {
 		Name = "Suggestions",
 		Parent = screenGui,
@@ -3723,16 +3316,15 @@ function UIInit.CreateTopBar(mainFrame, screenGui)
 		SortOrder = Enum.SortOrder.LayoutOrder,
 	})
 
-	State.SuggestFrame = suggestFrame
-	State.SuggestScroll = suggestScroll
+	LRX.UI.SuggestFrame = suggestFrame
+	LRX.UI.SuggestScroll = suggestScroll
 
-	-- Search events
 	Memory.TrackConnection(searchBox:GetPropertyChangedSignal("Text"):Connect(SearchSystem.UpdateSuggestions))
 	Memory.TrackConnection(searchBox.FocusLost:Connect(function()
 		if searchBox.Text == "" then
 			searchBox.Text = "Search"
 		end
-		task.wait(0.2)
+		task_wait(0.2)
 		suggestFrame.Visible = false
 	end))
 	Memory.TrackConnection(searchBox.Focused:Connect(function()
@@ -3741,7 +3333,6 @@ function UIInit.CreateTopBar(mainFrame, screenGui)
 		end
 	end))
 
-	-- Close button
 	local closeBtn = UI.Create("TextButton", {
 		Name = "CloseBtn",
 		Parent = topBar,
@@ -3765,28 +3356,25 @@ function UIInit.CreateTopBar(mainFrame, screenGui)
 	end))
 
 	Memory.TrackConnection(closeBtn.Activated:Connect(function()
-		Config.WindowPosition = {
+		LRX.Config.WindowPosition = {
 			mainFrame.Position.X.Scale,
 			mainFrame.Position.X.Offset,
 			mainFrame.Position.Y.Scale,
 			mainFrame.Position.Y.Offset,
 		}
-		Config.WindowSize = {
+		LRX.Config.WindowSize = {
 			mainFrame.Size.X.Scale,
 			mainFrame.Size.X.Offset,
 			mainFrame.Size.Y.Scale,
 			mainFrame.Size.Y.Offset,
 		}
 		ConfigSystem.Save()
-		Memory.FullCleanup()
+		LRX.Functions.FullCleanup()
 	end))
 
 	return topBar
 end
 
---[[
-    Creates the sidebar.
---]]
 function UIInit.CreateSidebar(mainFrame)
 	local sidebar = UI.Create("Frame", {
 		Name = "Sidebar",
@@ -3794,7 +3382,7 @@ function UIInit.CreateSidebar(mainFrame)
 		BackgroundColor3 = Theme.Sidebar,
 		BorderSizePixel = 0,
 		Position = UDim2.new(0, 2, 0, CONSTANTS.TOPBAR_HEIGHT + 2),
-		Size = UDim2.new(0, Config.SidebarWidth, 1, -CONSTANTS.TOPBAR_HEIGHT - 4),
+		Size = UDim2.new(0, LRX.Config.SidebarWidth, 1, -CONSTANTS.TOPBAR_HEIGHT - 4),
 		ZIndex = CONSTANTS.Z_BASE,
 	})
 
@@ -3818,9 +3406,8 @@ function UIInit.CreateSidebar(mainFrame)
 		SortOrder = Enum.SortOrder.LayoutOrder,
 	})
 
-	State.SidebarScroll = sidebarScroll
+	LRX.UI.SidebarScroll = sidebarScroll
 
-	-- Auto-update canvas size
 	Memory.TrackConnection(sidebarLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 		sidebarScroll.CanvasSize = UDim2.new(0, 0, 0, sidebarLayout.AbsoluteContentSize.Y + 10)
 	end))
@@ -3828,17 +3415,14 @@ function UIInit.CreateSidebar(mainFrame)
 	return sidebar, sidebarScroll, sidebarLayout
 end
 
---[[
-    Creates the content area.
---]]
 function UIInit.CreateContent(mainFrame)
 	local contentFrame = UI.Create("Frame", {
 		Name = "ContentFrame",
 		Parent = mainFrame,
 		BackgroundColor3 = Theme.Content,
 		BorderSizePixel = 0,
-		Position = UDim2.new(0, Config.SidebarWidth, 0, CONSTANTS.TOPBAR_HEIGHT + 2),
-		Size = UDim2.new(1, -Config.SidebarWidth, 1, -CONSTANTS.TOPBAR_HEIGHT - 4),
+		Position = UDim2.new(0, LRX.Config.SidebarWidth, 0, CONSTANTS.TOPBAR_HEIGHT + 2),
+		Size = UDim2.new(1, -LRX.Config.SidebarWidth, 1, -CONSTANTS.TOPBAR_HEIGHT - 4),
 		ZIndex = CONSTANTS.Z_BASE,
 		ClipsDescendants = true,
 	})
@@ -3864,19 +3448,15 @@ function UIInit.CreateContent(mainFrame)
 		SortOrder = Enum.SortOrder.LayoutOrder,
 	})
 
-	-- Auto-update canvas size
 	Memory.TrackConnection(contentList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 		contentScroll.CanvasSize = UDim2.new(0, 0, 0, contentList.AbsoluteContentSize.Y + 20)
 	end))
 	contentScroll.CanvasSize = UDim2.new(0, 0, 0, contentList.AbsoluteContentSize.Y + 20)
 
-	State.ContentScroll = contentScroll
+	LRX.UI.ContentScroll = contentScroll
 	return contentFrame, contentScroll
 end
 
---[[
-    Creates the resize handle.
---]]
 function UIInit.CreateResizeHandle(mainFrame)
 	local resizeHandle = UI.Create("Frame", {
 		Name = "ResizeHandle",
@@ -3911,7 +3491,7 @@ function UIInit.CreateResizeHandle(mainFrame)
 	})
 
 	Memory.TrackConnection(resizeBtn.InputBegan:Connect(function(input)
-		if State.ModalOpen then
+		if LRX.State.ModalOpen then
 			return
 		end
 		if
@@ -3930,9 +3510,9 @@ function UIInit.CreateResizeHandle(mainFrame)
 				local delta = mouse - Vector2.new(startPos.X, startPos.Y)
 				mainFrame.Size = UDim2.new(
 					0,
-					math.max(Config.MinWindowWidth, startSize.X.Offset + delta.X),
+					math_max(LRX.Config.MinWindowWidth, startSize.X.Offset + delta.X),
 					0,
-					math.max(Config.MinWindowHeight, startSize.Y.Offset + delta.Y)
+					math_max(LRX.Config.MinWindowHeight, startSize.Y.Offset + delta.Y)
 				)
 			end))
 
@@ -3947,13 +3527,10 @@ function UIInit.CreateResizeHandle(mainFrame)
 		end
 	end))
 
-	State.ResizeHandle = resizeHandle
+	LRX.UI.ResizeHandle = resizeHandle
 	return resizeHandle
 end
 
---[[
-    Sets up sidebar buttons.
---]]
 function UIInit.SetupSidebar(sidebarScroll)
 	local sidebarItems = {
 		{ Name = "Account", Icon = "👤", Color = Theme.Accent, Page = Pages.Account },
@@ -3982,8 +3559,8 @@ function UIInit.SetupSidebar(sidebarScroll)
 		})
 		UI.AddCorner(sidebarBtn, 4)
 
-		State.SidebarButtons[item.Name] = function()
-			State.CurrentPage = item.Name
+		LRX.State.SidebarButtons[item.Name] = function()
+			LRX.State.CurrentPage = item.Name
 			for _, child in pairs(sidebarScroll:GetChildren()) do
 				if child:IsA("TextButton") then
 					local isSelected = (child.Name == item.Name)
@@ -3994,69 +3571,63 @@ function UIInit.SetupSidebar(sidebarScroll)
 		end
 
 		Memory.TrackConnection(sidebarBtn.MouseEnter:Connect(function()
-			if State.CurrentPage ~= item.Name then
+			if LRX.State.CurrentPage ~= item.Name then
 				TweenSystem.Tween(sidebarBtn, { BackgroundColor3 = Theme.CardHover }, 0.15)
 			end
 		end))
 		Memory.TrackConnection(sidebarBtn.MouseLeave:Connect(function()
-			if State.CurrentPage ~= item.Name then
+			if LRX.State.CurrentPage ~= item.Name then
 				TweenSystem.Tween(sidebarBtn, { BackgroundColor3 = Theme.Sidebar }, 0.15)
 			end
 		end))
 
-		Memory.TrackConnection(sidebarBtn.Activated:Connect(State.SidebarButtons[item.Name]))
-		SearchSystem.Register(item.Name, item.Name, item.Icon, State.SidebarButtons[item.Name])
+		Memory.TrackConnection(sidebarBtn.Activated:Connect(LRX.State.SidebarButtons[item.Name]))
+		SearchSystem.Register(item.Name, item.Name, item.Icon, LRX.State.SidebarButtons[item.Name])
 	end
 
 	sidebarScroll.CanvasSize = UDim2.new(0, 0, 0, #sidebarItems * 39 + 10)
 end
 
---[[
-    Sets up window dragging.
---]]
 function UIInit.SetupWindowDrag(mainFrame)
 	Memory.TrackConnection(mainFrame.InputBegan:Connect(function(input)
-		if State.ModalOpen then
+		if LRX.State.ModalOpen then
 			return
 		end
 		if
 			input.UserInputType == Enum.UserInputType.MouseButton1
 			or input.UserInputType == Enum.UserInputType.Touch
 		then
-			State.IsDraggingWindow = true
-			State.DragStartPos = input.Position
-			State.FrameStartPos = mainFrame.Position
+			LRX.State.IsDraggingWindow = true
+			LRX.State.DragStartPos = input.Position
+			LRX.State.FrameStartPos = mainFrame.Position
 		end
 	end))
 
 	Memory.TrackConnection(Services.UserInputService.InputChanged:Connect(function(input)
 		if
-			State.IsDraggingWindow
+			LRX.State.IsDraggingWindow
 			and (
 				input.UserInputType == Enum.UserInputType.MouseMovement
 				or input.UserInputType == Enum.UserInputType.Touch
 			)
 		then
-			local delta = input.Position - State.DragStartPos
+			local delta = input.Position - LRX.State.DragStartPos
 			mainFrame.Position = UDim2.new(
-				State.FrameStartPos.X.Scale,
-				State.FrameStartPos.X.Offset + delta.X,
-				State.FrameStartPos.Y.Scale,
-				State.FrameStartPos.Y.Offset + delta.Y
+				LRX.State.FrameStartPos.X.Scale,
+				LRX.State.FrameStartPos.X.Offset + delta.X,
+				LRX.State.FrameStartPos.Y.Scale,
+				LRX.State.FrameStartPos.Y.Offset + delta.Y
 			)
 		end
 	end))
 
 	Memory.TrackConnection(Services.UserInputService.InputEnded:Connect(function(input)
-		if State.IsDraggingWindow then
-			State.IsDraggingWindow = false
+		if LRX.State.IsDraggingWindow then
+			LRX.State.IsDraggingWindow = false
 		end
 	end))
 end
 
---[[
-    Sets up global input handler for dropdown/suggestion closing.
---]]
 function UIInit.SetupGlobalInput()
 	Memory.TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		if gameProcessed then
@@ -4079,17 +3650,17 @@ function UIInit.SetupGlobalInput()
 			return pos.X >= ap.X and pos.X <= ap.X + as.X and pos.Y >= ap.Y and pos.Y <= ap.Y + as.Y
 		end
 
-		if State.SuggestFrame and State.SuggestFrame.Visible then
-			if not isInside(State.SearchFrame) and not isInside(State.SuggestFrame) then
-				State.SuggestFrame.Visible = false
+		if LRX.UI.SuggestFrame and LRX.UI.SuggestFrame.Visible then
+			if not isInside(LRX.UI.SearchFrame) and not isInside(LRX.UI.SuggestFrame) then
+				LRX.UI.SuggestFrame.Visible = false
 			end
 		end
 
-		if State.ActiveDropdownFrame and State.ActiveDropdownFrame.Parent then
-			if isInside(State.ActiveDropdownFrame) then
+		if LRX.State.ActiveDropdownFrame and LRX.State.ActiveDropdownFrame.Parent then
+			if isInside(LRX.State.ActiveDropdownFrame) then
 				return
 			end
-			if State.ActiveDropdownCard and isInside(State.ActiveDropdownCard) then
+			if LRX.State.ActiveDropdownCard and isInside(LRX.State.ActiveDropdownCard) then
 				return
 			end
 			DropdownSystem.Close()
@@ -4097,87 +3668,75 @@ function UIInit.SetupGlobalInput()
 	end))
 end
 
---[[
-    Applies mobile sizing if on a touch device.
---]]
 function UIInit.ApplyMobileSizing()
 	local success, err = pcall(function()
 		if not Services.UserInputService.TouchEnabled then
 			return
 		end
-
 		local camera = Services.Workspace.CurrentCamera
 		local viewport = camera and camera.ViewportSize
 		if not viewport or viewport.X < 100 or viewport.Y < 100 then
 			viewport = Vector2.new(800, 600)
 		end
-
-		local w = math.min(Config.WindowWidth, viewport.X - CONSTANTS.MOBILE_PADDING_X)
-		local h = math.min(Config.WindowHeight, viewport.Y - CONSTANTS.MOBILE_PADDING_Y)
-
-		w = math.max(w, Config.MinWindowWidth)
-		h = math.max(h, Config.MinWindowHeight)
-
-		State.MainFrame.Size = UDim2.new(0, w, 0, h)
-		State.MainFrame.Position = UDim2.new(0.5, -w / 2, 0.5, -h / 2)
-
-		print(string.format("[LRX_Hub] Mobile sizing applied: %dx%d", w, h))
+		local w = math_min(LRX.Config.WindowWidth, viewport.X - CONSTANTS.MOBILE_PADDING_X)
+		local h = math_min(LRX.Config.WindowHeight, viewport.Y - CONSTANTS.MOBILE_PADDING_Y)
+		w = math_max(w, LRX.Config.MinWindowWidth)
+		h = math_max(h, LRX.Config.MinWindowHeight)
+		LRX.UI.MainFrame.Size = UDim2.new(0, w, 0, h)
+		LRX.UI.MainFrame.Position = UDim2.new(0.5, -w / 2, 0.5, -h / 2)
+		print(string_format("[LRX_Hub] Mobile sizing applied: %dx%d", w, h))
 	end)
-
 	if not success then
 		warn("[LRX_Hub] Mobile sizing failed:", err)
 	end
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SECTION 23: BACKGROUND TASKS
+-- SECTION 24: BACKGROUND TASKS
 -- ═══════════════════════════════════════════════════════════════════════
 
 local BackgroundTasks = {}
 
---[[
-    Starts the seed placer background loop.
---]]
 function BackgroundTasks.StartSeedPlacerLoop()
-	table.insert(
-		State.Tasks,
-		task.spawn(function()
-			while State.ScriptRunning do
-				task.wait(CONSTANTS.PLANT_CYCLE_INTERVAL)
-				if Config.EnableSeedPlacer then
-					local ok, err = pcall(function()
-						SeedPlacer.RunCycle()
-					end)
-					if not ok then
-						warn("[SeedPlacer Loop Error]", err)
-					end
+	Memory.TrackThread(task_spawn(function()
+		while LRX.State.ScriptRunning do
+			task_wait(CONSTANTS.PLANT_CYCLE_INTERVAL)
+			if LRX.Config.EnableSeedPlacer then
+				local ok, err = pcall(function()
+					SeedPlacer.RunCycle()
+				end)
+				if not ok then
+					warn("[SeedPlacer Loop Error]", err)
 				end
 			end
-		end)
-	)
+		end
+	end))
 end
 
---[[
-    Starts the auto-buy background loop.
---]]
 function BackgroundTasks.StartAutoBuyLoop()
-	table.insert(
-		State.Tasks,
-		task.spawn(function()
-			while State.ScriptRunning do
-				task.wait(CONSTANTS.AUTO_BUY_INTERVAL)
-				if Config.EnableSeedShop and Networking and SeedData then
+	-- Cache leaderstats reference to avoid repeated FindFirstChild
+	local cachedSheckles = nil
+	local lastCheck = 0
+
+	Memory.TrackThread(task_spawn(function()
+		while LRX.State.ScriptRunning do
+			task_wait(CONSTANTS.AUTO_BUY_INTERVAL)
+			if LRX.Config.EnableSeedShop and Networking and SeedData then
+				-- Refresh cached sheckles reference every 5 seconds or if nil
+				if not cachedSheckles or tick() - lastCheck > 5 then
+					local leaderstats = Player:FindFirstChild("leaderstats")
+					cachedSheckles = leaderstats and leaderstats:FindFirstChild("Sheckles")
+					lastCheck = tick()
+				end
+
+				if cachedSheckles then
 					local ok, err = pcall(function()
-						local leaderstats = Player:FindFirstChild("leaderstats")
-						local sheckles = leaderstats and leaderstats:FindFirstChild("Sheckles")
-						if sheckles then
-							for _, seed in ipairs(SeedData) do
-								if
-									Config.SelectedSeeds[seed.SeedName]
-									and sheckles.Value >= (seed.PurchasePrice or 0)
-								then
-									Networking.SeedShop.PurchaseSeed:Fire(seed.SeedName)
-								end
+						for _, seed in ipairs(SeedData) do
+							if
+								LRX.Config.SelectedSeeds[seed.SeedName]
+								and cachedSheckles.Value >= (seed.PurchasePrice or 0)
+							then
+								Networking.SeedShop.PurchaseSeed:Fire(seed.SeedName)
 							end
 						end
 					end)
@@ -4186,17 +3745,48 @@ function BackgroundTasks.StartAutoBuyLoop()
 					end
 				end
 			end
-		end)
-	)
+		end
+	end))
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SECTION 24: INITIALIZATION
+-- SECTION 25: CLEANUP
+-- ═══════════════════════════════════════════════════════════════════════
+
+local function FullCleanup()
+	LRX.State.ScriptRunning = false
+	Memory.DisconnectAll()
+	Memory.CancelAllThreads()
+
+	for name, obj in pairs(LRX.Objects) do
+		if typeof(obj) == "Instance" and obj.Parent then
+			pcall(function()
+				obj:Destroy()
+			end)
+		end
+		LRX.Objects[name] = nil
+	end
+
+	if LRX.UI.ScreenGui then
+		pcall(function()
+			LRX.UI.ScreenGui:Destroy()
+		end)
+		LRX.UI.ScreenGui = nil
+	end
+
+	table_clear(LRX.Cache)
+	table_clear(LRX.State)
+	table_clear(LRX.UI)
+end
+
+LRX.Functions.FullCleanup = FullCleanup
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 26: INITIALIZATION
 -- ═══════════════════════════════════════════════════════════════════════
 
 local function Initialize()
 	local initSuccess, initError = pcall(function()
-		-- Create UI hierarchy
 		local screenGui = UIInit.CreateScreenGui()
 		local mainFrame = UIInit.CreateMainFrame(screenGui)
 		UIInit.CreateToggleButton(screenGui)
@@ -4208,12 +3798,10 @@ local function Initialize()
 		UIInit.SetupWindowDrag(mainFrame)
 		UIInit.SetupGlobalInput()
 
-		-- Load config
 		ConfigSystem.Load()
 
-		-- Restore grid dots if enabled
-		if Config.ShowGridDots then
-			task.delay(1.5, function()
+		if LRX.Config.ShowGridDots then
+			task_delay(1.5, function()
 				local ok, err = pcall(function()
 					GridSystem.Refresh()
 				end)
@@ -4223,16 +3811,13 @@ local function Initialize()
 			end)
 		end
 
-		-- Start background tasks
 		BackgroundTasks.StartSeedPlacerLoop()
 		BackgroundTasks.StartAutoBuyLoop()
 
-		-- Show home page
 		Pages.Home()
 
-		-- Mobile sizing
 		if Services.UserInputService.TouchEnabled then
-			task.delay(CONSTANTS.MOBILE_INIT_DELAY, UIInit.ApplyMobileSizing)
+			task_delay(CONSTANTS.MOBILE_INIT_DELAY, UIInit.ApplyMobileSizing)
 		end
 	end)
 
