@@ -458,6 +458,30 @@ function Utils.GetPlayerPosition()
 	return hrp and hrp.Position or nil
 end
 
+function Utils.DebugPlotInfo()
+	local plot = PlotSystem.FindPlayerPlot()
+	if not plot then
+		warn("[Debug] No plot found")
+		return
+	end
+
+	local parts = PlotSystem.DetectPlotParts(plot)
+	warn("[Debug] Found", #parts, "PlantAreaColumn parts")
+
+	for i, part in ipairs(parts) do
+		warn(
+			string_format(
+				"[Debug] Part %d: Name=%s | Size=%s | Pos=%s | Rot=%s",
+				i,
+				part.Name,
+				tostring(part.Size),
+				tostring(part.Position),
+				tostring(part.Orientation)
+			)
+		)
+	end
+end
+
 -- ═══════════════════════════════════════════════════════════════════════
 -- SECTION 9: TWEEN SYSTEM
 -- ═══════════════════════════════════════════════════════════════════════
@@ -1121,73 +1145,55 @@ local function GeneratePlantPositions(targetParts, spacing)
 	local iterationCount = 0
 	local yieldInterval = CONSTANTS.YIELD_INTERVAL
 
-	-- Build combined world-space bounds of ALL target parts
-	local minX, maxX = math_huge, -math_huge
-	local minZ, maxZ = math_huge, -math_huge
-	local plantY = 0
-
 	for _, part in ipairs(targetParts) do
 		local cf = part.CFrame
-		local hs = part.Size / 2
-		plantY = math_max(plantY, part.Position.Y + hs.Y)
+		local size = part.Size
+		local halfSize = size / 2
 
-		for dx = -1, 1, 2 do
-			for dz = -1, 1, 2 do
-				local corner = cf * Vector3.new(dx * hs.X, 0, dz * hs.Z)
-				minX = math_min(minX, corner.X)
-				maxX = math_max(maxX, corner.X)
-				minZ = math_min(minZ, corner.Z)
-				maxZ = math_max(maxZ, corner.Z)
-			end
-		end
-	end
+		-- Get the top surface Y in world space
+		-- For a non-rotated part: topY = Position.Y + Size.Y/2
+		-- For rotated parts: we use CFrame to transform local top to world
+		local topLocal = Vector3.new(0, halfSize.Y, 0)
+		local topWorld = cf * topLocal
 
-	-- Snap bounds to global grid aligned at origin
-	local startX = math_floor(minX / spacing) * spacing + spacing / 2
-	local startZ = math_floor(minZ / spacing) * spacing + spacing / 2
-	local endX = math_ceil(maxX / spacing) * spacing - spacing / 2
-	local endZ = math_ceil(maxZ / spacing) * spacing - spacing / 2
+		-- Calculate grid dimensions that FIT INSIDE the part
+		-- Use math_ceil to ensure we cover edges, then clamp
+		local cellsX = math_max(1, math_ceil((size.X - 0.01) / spacing))
+		local cellsZ = math_max(1, math_ceil((size.Z - 0.01) / spacing))
 
-	local x = startX
-	while x <= endX + 0.001 do
-		local z = startZ
-		while z <= endZ + 0.001 do
-			iterationCount += 1
-			if iterationCount % yieldInterval == 0 then
-				task_wait()
-			end
+		-- Center the grid: total grid width = (cellsX - 1) * spacing
+		-- Offset = (part width - grid width) / 2
+		local gridWidthX = (cellsX - 1) * spacing
+		local gridWidthZ = (cellsZ - 1) * spacing
+		local offsetX = (size.X - gridWidthX) / 2 - halfSize.X
+		local offsetZ = (size.Z - gridWidthZ) / 2 - halfSize.Z
 
-			local finalPos = Vector3.new(x, plantY, z)
-			local key = Utils.FormatPositionKey(finalPos)
-
-			if not seenKeys[key] then
-				-- Only keep dots that fall inside at least one target part
-				local insideAny = false
-				for _, part in ipairs(targetParts) do
-					local localPos = part.CFrame:PointToObjectSpace(finalPos)
-					local hs = part.Size / 2
-					if math_abs(localPos.X) <= hs.X + 0.01 and math_abs(localPos.Z) <= hs.Z + 0.01 then
-						insideAny = true
-						break
-					end
+		for ix = 0, cellsX - 1 do
+			for iz = 0, cellsZ - 1 do
+				iterationCount += 1
+				if iterationCount % yieldInterval == 0 then
+					task_wait()
 				end
 
-				if insideAny then
+				-- Local position relative to part center
+				local localX = offsetX + ix * spacing
+				local localZ = offsetZ + iz * spacing
+
+				-- Transform to world space, keeping the TOP surface Y
+				local worldX = cf.Position.X + (cf.RightVector.X * localX + cf.RightVector.Z * localZ)
+				local worldZ = cf.Position.Z + (cf.LookVector.X * localX + cf.LookVector.Z * localZ)
+
+				-- Use the exact top surface height
+				local plantPos = Vector3.new(Utils.Round(worldX), topWorld.Y, Utils.Round(worldZ))
+
+				local key = Utils.FormatPositionKey(plantPos)
+
+				if not seenKeys[key] then
 					seenKeys[key] = true
-					positions[#positions + 1] = { Pos = finalPos, Part = targetParts[1] }
+					positions[#positions + 1] = { Pos = plantPos, Part = part }
 				end
 			end
-
-			if z >= endZ - 0.001 then
-				break
-			end
-			z += spacing
 		end
-
-		if x >= endX - 0.001 then
-			break
-		end
-		x += spacing
 	end
 
 	return positions
