@@ -1486,10 +1486,8 @@ function SeedPlacer.RunCycle()
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SECTION 14.5: AUTO FARM SYSTEM (Collect & Shovel) - FINAL v7
--- Signature: CollectFruit(plantId, fruitId)
---   - Tree fruits (Strawberry): fruitId = UUID from Fruits folder
---   - Single-harvest (Carrot, Bamboo): fruitId = "" (empty string)
+-- SECTION 14.5: AUTO FARM SYSTEM (Collect & Shovel) - FINAL v7.1
+-- Shovel fixed with more signatures and better debug
 -- ═══════════════════════════════════════════════════════════════════════
 
 local AutoFarmSystem = {}
@@ -1588,15 +1586,13 @@ local function IsPlantReady(plant)
 	return false
 end
 
--- ─── CRITICAL: Get Fruit ID ────────────────────────────────────────────
--- Returns: fruitId (string), isTreeFruit (boolean)
+-- ─── Get Fruit ID ──────────────────────────────────────────────────────
 
 local function GetFruitId(plant)
 	if not plant then
 		return "", false
 	end
 
-	-- Tree fruits: Fruits folder with children (Strawberry)
 	local fruits = plant:FindFirstChild("Fruits")
 	if fruits and #fruits:GetChildren() > 0 then
 		for _, fruit in ipairs(fruits:GetChildren()) do
@@ -1610,8 +1606,6 @@ local function GetFruitId(plant)
 		end
 	end
 
-	-- Single-harvest plants (Carrot, Bamboo): return empty string
-	-- The game expects: CollectFruit(plantId, "")
 	return "", false
 end
 
@@ -1620,17 +1614,18 @@ local function SafeFireRemote(remote, ...)
 		DebugPrint("Remote is nil")
 		return false, "nil"
 	end
-	local ok, err = pcall(function(...)
+	local allArgs = { ... }
+	local ok, err = pcall(function()
 		if typeof(remote) == "table" and remote.Fire then
-			remote:Fire(...)
+			remote:Fire(table.unpack(allArgs))
 		elseif typeof(remote) == "Instance" and remote:IsA("RemoteEvent") then
-			remote:FireServer(...)
+			remote:FireServer(table.unpack(allArgs))
 		elseif typeof(remote) == "Instance" and remote:IsA("RemoteFunction") then
-			remote:InvokeServer(...)
+			remote:InvokeServer(table.unpack(allArgs))
 		else
 			error("Bad remote type: " .. typeof(remote))
 		end
-	end, ...)
+	end)
 	if not ok then
 		DebugPrint("Remote fire failed:", err)
 		return false, err
@@ -1754,9 +1749,6 @@ function AutoFarmSystem.StartCollect()
 						local plantId = GetPlantId(plant)
 						local fruitId, isTree = GetFruitId(plant)
 
-						-- CORRECT SIGNATURE for ALL plants:
-						-- Tree fruits: CollectFruit(plantId, fruitUUID)
-						-- Single-harvest: CollectFruit(plantId, "")
 						DebugPrint(
 							"COLLECTING:",
 							seedName,
@@ -1793,14 +1785,24 @@ function AutoFarmSystem.StopCollect()
 end
 
 -- ─── Auto Shovel ───────────────────────────────────────────────────────
+-- FIXED: More signatures, better debug, checks if remote exists properly
 
 function AutoFarmSystem.StartShovel()
 	if State.AutoShovelThread then
+		DebugPrint("StartShovel: Already running")
 		return
 	end
+
+	-- CRITICAL FIX: Check if remote exists with proper type
 	if not UseShovelRemote then
 		NotificationSystem.Notify("Auto Farm", "UseShovel remote not found", "Error", 3)
+		DebugPrint("UseShovelRemote is nil")
 		return
+	end
+
+	DebugPrint("UseShovelRemote type:", typeof(UseShovelRemote))
+	if typeof(UseShovelRemote) == "table" then
+		DebugPrint("UseShovelRemote.Fire exists:", tostring(UseShovelRemote.Fire ~= nil))
 	end
 
 	DebugPrint("Starting Auto Shovel...")
@@ -1826,31 +1828,55 @@ function AutoFarmSystem.StartShovel()
 						end
 
 						if hasSelection and not selected[seedName] then
+							DebugPrint("SHOVEL SKIP (not selected):", seedName)
 							continue
 						end
 
 						local plantId = GetPlantId(plant)
+						if not plantId then
+							DebugPrint("SHOVEL SKIP (no plantId):", seedName)
+							continue
+						end
+
 						DebugPrint("SHOVELING:", seedName, "| plantId=", plantId)
 
-						local ok = SafeFireRemote(UseShovelRemote, "Dig", plantId, "", nil)
+						-- Try ALL possible signatures
+						local signatures = {
+							{ "Dig", plantId, "", nil },
+							{ "Dig", plantId },
+							{ plantId },
+							{ "Dig", plantId, "" },
+							{ "Dig", plantId, nil },
+							{ "Remove", plantId },
+							{ "Destroy", plantId },
+						}
+
+						local ok = false
+						for i, sig in ipairs(signatures) do
+							DebugPrint("  Trying signature #" .. i .. ":", table.concat(sig, ", "))
+							ok = SafeFireRemote(UseShovelRemote, table.unpack(sig))
+							if ok then
+								DebugPrint("  -> SUCCESS with signature #" .. i)
+								break
+							end
+						end
+
 						if not ok then
-							ok = SafeFireRemote(UseShovelRemote, "Dig", plantId)
+							DebugPrint("  -> ALL SIGNATURES FAILED")
 						end
-						if not ok then
-							ok = SafeFireRemote(UseShovelRemote, plantId)
-						end
-						if ok then
-							DebugPrint("  -> SUCCESS")
-						else
-							DebugPrint("  -> FAILED")
-						end
-						task_wait(0.15)
+
+						task_wait(0.2)
 					end
+				else
+					DebugPrint("Shovel: Plants folder not found")
 				end
+			else
+				DebugPrint("Shovel: Plot not found")
 			end
-			task_wait(0.4)
+			task_wait(0.5)
 		end
 		State.AutoShovelThread = nil
+		DebugPrint("Auto Shovel loop ended")
 	end)
 
 	TrackThread(State.AutoShovelThread)
