@@ -211,6 +211,8 @@ local table_clone = table.clone
 local table_sort = table.sort
 local pairs = pairs
 local ipairs = ipairs
+-- Forward declarations: systems referenced before they are defined
+local PlotSystem, SeedPlacer
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- SECTION 3: CONFIG (persistent user settings — never overwrite existing)
@@ -278,6 +280,7 @@ LRX.State.IsResizing = false
 LRX.State.AutoSaveDebounce = nil
 LRX.State.SidebarButtons = {}
 LRX.State.SearchableItems = {}
+LRX.State.GridRefreshThread = nil
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- SECTION 5: CACHE (expensive computed data, invalidated when stale)
@@ -912,7 +915,7 @@ end
 -- SECTION 13: PLOT DETECTION SYSTEM
 -- ═══════════════════════════════════════════════════════════════════════
 
-local PlotSystem = {}
+PlotSystem = {}
 
 function PlotSystem.FindPlayerPlot()
 	if LRX.Cache.CachedPlot and LRX.Cache.CachedPlot.Parent then
@@ -1099,7 +1102,7 @@ end
 -- SECTION 14: SEED PLACER SYSTEM
 -- ═══════════════════════════════════════════════════════════════════════
 
-local SeedPlacer = {}
+SeedPlacer = {}
 
 local function GetConfigHash()
 	return string_format(
