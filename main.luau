@@ -1,10 +1,10 @@
 -- ═══════════════════════════════════════════════════════════════════════
---  LRX_Hub v2.2.3
---  Fixed: Grid Dots scope error, persistent toggle, scroll, modal height
+--  LRX_Hub v2.2.4
+--  Fixed: Grid corner coverage, undefined RefreshGridDots, scope order
 -- ═══════════════════════════════════════════════════════════════════════
 
 --══════════════════════════════════════════════════════--
--- SERVICES
+-- SERVICES & PLAYER
 --══════════════════════════════════════════════════════--
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -14,6 +14,16 @@ local HttpService = game:GetService("HttpService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
+
+--══════════════════════════════════════════════════════--
+-- UI: SCREEN GUI (create early so Notify can use it)
+--══════════════════════════════════════════════════════--
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "LRX_Hub"
+ScreenGui.Parent = playerGui
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.DisplayOrder = 999
 
 --══════════════════════════════════════════════════════--
 -- CONFIGURATION
@@ -85,11 +95,136 @@ local Themes = {
 local Theme = Themes[Config.Theme]
 
 --══════════════════════════════════════════════════════--
--- LASER VISUAL EFFECT
+-- NETWORKING (load early — SeedPlacer needs it)
 --══════════════════════════════════════════════════════--
+local Networking, SeedData
+pcall(function()
+	Networking = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
+	SeedData = require(game:GetService("ReplicatedStorage").SharedModules.SeedData)
+end)
+
+--══════════════════════════════════════════════════════--
+-- STATE
+--══════════════════════════════════════════════════════--
+local ScriptRunning = true
+local Connections = {}
+local Tasks = {}
+local ActiveNotifs = 0
+local CurrentPage = "Home"
+local SidebarButtons = {}
+local Pages = {}
+local SearchableItems = {}
+
+local ActiveDropdownCard = nil
+local ActiveDropdownFrame = nil
+local DropdownDebounce = false
+
+local ModalOverlay = nil
+local ActiveModal = nil
+local ModalOpen = false
+
+local CardOrder = 0
+local AutoSaveDebounce = nil
+
+-- Grid dots state
+local GridDots = {}
+local DotsFolder = nil
+local RefreshGridDots -- will be assigned below
+
+-- Laser state
 local LaserBeams = {}
 local LaserFolder = nil
 
+--══════════════════════════════════════════════════════--
+-- UTILITIES
+--══════════════════════════════════════════════════════--
+local function AddConnection(eventConnection)
+	table.insert(Connections, eventConnection)
+	return eventConnection
+end
+
+local function DisconnectAll()
+	for _, connection in ipairs(Connections) do
+		if connection and connection.Connected then
+			pcall(function()
+				connection:Disconnect()
+			end)
+		end
+	end
+	table.clear(Connections)
+end
+
+local function Tween(instance, properties, duration, callback)
+	if Config.DisableAnimations then
+		for key, value in pairs(properties) do
+			instance[key] = value
+		end
+		if callback then
+			callback()
+		end
+		return
+	end
+	local activeTween = TweenService:Create(
+		instance,
+		TweenInfo.new(duration or Config.AnimationSpeed, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		properties
+	)
+	if callback then
+		activeTween.Completed:Connect(callback)
+	end
+	activeTween:Play()
+end
+
+local function Create(className, properties)
+	local newInstance = Instance.new(className)
+	for property, value in pairs(properties or {}) do
+		newInstance[property] = value
+	end
+	return newInstance
+end
+
+local function Corner(instance, radius)
+	local newCorner = Instance.new("UICorner")
+	newCorner.CornerRadius = UDim.new(0, radius or 6)
+	newCorner.Parent = instance
+end
+
+local function Stroke(instance, color, thickness)
+	local newStroke = Instance.new("UIStroke")
+	newStroke.Color = color or Theme.Border
+	newStroke.Thickness = thickness or 1
+	newStroke.Parent = instance
+end
+
+local function FormatSelectedSeeds(selectedTable, maxDisplay)
+	local names = {}
+	for seedName, selected in pairs(selectedTable) do
+		if selected then
+			table.insert(names, seedName)
+		end
+	end
+	table.sort(names)
+
+	local shown = {}
+	local displayLimit = maxDisplay or 10
+	for i = 1, math.min(#names, displayLimit) do
+		table.insert(shown, names[i])
+	end
+
+	local text = table.concat(shown, ", ")
+	if #names > displayLimit then
+		text = text .. "..."
+	end
+	if text == "" then
+		text = "None"
+	end
+
+	return string.format("Selected (%d): %s", #names, text)
+end
+
+--══════════════════════════════════════════════════════--
+-- LASER VISUAL EFFECT
+--══════════════════════════════════════════════════════--
 local function EnsureLaserFolder()
 	if not LaserFolder or not LaserFolder.Parent then
 		LaserFolder = Instance.new("Folder")
@@ -257,123 +392,791 @@ local function LaserScanPlot(plot, scanDuration)
 end
 
 --══════════════════════════════════════════════════════--
--- STATE
+-- MODULE: SEED PLACER (moved up — needed by grid dots)
 --══════════════════════════════════════════════════════--
-local ScriptRunning = true
-local Connections = {}
-local Tasks = {}
-local ActiveNotifs = 0
-local CurrentPage = "Home"
-local SidebarButtons = {}
-local Pages = {}
-local SearchableItems = {}
+local SeedPlacer = (function()
+	local module = {}
 
-local ActiveDropdownCard = nil
-local ActiveDropdownFrame = nil
-local DropdownDebounce = false
+	local PlantPositions = nil
+	local OwnedPlot = nil
+	local CurrentPlantIndex = 1
+	local LastConfigHash = nil
 
-local ModalOverlay = nil
-local ActiveModal = nil
-local ModalOpen = false
+	local function GetWorldBounds(part)
+		local partCFrame = part.CFrame
+		local partHalfSize = part.Size / 2
+		local worldCorners = {
+			partCFrame * Vector3.new(-partHalfSize.X, -partHalfSize.Y, -partHalfSize.Z),
+			partCFrame * Vector3.new(-partHalfSize.X, -partHalfSize.Y, partHalfSize.Z),
+			partCFrame * Vector3.new(-partHalfSize.X, partHalfSize.Y, -partHalfSize.Z),
+			partCFrame * Vector3.new(-partHalfSize.X, partHalfSize.Y, partHalfSize.Z),
+			partCFrame * Vector3.new(partHalfSize.X, -partHalfSize.Y, -partHalfSize.Z),
+			partCFrame * Vector3.new(partHalfSize.X, -partHalfSize.Y, partHalfSize.Z),
+			partCFrame * Vector3.new(partHalfSize.X, partHalfSize.Y, -partHalfSize.Z),
+			partCFrame * Vector3.new(partHalfSize.X, partHalfSize.Y, partHalfSize.Z),
+		}
 
-local CardOrder = 0
-local AutoSaveDebounce = nil
+		local minX, maxX = math.huge, -math.huge
+		local minZ, maxZ = math.huge, -math.huge
 
--- Grid dots state (functions defined after SeedPlacer)
-local GridDots = {}
-local DotsFolder = nil
-local RefreshGridDots -- forward declare
+		for _, corner in ipairs(worldCorners) do
+			minX = math.min(minX, corner.X)
+			maxX = math.max(maxX, corner.X)
+			minZ = math.min(minZ, corner.Z)
+			maxZ = math.max(maxZ, corner.Z)
+		end
+
+		return minX, maxX, minZ, maxZ
+	end
+
+	local function IsPointInPart(point, part)
+		local objectSpacePoint = part.CFrame:PointToObjectSpace(point)
+		local partHalfSize = part.Size / 2
+		return math.abs(objectSpacePoint.X) <= partHalfSize.X + 0.1
+			and math.abs(objectSpacePoint.Y) <= partHalfSize.Y + 0.1
+			and math.abs(objectSpacePoint.Z) <= partHalfSize.Z + 0.1
+	end
+
+	local function FindPlayerPlot()
+		local GardensFolder = workspace:FindFirstChild("Gardens")
+		if not GardensFolder then
+			warn("[SeedPlacer] workspace.Gardens not found.")
+			return nil
+		end
+
+		for _, plot in ipairs(GardensFolder:GetChildren()) do
+			local ownerName = plot:GetAttribute("Owner")
+			local ownerId = plot:GetAttribute("OwnerUserId")
+
+			if ownerName == player.Name or ownerId == player.UserId then
+				print(string.format("[SeedPlacer] Found by Owner attribute: %s", plot.Name))
+				return plot
+			end
+		end
+
+		local character = player.Character
+		local hrp = character and character:FindFirstChild("HumanoidRootPart")
+		local playerPos = hrp and hrp.Position
+
+		if playerPos then
+			local candidates = {}
+			for _, plot in ipairs(GardensFolder:GetChildren()) do
+				local visual = plot:FindFirstChild("Visual")
+				if not visual then
+					continue
+				end
+
+				local plotColumns = {}
+				for _, child in ipairs(visual:GetChildren()) do
+					if child:IsA("BasePart") and child.Name:match("^PlantAreaColumn") then
+						table.insert(plotColumns, child)
+					end
+				end
+				if #plotColumns == 0 then
+					continue
+				end
+
+				local inside = false
+				for _, col in ipairs(plotColumns) do
+					local localPos = col.CFrame:PointToObjectSpace(playerPos)
+					local half = col.Size / 2
+					if
+						math.abs(localPos.X) <= half.X + 0.5
+						and math.abs(localPos.Y) <= half.Y + 10
+						and math.abs(localPos.Z) <= half.Z + 0.5
+					then
+						inside = true
+						break
+					end
+				end
+
+				if inside then
+					local plotCenter = Vector3.zero
+					for _, col in ipairs(plotColumns) do
+						plotCenter = plotCenter + col.Position
+					end
+					plotCenter = plotCenter / #plotColumns
+					table.insert(candidates, {
+						Plot = plot,
+						CenterDist = (plotCenter - playerPos).Magnitude,
+					})
+				end
+			end
+
+			if #candidates > 0 then
+				table.sort(candidates, function(a, b)
+					return a.CenterDist < b.CenterDist
+				end)
+				print(string.format("[SeedPlacer] Position fallback → %s", candidates[1].Plot.Name))
+				return candidates[1].Plot
+			end
+		end
+
+		warn("[SeedPlacer] Could not find plot for player:", player.Name)
+		return nil
+	end
+
+	local function DetectPlotParts(plot)
+		local visual = plot:FindFirstChild("Visual")
+		if not visual then
+			return {}
+		end
+
+		local parts = {}
+		for _, child in ipairs(visual:GetChildren()) do
+			if child:IsA("BasePart") and child.Name:match("^PlantAreaColumn") then
+				table.insert(parts, child)
+			end
+		end
+		return parts
+	end
+
+	local function BuildPartOptions(parts)
+		local nameCounts = {}
+		local options = {}
+		for _, part in ipairs(parts) do
+			local name = part.Name
+			nameCounts[name] = (nameCounts[name] or 0) + 1
+			local displayName = name
+			local value = name
+			if nameCounts[name] > 1 then
+				displayName = name .. " #" .. nameCounts[name]
+				value = name .. "_" .. nameCounts[name]
+			end
+			table.insert(options, {
+				Label = displayName,
+				Value = value,
+				Part = part,
+			})
+		end
+		return options
+	end
+
+	local function FindPartByValue(parts, value)
+		if value == "All" or not value then
+			return nil
+		end
+		local nameCounts = {}
+		for _, part in ipairs(parts) do
+			local name = part.Name
+			nameCounts[name] = (nameCounts[name] or 0) + 1
+			local checkValue = name
+			if nameCounts[name] > 1 then
+				checkValue = name .. "_" .. nameCounts[name]
+			end
+			if checkValue == value then
+				return part
+			end
+		end
+		return nil
+	end
+
+	-- FIXED: Local-space iteration guarantees full coverage including corners
+	local function GeneratePlantPositions(targetParts, spacing)
+		if #targetParts == 0 then
+			return {}
+		end
+
+		local positions = {}
+		local step = math.max(0.1, spacing)
+		local YieldInterval = 200
+		local iterationCount = 0
+		local seenKeys = {}
+
+		for _, part in ipairs(targetParts) do
+			local halfSize = part.Size / 2
+			local cf = part.CFrame
+			local plantY = part.Position.Y
+
+			-- Iterate in local XZ from edge to edge so corners are never missed
+			local startX = -halfSize.X
+			local endX = halfSize.X
+			local startZ = -halfSize.Z
+			local endZ = halfSize.Z
+
+			local localX = startX
+			while localX <= endX + 0.001 do
+				local localZ = startZ
+				while localZ <= endZ + 0.001 do
+					iterationCount = iterationCount + 1
+					if iterationCount % YieldInterval == 0 then
+						task.wait()
+					end
+
+					-- Transform local point to world space
+					local worldPos = cf * Vector3.new(localX, 0, localZ)
+
+					-- Round to reduce floating-point jitter
+					local finalPos = Vector3.new(
+						math.floor(worldPos.X * 100 + 0.5) / 100,
+						plantY,
+						math.floor(worldPos.Z * 100 + 0.5) / 100
+					)
+
+					-- Deduplicate across adjacent columns
+					local key = string.format("%.1f,%.1f", finalPos.X, finalPos.Z)
+					if not seenKeys[key] then
+						seenKeys[key] = true
+						table.insert(positions, { Pos = finalPos, Part = part })
+					end
+
+					localZ = localZ + step
+				end
+				localX = localX + step
+			end
+		end
+
+		return positions
+	end
+
+	local function ApplyPattern(positions, pattern)
+		if pattern == "LeftToRight" then
+			return positions
+		elseif pattern == "RightToLeft" then
+			local result = {}
+			for i = #positions, 1, -1 do
+				table.insert(result, positions[i])
+			end
+			return result
+		elseif pattern == "OutsideToCenter" then
+			local result = {}
+			local left = 1
+			local right = #positions
+			while left <= right do
+				table.insert(result, positions[left])
+				left = left + 1
+				if left <= right then
+					table.insert(result, positions[right])
+					right = right - 1
+				end
+			end
+			return result
+		elseif pattern == "CenterToOutside" then
+			local result = {}
+			local n = #positions
+			if n == 0 then
+				return result
+			end
+			local mid = math.ceil(n / 2)
+			table.insert(result, positions[mid])
+			local offset = 1
+			while true do
+				local added = false
+				if mid - offset >= 1 then
+					table.insert(result, positions[mid - offset])
+					added = true
+				end
+				if mid + offset <= n then
+					table.insert(result, positions[mid + offset])
+					added = true
+				end
+				if not added then
+					break
+				end
+				offset = offset + 1
+			end
+			return result
+		elseif pattern == "Middle" then
+			if #positions == 0 then
+				return {}
+			end
+
+			local grid = {}
+			local minX, maxX = math.huge, -math.huge
+			local minZ, maxZ = math.huge, -math.huge
+
+			for _, posData in ipairs(positions) do
+				local p = posData.Pos
+				minX = math.min(minX, p.X)
+				maxX = math.max(maxX, p.X)
+				minZ = math.min(minZ, p.Z)
+				maxZ = math.max(maxZ, p.Z)
+			end
+
+			local step = math.max(0.1, Config.PlantSpacing or 1)
+			local cols = math.max(1, math.floor((maxX - minX) / step + 0.5) + 1)
+			local rows = math.max(1, math.floor((maxZ - minZ) / step + 0.5) + 1)
+
+			local cellMap = {}
+			for r = 1, rows do
+				cellMap[r] = {}
+			end
+
+			for _, posData in ipairs(positions) do
+				local p = posData.Pos
+				local c = math.floor((p.X - minX) / step + 0.5) + 1
+				local r = math.floor((p.Z - minZ) / step + 0.5) + 1
+				c = math.clamp(c, 1, cols)
+				r = math.clamp(r, 1, rows)
+				if not cellMap[r][c] then
+					cellMap[r][c] = {}
+				end
+				table.insert(cellMap[r][c], posData)
+			end
+
+			local result = {}
+			local centerR = math.ceil(rows / 2)
+			local centerC = math.ceil(cols / 2)
+
+			local dr = { 0, 1, 0, -1 }
+			local dc = { 1, 0, -1, 0 }
+			local dir = 0
+			local steps = 1
+			local r, c = centerR, centerC
+
+			if cellMap[r] and cellMap[r][c] then
+				for _, posData in ipairs(cellMap[r][c]) do
+					table.insert(result, posData)
+				end
+			end
+
+			while #result < #positions do
+				for _ = 1, 2 do
+					for _ = 1, steps do
+						r = r + dr[dir + 1]
+						c = c + dc[dir + 1]
+						if r >= 1 and r <= rows and c >= 1 and c <= cols then
+							if cellMap[r] and cellMap[r][c] then
+								for _, posData in ipairs(cellMap[r][c]) do
+									table.insert(result, posData)
+								end
+							end
+						end
+					end
+					dir = (dir + 1) % 4
+				end
+				steps = steps + 1
+			end
+
+			return result
+		elseif pattern == "Random" then
+			local result = {}
+			for i, pos in ipairs(positions) do
+				result[i] = pos
+			end
+			for i = #result, 2, -1 do
+				local j = math.random(1, i)
+				result[i], result[j] = result[j], result[i]
+			end
+			return result
+		else
+			return positions
+		end
+	end
+
+	local function BuildOccupiedLookup()
+		local occupied = {}
+		local controllers = player:FindFirstChild("PlayerScripts")
+			and player.PlayerScripts:FindFirstChild("Controllers")
+		local seedInspect = controllers and controllers:FindFirstChild("SeedInspectController")
+		local fakePlot = seedInspect and seedInspect:FindFirstChild("FakePlot")
+
+		if not fakePlot then
+			return occupied
+		end
+
+		local plantsFolder = fakePlot:FindFirstChild("Plants")
+		if not plantsFolder then
+			if OwnedPlot then
+				plantsFolder = OwnedPlot:FindFirstChild("Plants")
+			end
+		end
+
+		if not plantsFolder then
+			return occupied
+		end
+
+		for _, plant in ipairs(plantsFolder:GetChildren()) do
+			local plantPos = nil
+
+			if plant:IsA("BasePart") then
+				plantPos = plant.Position
+			elseif plant:IsA("Model") then
+				if plant.PrimaryPart then
+					plantPos = plant.PrimaryPart.Position
+				else
+					for _, child in ipairs(plant:GetDescendants()) do
+						if child:IsA("BasePart") then
+							plantPos = child.Position
+							break
+						end
+					end
+				end
+			end
+
+			if plantPos then
+				local keyX = math.floor(plantPos.X * 2 + 0.5) / 2
+				local keyZ = math.floor(plantPos.Z * 2 + 0.5) / 2
+				local key = string.format("%.1f,%.1f", keyX, keyZ)
+				occupied[key] = true
+			end
+		end
+
+		return occupied
+	end
+
+	local function IsSpotEmpty(spotPosition, occupiedLookup)
+		local keyX = math.floor(spotPosition.X * 2 + 0.5) / 2
+		local keyZ = math.floor(spotPosition.Z * 2 + 0.5) / 2
+		local key = string.format("%.1f,%.1f", keyX, keyZ)
+		return not occupiedLookup[key]
+	end
+
+	local function GetConfigHash()
+		return string.format(
+			"%s|%s|%.2f",
+			Config.PlantingArea or "All",
+			Config.PlantingPattern or "LeftToRight",
+			Config.PlantSpacing or 1
+		)
+	end
+
+	function module:GetPlantPositions()
+		local currentHash = GetConfigHash()
+		if PlantPositions and LastConfigHash == currentHash then
+			return PlantPositions
+		end
+
+		if not OwnedPlot then
+			OwnedPlot = FindPlayerPlot()
+		end
+
+		if not OwnedPlot then
+			return nil
+		end
+
+		local allParts = DetectPlotParts(OwnedPlot)
+		local targetParts = {}
+
+		if Config.PlantingArea == "All" or not Config.PlantingArea or Config.PlantingArea == "" then
+			for _, part in ipairs(allParts) do
+				table.insert(targetParts, part)
+			end
+		else
+			local selectedPart = FindPartByValue(allParts, Config.PlantingArea)
+			if selectedPart then
+				table.insert(targetParts, selectedPart)
+			else
+				for _, part in ipairs(allParts) do
+					table.insert(targetParts, part)
+				end
+			end
+		end
+
+		if #targetParts == 0 then
+			warn("[SeedPlacer] No target parts found for area: " .. tostring(Config.PlantingArea))
+			return nil
+		end
+
+		local positions = GeneratePlantPositions(targetParts, Config.PlantSpacing or 1)
+		positions = ApplyPattern(positions, Config.PlantingPattern or "LeftToRight")
+
+		PlantPositions = positions
+		LastConfigHash = currentHash
+
+		print(
+			string.format(
+				"[SeedPlacer] Generated %d positions in %s (Area: %s) across %d parts.",
+				#positions,
+				OwnedPlot.Name,
+				Config.PlantingArea or "All",
+				#targetParts
+			)
+		)
+
+		return PlantPositions
+	end
+
+	function module:GetDetectionInfo()
+		local plot = OwnedPlot or FindPlayerPlot()
+		if not plot then
+			return { Parts = {}, PartOptions = {}, PartNames = {}, PlotName = "None", PlotInstance = nil }
+		end
+
+		local parts = DetectPlotParts(plot)
+		local options = BuildPartOptions(parts)
+		local names = {}
+		for _, opt in ipairs(options) do
+			table.insert(names, opt.Label)
+		end
+		return {
+			Parts = parts,
+			PartOptions = options,
+			PartNames = names,
+			PlotName = plot.Name,
+			PlotInstance = plot,
+		}
+	end
+
+	function module:ClearCache()
+		PlantPositions = nil
+		OwnedPlot = nil
+		CurrentPlantIndex = 1
+		LastConfigHash = nil
+	end
+
+	function module:FindPlayerPlot()
+		return FindPlayerPlot()
+	end
+
+	function module:RunCycle()
+		local allSpots = self:GetPlantPositions()
+		if not allSpots then
+			return
+		end
+
+		local PlantRemote = Networking and Networking.Plant and Networking.Plant.PlantSeed
+		if not PlantRemote then
+			warn("[SeedPlacer] Networking.Plant.PlantSeed not found!")
+			return
+		end
+
+		local EnabledSeedNames = {}
+		for seedName, enabled in pairs(Config.SelectedPlaceSeeds or {}) do
+			if enabled then
+				table.insert(EnabledSeedNames, seedName)
+			end
+		end
+
+		if #EnabledSeedNames == 0 then
+			return
+		end
+
+		local occupiedLookup = BuildOccupiedLookup()
+		local totalSpots = #allSpots
+		local maxPlantAmount = Config.PlaceAmount or 10
+		local plantedCount = 0
+		local seedIndex = 1
+		local checkedCount = 0
+		local delay = math.max(0, Config.PlantDelay or 0.05)
+
+		while plantedCount < maxPlantAmount and checkedCount < totalSpots do
+			if not Config.EnableSeedPlacer then
+				break
+			end
+
+			local spot = allSpots[CurrentPlantIndex]
+			if not spot or not spot.Part then
+				CurrentPlantIndex = 1
+				break
+			end
+
+			checkedCount = checkedCount + 1
+
+			if IsSpotEmpty(spot.Pos, occupiedLookup) then
+				local seedName = EnabledSeedNames[seedIndex]
+				seedIndex = seedIndex % #EnabledSeedNames + 1
+
+				local success, err = pcall(function()
+					PlantRemote:Fire(spot.Pos, seedName, spot.Part)
+				end)
+
+				if not success then
+					warn("[SeedPlacer] PlantSeed failed at spot " .. tostring(CurrentPlantIndex) .. ":", err)
+				end
+
+				plantedCount = plantedCount + 1
+
+				if plantedCount < maxPlantAmount then
+					task.wait(delay)
+				end
+			end
+
+			CurrentPlantIndex = CurrentPlantIndex + 1
+			if CurrentPlantIndex > totalSpots then
+				CurrentPlantIndex = 1
+			end
+		end
+
+		if plantedCount > 0 then
+			print(string.format("[SeedPlacer] Planted %d seeds this cycle.", plantedCount))
+		end
+	end
+
+	return module
+end)()
 
 --══════════════════════════════════════════════════════--
--- UTILITIES
+-- GRID DOTS VISUAL (defined BEFORE UI so ClearAllVisuals works in CloseBtn)
 --══════════════════════════════════════════════════════--
-local function AddConnection(eventConnection)
-	table.insert(Connections, eventConnection)
-	return eventConnection
+local function EnsureDotsFolder()
+	if not DotsFolder or not DotsFolder.Parent then
+		DotsFolder = Instance.new("Folder")
+		DotsFolder.Name = "LRX_GridDots"
+		DotsFolder.Parent = workspace
+	end
+	return DotsFolder
 end
 
-local function DisconnectAll()
-	for _, connection in ipairs(Connections) do
-		if connection and connection.Connected then
+local function ClearGridDots()
+	for _, dot in ipairs(GridDots) do
+		if dot then
 			pcall(function()
-				connection:Disconnect()
+				dot:Destroy()
 			end)
 		end
 	end
-	table.clear(Connections)
+	table.clear(GridDots)
 end
 
-local function Tween(instance, properties, duration, callback)
-	if Config.DisableAnimations then
-		for key, value in pairs(properties) do
-			instance[key] = value
-		end
-		if callback then
-			callback()
-		end
+-- Properly assign to the local variable so all closures capture it correctly
+RefreshGridDots = function()
+	ClearGridDots()
+	if not Config.ShowGridDots then
 		return
 	end
-	local activeTween = TweenService:Create(
-		instance,
-		TweenInfo.new(duration or Config.AnimationSpeed, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		properties
-	)
-	if callback then
-		activeTween.Completed:Connect(callback)
+
+	local plot = SeedPlacer:FindPlayerPlot()
+	if not plot then
+		warn("[GridDots] Could not find player plot.")
+		return
 	end
-	activeTween:Play()
-end
 
-local function Create(className, properties)
-	local newInstance = Instance.new(className)
-	for property, value in pairs(properties or {}) do
-		newInstance[property] = value
+	SeedPlacer:ClearCache()
+	local positions = SeedPlacer:GetPlantPositions()
+	if not positions or #positions == 0 then
+		warn("[GridDots] No plant positions generated.")
+		return
 	end
-	return newInstance
-end
 
-local function Corner(instance, radius)
-	local newCorner = Instance.new("UICorner")
-	newCorner.CornerRadius = UDim.new(0, radius or 6)
-	newCorner.Parent = instance
-end
+	local folder = EnsureDotsFolder()
 
-local function Stroke(instance, color, thickness)
-	local newStroke = Instance.new("UIStroke")
-	newStroke.Color = color or Theme.Border
-	newStroke.Thickness = thickness or 1
-	newStroke.Parent = instance
-end
+	local GridDotColors = {
+		Color3.fromRGB(50, 205, 50),
+		Color3.fromRGB(255, 215, 0),
+		Color3.fromRGB(0, 255, 127),
+		Color3.fromRGB(255, 165, 0),
+	}
 
-local function FormatSelectedSeeds(selectedTable, maxDisplay)
-	local names = {}
-	for seedName, selected in pairs(selectedTable) do
-		if selected then
-			table.insert(names, seedName)
+	local total = #positions
+	local batchSize = 500
+	local batchDelay = 0.05
+
+	for batchStart = 1, total, batchSize do
+		local batchEnd = math.min(batchStart + batchSize - 1, total)
+
+		for i = batchStart, batchEnd do
+			local posData = positions[i]
+			local dot = Instance.new("Part")
+			dot.Name = "GridDot"
+			dot.Anchored = true
+			dot.CanCollide = false
+			dot.CanQuery = false
+			dot.CanTouch = false
+			dot.CastShadow = false
+			dot.Material = Enum.Material.Neon
+			dot.Color = GridDotColors[((i - 1) % #GridDotColors) + 1]
+			dot.Shape = Enum.PartType.Ball
+			dot.Size = Vector3.new(0.08, 0.08, 0.08)
+			dot.Position = posData.Pos + Vector3.new(0, 0.05, 0)
+			dot.Parent = folder
+			dot.Transparency = 0.15
+
+			table.insert(GridDots, dot)
+		end
+
+		if batchEnd < total then
+			task.wait(batchDelay)
 		end
 	end
-	table.sort(names)
 
-	local shown = {}
-	local displayLimit = maxDisplay or 10
-	for i = 1, math.min(#names, displayLimit) do
-		table.insert(shown, names[i])
-	end
-
-	local text = table.concat(shown, ", ")
-	if #names > displayLimit then
-		text = text .. "..."
-	end
-	if text == "" then
-		text = "None"
-	end
-
-	return string.format("Selected (%d): %s", #names, text)
+	Notify("Plot Visualizer", string.format("Showing %d grid dots (all spots)", #GridDots), "Success", 2)
 end
 
 local function ClearAllVisuals()
 	ClearLasers()
 	ClearGridDots()
+end
+
+--══════════════════════════════════════════════════════--
+-- NOTIFICATIONS (moved before Save/Load so they can call it)
+--══════════════════════════════════════════════════════--
+function Notify(title, message, notifType, duration)
+	notifType = notifType or "Info"
+	duration = duration or Config.NotificationDuration
+
+	local colors = {
+		Success = Color3.fromRGB(50, 205, 50),
+		Warning = Color3.fromRGB(255, 165, 0),
+		Error = Color3.fromRGB(255, 80, 80),
+		Info = Color3.fromRGB(100, 150, 255),
+	}
+	local accent = colors[notifType] or colors.Info
+
+	while ActiveNotifs >= 5 do
+		task.wait(0.1)
+	end
+	ActiveNotifs = ActiveNotifs + 1
+
+	local NotifFrame = Instance.new("Frame")
+	NotifFrame.Parent = ScreenGui
+	NotifFrame.BackgroundColor3 = Theme.Card
+	NotifFrame.BorderSizePixel = 0
+	NotifFrame.Position = UDim2.new(1, 20, 0, 20 + (ActiveNotifs - 1) * 70)
+	NotifFrame.Size = UDim2.new(0, 280, 0, 60)
+	NotifFrame.ZIndex = 700
+	NotifFrame.Active = true
+
+	local NotifCorner = Instance.new("UICorner")
+	NotifCorner.CornerRadius = UDim.new(0, 8)
+	NotifCorner.Parent = NotifFrame
+
+	local NotifStroke = Instance.new("UIStroke")
+	NotifStroke.Color = Theme.Border
+	NotifStroke.Thickness = 1
+	NotifStroke.Parent = NotifFrame
+
+	local NotifBar = Instance.new("Frame")
+	NotifBar.Parent = NotifFrame
+	NotifBar.BackgroundColor3 = accent
+	NotifBar.BorderSizePixel = 0
+	NotifBar.Size = UDim2.new(0, 4, 1, 0)
+	NotifBar.ZIndex = 701
+
+	local NotifBarCorner = Instance.new("UICorner")
+	NotifBarCorner.CornerRadius = UDim.new(0, 8)
+	NotifBarCorner.Parent = NotifBar
+
+	local NotifTitle = Instance.new("TextLabel")
+	NotifTitle.Parent = NotifFrame
+	NotifTitle.BackgroundTransparency = 1
+	NotifTitle.Position = UDim2.new(0, 14, 0, 8)
+	NotifTitle.Size = UDim2.new(1, -28, 0, 18)
+	NotifTitle.Font = Enum.Font.GothamBold
+	NotifTitle.Text = title
+	NotifTitle.TextColor3 = Theme.TextPrimary
+	NotifTitle.TextSize = 13
+	NotifTitle.TextXAlignment = Enum.TextXAlignment.Left
+	NotifTitle.ZIndex = 701
+
+	local NotifMessage = Instance.new("TextLabel")
+	NotifMessage.Parent = NotifFrame
+	NotifMessage.BackgroundTransparency = 1
+	NotifMessage.Position = UDim2.new(0, 14, 0, 26)
+	NotifMessage.Size = UDim2.new(1, -28, 0, 28)
+	NotifMessage.Font = Enum.Font.Gotham
+	NotifMessage.Text = message
+	NotifMessage.TextColor3 = Theme.TextSecondary
+	NotifMessage.TextSize = 11
+	NotifMessage.TextWrapped = true
+	NotifMessage.TextXAlignment = Enum.TextXAlignment.Left
+	NotifMessage.ZIndex = 701
+
+	TweenService:Create(NotifFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Position = UDim2.new(1, -300, 0, NotifFrame.Position.Y.Offset),
+	}):Play()
+
+	task.delay(duration, function()
+		local tween =
+			TweenService:Create(NotifFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				Position = UDim2.new(1, 20, 0, NotifFrame.Position.Y.Offset),
+			})
+		tween.Completed:Connect(function()
+			NotifFrame:Destroy()
+			ActiveNotifs = ActiveNotifs - 1
+		end)
+		tween:Play()
+	end)
 end
 
 --══════════════════════════════════════════════════════--
@@ -591,107 +1394,6 @@ function AutoSaveConfig()
 		AutoSaveDebounce = nil
 	end)
 end
-
---══════════════════════════════════════════════════════--
--- NOTIFICATIONS
---══════════════════════════════════════════════════════--
-function Notify(title, message, notifType, duration)
-	notifType = notifType or "Info"
-	duration = duration or Config.NotificationDuration
-
-	local colors = {
-		Success = Color3.fromRGB(50, 205, 50),
-		Warning = Color3.fromRGB(255, 165, 0),
-		Error = Color3.fromRGB(255, 80, 80),
-		Info = Color3.fromRGB(100, 150, 255),
-	}
-	local accent = colors[notifType] or colors.Info
-
-	while ActiveNotifs >= 5 do
-		task.wait(0.1)
-	end
-	ActiveNotifs = ActiveNotifs + 1
-
-	local NotifFrame = Instance.new("Frame")
-	NotifFrame.Parent = ScreenGui
-	NotifFrame.BackgroundColor3 = Theme.Card
-	NotifFrame.BorderSizePixel = 0
-	NotifFrame.Position = UDim2.new(1, 20, 0, 20 + (ActiveNotifs - 1) * 70)
-	NotifFrame.Size = UDim2.new(0, 280, 0, 60)
-	NotifFrame.ZIndex = 700
-	NotifFrame.Active = true
-
-	local NotifCorner = Instance.new("UICorner")
-	NotifCorner.CornerRadius = UDim.new(0, 8)
-	NotifCorner.Parent = NotifFrame
-
-	local NotifStroke = Instance.new("UIStroke")
-	NotifStroke.Color = Theme.Border
-	NotifStroke.Thickness = 1
-	NotifStroke.Parent = NotifFrame
-
-	local NotifBar = Instance.new("Frame")
-	NotifBar.Parent = NotifFrame
-	NotifBar.BackgroundColor3 = accent
-	NotifBar.BorderSizePixel = 0
-	NotifBar.Size = UDim2.new(0, 4, 1, 0)
-	NotifBar.ZIndex = 701
-
-	local NotifBarCorner = Instance.new("UICorner")
-	NotifBarCorner.CornerRadius = UDim.new(0, 8)
-	NotifBarCorner.Parent = NotifBar
-
-	local NotifTitle = Instance.new("TextLabel")
-	NotifTitle.Parent = NotifFrame
-	NotifTitle.BackgroundTransparency = 1
-	NotifTitle.Position = UDim2.new(0, 14, 0, 8)
-	NotifTitle.Size = UDim2.new(1, -28, 0, 18)
-	NotifTitle.Font = Enum.Font.GothamBold
-	NotifTitle.Text = title
-	NotifTitle.TextColor3 = Theme.TextPrimary
-	NotifTitle.TextSize = 13
-	NotifTitle.TextXAlignment = Enum.TextXAlignment.Left
-	NotifTitle.ZIndex = 701
-
-	local NotifMessage = Instance.new("TextLabel")
-	NotifMessage.Parent = NotifFrame
-	NotifMessage.BackgroundTransparency = 1
-	NotifMessage.Position = UDim2.new(0, 14, 0, 26)
-	NotifMessage.Size = UDim2.new(1, -28, 0, 28)
-	NotifMessage.Font = Enum.Font.Gotham
-	NotifMessage.Text = message
-	NotifMessage.TextColor3 = Theme.TextSecondary
-	NotifMessage.TextSize = 11
-	NotifMessage.TextWrapped = true
-	NotifMessage.TextXAlignment = Enum.TextXAlignment.Left
-	NotifMessage.ZIndex = 701
-
-	TweenService:Create(NotifFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		Position = UDim2.new(1, -300, 0, NotifFrame.Position.Y.Offset),
-	}):Play()
-
-	task.delay(duration, function()
-		local tween =
-			TweenService:Create(NotifFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-				Position = UDim2.new(1, 20, 0, NotifFrame.Position.Y.Offset),
-			})
-		tween.Completed:Connect(function()
-			NotifFrame:Destroy()
-			ActiveNotifs = ActiveNotifs - 1
-		end)
-		tween:Play()
-	end)
-end
-
---══════════════════════════════════════════════════════--
--- UI: SCREEN GUI
---══════════════════════════════════════════════════════--
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "LRX_Hub"
-ScreenGui.Parent = playerGui
-ScreenGui.ResetOnSpawn = false
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ScreenGui.DisplayOrder = 999
 
 --══════════════════════════════════════════════════════--
 -- UI: MAIN FRAME
@@ -959,7 +1661,7 @@ AddConnection(CloseBtn.Activated:Connect(function()
 	SaveConfig()
 	ScriptRunning = false
 	DisconnectAll()
-	ClearAllVisuals() -- FIX: Clear lasers AND grid dots on close
+	ClearAllVisuals() -- now properly defined above
 	ScreenGui:Destroy()
 end))
 
@@ -1025,14 +1727,14 @@ local ContentScroll = Create("ScrollingFrame", {
 	ClipsDescendants = true,
 })
 
--- FIX: Create UIListLayout ONCE and keep it alive
+-- Create UIListLayout ONCE and keep it alive
 local ContentList = Create("UIListLayout", {
 	Parent = ContentScroll,
 	Padding = UDim.new(0, 6),
 	SortOrder = Enum.SortOrder.LayoutOrder,
 })
 
--- FIX: Auto-update CanvasSize so content actually scrolls
+-- Auto-update CanvasSize so content actually scrolls
 AddConnection(ContentList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 	ContentScroll.CanvasSize = UDim2.new(0, 0, 0, ContentList.AbsoluteContentSize.Y + 20)
 end))
@@ -1716,732 +2418,6 @@ local function SwitchPage(targetPage, pageTitle, pageSubtitle, pageBuilder)
 end
 
 --══════════════════════════════════════════════════════--
--- NETWORKING
---══════════════════════════════════════════════════════--
-local Networking, SeedData
-pcall(function()
-	Networking = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
-	SeedData = require(game:GetService("ReplicatedStorage").SharedModules.SeedData)
-end)
-
---══════════════════════════════════════════════════════--
--- MODULE: SEED PLACER
---══════════════════════════════════════════════════════--
-local SeedPlacer = (function()
-	local module = {}
-
-	local PlantPositions = nil
-	local OwnedPlot = nil
-	local CurrentPlantIndex = 1
-	local LastConfigHash = nil
-
-	local function GetWorldBounds(part)
-		local partCFrame = part.CFrame
-		local partHalfSize = part.Size / 2
-		local worldCorners = {
-			partCFrame * Vector3.new(-partHalfSize.X, -partHalfSize.Y, -partHalfSize.Z),
-			partCFrame * Vector3.new(-partHalfSize.X, -partHalfSize.Y, partHalfSize.Z),
-			partCFrame * Vector3.new(-partHalfSize.X, partHalfSize.Y, -partHalfSize.Z),
-			partCFrame * Vector3.new(-partHalfSize.X, partHalfSize.Y, partHalfSize.Z),
-			partCFrame * Vector3.new(partHalfSize.X, -partHalfSize.Y, -partHalfSize.Z),
-			partCFrame * Vector3.new(partHalfSize.X, -partHalfSize.Y, partHalfSize.Z),
-			partCFrame * Vector3.new(partHalfSize.X, partHalfSize.Y, -partHalfSize.Z),
-			partCFrame * Vector3.new(partHalfSize.X, partHalfSize.Y, partHalfSize.Z),
-		}
-
-		local minX, maxX = math.huge, -math.huge
-		local minZ, maxZ = math.huge, -math.huge
-
-		for _, corner in ipairs(worldCorners) do
-			minX = math.min(minX, corner.X)
-			maxX = math.max(maxX, corner.X)
-			minZ = math.min(minZ, corner.Z)
-			maxZ = math.max(maxZ, corner.Z)
-		end
-
-		return minX, maxX, minZ, maxZ
-	end
-
-	local function IsPointInPart(point, part)
-		local objectSpacePoint = part.CFrame:PointToObjectSpace(point)
-		local partHalfSize = part.Size / 2
-		return math.abs(objectSpacePoint.X) <= partHalfSize.X + 0.1
-			and math.abs(objectSpacePoint.Y) <= partHalfSize.Y + 0.1
-			and math.abs(objectSpacePoint.Z) <= partHalfSize.Z + 0.1
-	end
-
-	local function FindPlayerPlot()
-		local GardensFolder = workspace:FindFirstChild("Gardens")
-		if not GardensFolder then
-			warn("[SeedPlacer] workspace.Gardens not found.")
-			return nil
-		end
-
-		for _, plot in ipairs(GardensFolder:GetChildren()) do
-			local ownerName = plot:GetAttribute("Owner")
-			local ownerId = plot:GetAttribute("OwnerUserId")
-
-			if ownerName == player.Name or ownerId == player.UserId then
-				print(string.format("[SeedPlacer] Found by Owner attribute: %s", plot.Name))
-				return plot
-			end
-		end
-
-		local character = player.Character
-		local hrp = character and character:FindFirstChild("HumanoidRootPart")
-		local playerPos = hrp and hrp.Position
-
-		if playerPos then
-			local candidates = {}
-			for _, plot in ipairs(GardensFolder:GetChildren()) do
-				local visual = plot:FindFirstChild("Visual")
-				if not visual then
-					continue
-				end
-
-				local plotColumns = {}
-				for _, child in ipairs(visual:GetChildren()) do
-					if child:IsA("BasePart") and child.Name:match("^PlantAreaColumn") then
-						table.insert(plotColumns, child)
-					end
-				end
-				if #plotColumns == 0 then
-					continue
-				end
-
-				local inside = false
-				for _, col in ipairs(plotColumns) do
-					local localPos = col.CFrame:PointToObjectSpace(playerPos)
-					local half = col.Size / 2
-					if
-						math.abs(localPos.X) <= half.X + 0.5
-						and math.abs(localPos.Y) <= half.Y + 10
-						and math.abs(localPos.Z) <= half.Z + 0.5
-					then
-						inside = true
-						break
-					end
-				end
-
-				if inside then
-					local plotCenter = Vector3.zero
-					for _, col in ipairs(plotColumns) do
-						plotCenter = plotCenter + col.Position
-					end
-					plotCenter = plotCenter / #plotColumns
-					table.insert(candidates, {
-						Plot = plot,
-						CenterDist = (plotCenter - playerPos).Magnitude,
-					})
-				end
-			end
-
-			if #candidates > 0 then
-				table.sort(candidates, function(a, b)
-					return a.CenterDist < b.CenterDist
-				end)
-				print(string.format("[SeedPlacer] Position fallback → %s", candidates[1].Plot.Name))
-				return candidates[1].Plot
-			end
-		end
-
-		warn("[SeedPlacer] Could not find plot for player:", player.Name)
-		return nil
-	end
-
-	local function DetectPlotParts(plot)
-		local visual = plot:FindFirstChild("Visual")
-		if not visual then
-			return {}
-		end
-
-		local parts = {}
-		for _, child in ipairs(visual:GetChildren()) do
-			if child:IsA("BasePart") and child.Name:match("^PlantAreaColumn") then
-				table.insert(parts, child)
-			end
-		end
-		return parts
-	end
-
-	local function BuildPartOptions(parts)
-		local nameCounts = {}
-		local options = {}
-		for _, part in ipairs(parts) do
-			local name = part.Name
-			nameCounts[name] = (nameCounts[name] or 0) + 1
-			local displayName = name
-			local value = name
-			if nameCounts[name] > 1 then
-				displayName = name .. " #" .. nameCounts[name]
-				value = name .. "_" .. nameCounts[name]
-			end
-			table.insert(options, {
-				Label = displayName,
-				Value = value,
-				Part = part,
-			})
-		end
-		return options
-	end
-
-	local function FindPartByValue(parts, value)
-		if value == "All" or not value then
-			return nil
-		end
-		local nameCounts = {}
-		for _, part in ipairs(parts) do
-			local name = part.Name
-			nameCounts[name] = (nameCounts[name] or 0) + 1
-			local checkValue = name
-			if nameCounts[name] > 1 then
-				checkValue = name .. "_" .. nameCounts[name]
-			end
-			if checkValue == value then
-				return part
-			end
-		end
-		return nil
-	end
-
-	local function GeneratePlantPositions(targetParts, spacing)
-		if #targetParts == 0 then
-			return {}
-		end
-
-		local ColumnData = {}
-		local totalMinX, totalMaxX = math.huge, -math.huge
-		local totalMinZ, totalMaxZ = math.huge, -math.huge
-		local PlantYLevel = 142.505
-
-		for _, part in ipairs(targetParts) do
-			local minX, maxX, minZ, maxZ = GetWorldBounds(part)
-			table.insert(ColumnData, {
-				Part = part,
-				MinX = minX,
-				MaxX = maxX,
-				MinZ = minZ,
-				MaxZ = maxZ,
-			})
-			totalMinX = math.min(totalMinX, minX)
-			totalMaxX = math.max(totalMaxX, maxX)
-			totalMinZ = math.min(totalMinZ, minZ)
-			totalMaxZ = math.max(totalMaxZ, maxZ)
-			PlantYLevel = part.Position.Y
-		end
-
-		local positions = {}
-		local step = math.max(0.1, spacing)
-		local YieldInterval = 100
-		local iterationCount = 0
-
-		-- FIX: Align to stud grid centers, not arbitrary floor
-		-- Start at the first half-step from the min boundary so dots land on cell centers
-		local startX = math.floor(totalMinX / step) * step + step / 2
-		local startZ = math.floor(totalMinZ / step) * step + step / 2
-		local endX = math.ceil(totalMaxX / step) * step
-		local endZ = math.ceil(totalMaxZ / step) * step
-
-		local x = startX
-		while x <= endX + 0.001 do
-			local z = startZ
-			while z <= endZ + 0.001 do
-				iterationCount = iterationCount + 1
-				if iterationCount % YieldInterval == 0 then
-					task.wait()
-				end
-
-				local gridX = math.floor(x * 100 + 0.5) / 100
-				local gridZ = math.floor(z * 100 + 0.5) / 100
-				local gridPosition = Vector3.new(gridX, PlantYLevel, gridZ)
-
-				for _, columnInfo in ipairs(ColumnData) do
-					if
-						gridX >= columnInfo.MinX - 0.01
-						and gridX <= columnInfo.MaxX + 0.01
-						and gridZ >= columnInfo.MinZ - 0.01
-						and gridZ <= columnInfo.MaxZ + 0.01
-					then
-						if IsPointInPart(gridPosition, columnInfo.Part) then
-							table.insert(positions, { Pos = gridPosition, Part = columnInfo.Part })
-							break
-						end
-					end
-				end
-
-				z = z + step
-			end
-			x = x + step
-		end
-
-		return positions
-	end
-
-	local function ApplyPattern(positions, pattern)
-		if pattern == "LeftToRight" then
-			return positions
-		elseif pattern == "RightToLeft" then
-			local result = {}
-			for i = #positions, 1, -1 do
-				table.insert(result, positions[i])
-			end
-			return result
-		elseif pattern == "OutsideToCenter" then
-			local result = {}
-			local left = 1
-			local right = #positions
-			while left <= right do
-				table.insert(result, positions[left])
-				left = left + 1
-				if left <= right then
-					table.insert(result, positions[right])
-					right = right - 1
-				end
-			end
-			return result
-		elseif pattern == "CenterToOutside" then
-			local result = {}
-			local n = #positions
-			if n == 0 then
-				return result
-			end
-			local mid = math.ceil(n / 2)
-			table.insert(result, positions[mid])
-			local offset = 1
-			while true do
-				local added = false
-				if mid - offset >= 1 then
-					table.insert(result, positions[mid - offset])
-					added = true
-				end
-				if mid + offset <= n then
-					table.insert(result, positions[mid + offset])
-					added = true
-				end
-				if not added then
-					break
-				end
-				offset = offset + 1
-			end
-			return result
-		elseif pattern == "Middle" then
-			if #positions == 0 then
-				return {}
-			end
-
-			local grid = {}
-			local minX, maxX = math.huge, -math.huge
-			local minZ, maxZ = math.huge, -math.huge
-
-			for _, posData in ipairs(positions) do
-				local p = posData.Pos
-				minX = math.min(minX, p.X)
-				maxX = math.max(maxX, p.X)
-				minZ = math.min(minZ, p.Z)
-				maxZ = math.max(maxZ, p.Z)
-			end
-
-			local step = math.max(0.1, Config.PlantSpacing or 1)
-			local cols = math.max(1, math.floor((maxX - minX) / step + 0.5) + 1)
-			local rows = math.max(1, math.floor((maxZ - minZ) / step + 0.5) + 1)
-
-			local cellMap = {}
-			for r = 1, rows do
-				cellMap[r] = {}
-			end
-
-			for _, posData in ipairs(positions) do
-				local p = posData.Pos
-				local c = math.floor((p.X - minX) / step + 0.5) + 1
-				local r = math.floor((p.Z - minZ) / step + 0.5) + 1
-				c = math.clamp(c, 1, cols)
-				r = math.clamp(r, 1, rows)
-				if not cellMap[r][c] then
-					cellMap[r][c] = {}
-				end
-				table.insert(cellMap[r][c], posData)
-			end
-
-			local result = {}
-			local centerR = math.ceil(rows / 2)
-			local centerC = math.ceil(cols / 2)
-
-			local dr = { 0, 1, 0, -1 }
-			local dc = { 1, 0, -1, 0 }
-			local dir = 0
-			local steps = 1
-			local r, c = centerR, centerC
-
-			if cellMap[r] and cellMap[r][c] then
-				for _, posData in ipairs(cellMap[r][c]) do
-					table.insert(result, posData)
-				end
-			end
-
-			while #result < #positions do
-				for _ = 1, 2 do
-					for _ = 1, steps do
-						r = r + dr[dir + 1]
-						c = c + dc[dir + 1]
-						if r >= 1 and r <= rows and c >= 1 and c <= cols then
-							if cellMap[r] and cellMap[r][c] then
-								for _, posData in ipairs(cellMap[r][c]) do
-									table.insert(result, posData)
-								end
-							end
-						end
-					end
-					dir = (dir + 1) % 4
-				end
-				steps = steps + 1
-			end
-
-			return result
-		elseif pattern == "Random" then
-			local result = {}
-			for i, pos in ipairs(positions) do
-				result[i] = pos
-			end
-			for i = #result, 2, -1 do
-				local j = math.random(1, i)
-				result[i], result[j] = result[j], result[i]
-			end
-			return result
-		else
-			return positions
-		end
-	end
-
-	local function BuildOccupiedLookup()
-		local occupied = {}
-		local controllers = player:FindFirstChild("PlayerScripts")
-			and player.PlayerScripts:FindFirstChild("Controllers")
-		local seedInspect = controllers and controllers:FindFirstChild("SeedInspectController")
-		local fakePlot = seedInspect and seedInspect:FindFirstChild("FakePlot")
-
-		if not fakePlot then
-			return occupied
-		end
-
-		local plantsFolder = fakePlot:FindFirstChild("Plants")
-		if not plantsFolder then
-			if OwnedPlot then
-				plantsFolder = OwnedPlot:FindFirstChild("Plants")
-			end
-		end
-
-		if not plantsFolder then
-			return occupied
-		end
-
-		for _, plant in ipairs(plantsFolder:GetChildren()) do
-			local plantPos = nil
-
-			if plant:IsA("BasePart") then
-				plantPos = plant.Position
-			elseif plant:IsA("Model") then
-				if plant.PrimaryPart then
-					plantPos = plant.PrimaryPart.Position
-				else
-					for _, child in ipairs(plant:GetDescendants()) do
-						if child:IsA("BasePart") then
-							plantPos = child.Position
-							break
-						end
-					end
-				end
-			end
-
-			if plantPos then
-				local keyX = math.floor(plantPos.X * 2 + 0.5) / 2
-				local keyZ = math.floor(plantPos.Z * 2 + 0.5) / 2
-				local key = string.format("%.1f,%.1f", keyX, keyZ)
-				occupied[key] = true
-			end
-		end
-
-		return occupied
-	end
-
-	local function IsSpotEmpty(spotPosition, occupiedLookup)
-		local keyX = math.floor(spotPosition.X * 2 + 0.5) / 2
-		local keyZ = math.floor(spotPosition.Z * 2 + 0.5) / 2
-		local key = string.format("%.1f,%.1f", keyX, keyZ)
-		return not occupiedLookup[key]
-	end
-
-	local function GetConfigHash()
-		return string.format(
-			"%s|%s|%.2f",
-			Config.PlantingArea or "All",
-			Config.PlantingPattern or "LeftToRight",
-			Config.PlantSpacing or 1
-		)
-	end
-
-	function module:GetPlantPositions()
-		local currentHash = GetConfigHash()
-		if PlantPositions and LastConfigHash == currentHash then
-			return PlantPositions
-		end
-
-		if not OwnedPlot then
-			OwnedPlot = FindPlayerPlot()
-		end
-
-		if not OwnedPlot then
-			return nil
-		end
-
-		local allParts = DetectPlotParts(OwnedPlot)
-		local targetParts = {}
-
-		if Config.PlantingArea == "All" or not Config.PlantingArea or Config.PlantingArea == "" then
-			for _, part in ipairs(allParts) do
-				table.insert(targetParts, part)
-			end
-		else
-			local selectedPart = FindPartByValue(allParts, Config.PlantingArea)
-			if selectedPart then
-				table.insert(targetParts, selectedPart)
-			else
-				for _, part in ipairs(allParts) do
-					table.insert(targetParts, part)
-				end
-			end
-		end
-
-		if #targetParts == 0 then
-			warn("[SeedPlacer] No target parts found for area: " .. tostring(Config.PlantingArea))
-			return nil
-		end
-
-		local positions = GeneratePlantPositions(targetParts, Config.PlantSpacing or 1)
-		positions = ApplyPattern(positions, Config.PlantingPattern or "LeftToRight")
-
-		PlantPositions = positions
-		LastConfigHash = currentHash
-
-		print(
-			string.format(
-				"[SeedPlacer] Generated %d positions in %s (Area: %s) across %d parts.",
-				#positions,
-				OwnedPlot.Name,
-				Config.PlantingArea or "All",
-				#targetParts
-			)
-		)
-
-		return PlantPositions
-	end
-
-	function module:GetDetectionInfo()
-		local plot = OwnedPlot or FindPlayerPlot()
-		if not plot then
-			return { Parts = {}, PartOptions = {}, PartNames = {}, PlotName = "None", PlotInstance = nil }
-		end
-
-		local parts = DetectPlotParts(plot)
-		local options = BuildPartOptions(parts)
-		local names = {}
-		for _, opt in ipairs(options) do
-			table.insert(names, opt.Label)
-		end
-		return {
-			Parts = parts,
-			PartOptions = options,
-			PartNames = names,
-			PlotName = plot.Name,
-			PlotInstance = plot,
-		}
-	end
-
-	function module:ClearCache()
-		PlantPositions = nil
-		OwnedPlot = nil
-		CurrentPlantIndex = 1
-		LastConfigHash = nil
-	end
-
-	function module:FindPlayerPlot()
-		return FindPlayerPlot()
-	end
-
-	function module:RunCycle()
-		local allSpots = self:GetPlantPositions()
-		if not allSpots then
-			return
-		end
-
-		local PlantRemote = Networking and Networking.Plant and Networking.Plant.PlantSeed
-		if not PlantRemote then
-			warn("[SeedPlacer] Networking.Plant.PlantSeed not found!")
-			return
-		end
-
-		local EnabledSeedNames = {}
-		for seedName, enabled in pairs(Config.SelectedPlaceSeeds or {}) do
-			if enabled then
-				table.insert(EnabledSeedNames, seedName)
-			end
-		end
-
-		if #EnabledSeedNames == 0 then
-			return
-		end
-
-		local occupiedLookup = BuildOccupiedLookup()
-		local totalSpots = #allSpots
-		local maxPlantAmount = Config.PlaceAmount or 10
-		local plantedCount = 0
-		local seedIndex = 1
-		local checkedCount = 0
-		local delay = math.max(0, Config.PlantDelay or 0.05)
-
-		while plantedCount < maxPlantAmount and checkedCount < totalSpots do
-			if not Config.EnableSeedPlacer then
-				break
-			end
-
-			local spot = allSpots[CurrentPlantIndex]
-			if not spot or not spot.Part then
-				CurrentPlantIndex = 1
-				break
-			end
-
-			checkedCount = checkedCount + 1
-
-			if IsSpotEmpty(spot.Pos, occupiedLookup) then
-				local seedName = EnabledSeedNames[seedIndex]
-				seedIndex = seedIndex % #EnabledSeedNames + 1
-
-				local success, err = pcall(function()
-					PlantRemote:Fire(spot.Pos, seedName, spot.Part)
-				end)
-
-				if not success then
-					warn("[SeedPlacer] PlantSeed failed at spot " .. tostring(CurrentPlantIndex) .. ":", err)
-				end
-
-				plantedCount = plantedCount + 1
-
-				if plantedCount < maxPlantAmount then
-					task.wait(delay)
-				end
-			end
-
-			CurrentPlantIndex = CurrentPlantIndex + 1
-			if CurrentPlantIndex > totalSpots then
-				CurrentPlantIndex = 1
-			end
-		end
-
-		if plantedCount > 0 then
-			print(string.format("[SeedPlacer] Planted %d seeds this cycle.", plantedCount))
-		end
-	end
-
-	return module
-end)()
-
---══════════════════════════════════════════════════════--
--- GRID DOTS VISUAL (DEFINED AFTER SeedPlacer SO IT'S NOT NIL)
---══════════════════════════════════════════════════════--
-local function EnsureDotsFolder()
-	if not DotsFolder or not DotsFolder.Parent then
-		DotsFolder = Instance.new("Folder")
-		DotsFolder.Name = "LRX_GridDots"
-		DotsFolder.Parent = workspace
-	end
-	return DotsFolder
-end
-
-local function ClearGridDots()
-	for _, dot in ipairs(GridDots) do
-		if dot then
-			pcall(function()
-				dot:Destroy()
-			end)
-		end
-	end
-	table.clear(GridDots)
-end
-
-local function ClearAllVisuals()
-	ClearLasers()
-	ClearGridDots()
-end
-
--- Grid dot colors to match the image (green/yellow alternating)
-local GridDotColors = {
-	Color3.fromRGB(50, 205, 50),
-	Color3.fromRGB(255, 215, 0),
-	Color3.fromRGB(0, 255, 127),
-	Color3.fromRGB(255, 165, 0),
-}
-
-function RefreshGridDots()
-	ClearGridDots()
-	if not Config.ShowGridDots then
-		return
-	end
-
-	local plot = SeedPlacer:FindPlayerPlot()
-	if not plot then
-		warn("[GridDots] Could not find player plot.")
-		return
-	end
-
-	SeedPlacer:ClearCache()
-	local positions = SeedPlacer:GetPlantPositions()
-	if not positions or #positions == 0 then
-		warn("[GridDots] No plant positions generated.")
-		return
-	end
-
-	local folder = EnsureDotsFolder()
-
-	-- FIX: Show ALL positions, not a sampled subset
-	-- Create dots in batches to avoid lag, but cover every spot
-	local total = #positions
-	local batchSize = 500
-	local batchDelay = 0.05
-
-	for batchStart = 1, total, batchSize do
-		local batchEnd = math.min(batchStart + batchSize - 1, total)
-
-		for i = batchStart, batchEnd do
-			local posData = positions[i]
-			local dot = Instance.new("Part")
-			dot.Name = "GridDot"
-			dot.Anchored = true
-			dot.CanCollide = false
-			dot.CanQuery = false
-			dot.CanTouch = false
-			dot.CastShadow = false
-			dot.Material = Enum.Material.Neon
-			dot.Color = GridDotColors[((i - 1) % #GridDotColors) + 1]
-			dot.Shape = Enum.PartType.Ball
-			-- Slightly smaller so they don't overlap visually
-			dot.Size = Vector3.new(0.08, 0.08, 0.08)
-			-- Position exactly at the planting spot, slightly above ground
-			dot.Position = posData.Pos + Vector3.new(0, 0.05, 0)
-			dot.Parent = folder
-			dot.Transparency = 0.15
-
-			table.insert(GridDots, dot)
-		end
-
-		-- Small delay between batches to prevent frame drops
-		if batchEnd < total then
-			task.wait(batchDelay)
-		end
-	end
-
-	Notify("Plot Visualizer", string.format("Showing %d grid dots (all spots)", #GridDots), "Success", 2)
-end
-
---══════════════════════════════════════════════════════--
 -- SEED SELECTION MODAL
 --══════════════════════════════════════════════════════--
 local function ShowSeedSelectionModal(title, selectedTable, updateCallback)
@@ -3098,7 +3074,7 @@ function Pages.Home()
 				end)
 				LaserBtn.Size = UDim2.new(1, -8, 0, 32)
 
-				-- FIX: Grid Dots is now a persistent toggle
+				-- Grid Dots is now a persistent toggle
 				CreateToggle(DropdownScroll, "Show Grid Dots", Config.ShowGridDots, function(state)
 					Config.ShowGridDots = state
 					AutoSaveConfig()
@@ -3459,22 +3435,18 @@ end))
 --══════════════════════════════════════════════════════--
 -- MOBILE SUPPORT & SAFEGUARDS
 --══════════════════════════════════════════════════════--
-
--- FIX: Safe viewport detection for mobile
 local function GetSafeViewportSize()
 	local camera = workspace.CurrentCamera
 	if not camera then
 		return Vector2.new(800, 600)
 	end
 	local viewport = camera.ViewportSize
-	-- Sometimes ViewportSize is (0,0) briefly on load
 	if viewport.X < 100 or viewport.Y < 100 then
 		return Vector2.new(800, 600)
 	end
 	return viewport
 end
 
--- FIX: Apply mobile sizing with proper checks
 local function ApplyMobileSizing()
 	local success, err = pcall(function()
 		if not UserInputService.TouchEnabled then
@@ -3485,7 +3457,6 @@ local function ApplyMobileSizing()
 		local w = math.min(Config.WindowWidth, viewport.X - 20)
 		local h = math.min(Config.WindowHeight, viewport.Y - 40)
 
-		-- Ensure minimum reasonable size
 		w = math.max(w, Config.MinWindowWidth)
 		h = math.max(h, Config.MinWindowHeight)
 
@@ -3500,7 +3471,6 @@ local function ApplyMobileSizing()
 	end
 end
 
--- Delay mobile sizing to ensure camera is ready
 if UserInputService.TouchEnabled then
 	task.delay(0.5, ApplyMobileSizing)
 end
@@ -3508,11 +3478,9 @@ end
 --══════════════════════════════════════════════════════--
 -- INITIALIZATION
 --══════════════════════════════════════════════════════--
-
 local InitSuccess, InitError = pcall(function()
 	LoadConfig()
 
-	-- If grid dots were saved as enabled, show them on load
 	if Config.ShowGridDots then
 		task.delay(1.5, function()
 			local ok, err = pcall(function()
@@ -3529,7 +3497,6 @@ end)
 
 if not InitSuccess then
 	warn("[LRX_Hub] CRITICAL INIT ERROR:", InitError)
-	-- Try to show basic UI anyway
 	pcall(function()
 		Pages.Home()
 	end)
