@@ -1,48 +1,236 @@
 -- ═══════════════════════════════════════════════════════════════════════
---  LRX_Hub v2.2.4
---  Fixed: Grid corner coverage, undefined RefreshGridDots, scope order
+--  LRX_Hub v3.0.0 - Production Refactor
+--  Architecture: Modular, Performance-Optimized, Memory-Safe
 -- ═══════════════════════════════════════════════════════════════════════
 
---══════════════════════════════════════════════════════--
--- SERVICES & PLAYER
---══════════════════════════════════════════════════════--
-local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
+--[[
+    ARCHITECTURE OVERVIEW:
 
-local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+    1. CONSTANTS        - Immutable configuration values
+    2. SERVICES         - Cached Roblox service references
+    3. STATE            - Runtime mutable state (separated from Config)
+    4. CONFIG           - User-persistent settings with validation
+    5. THEMES           - Visual styling definitions
+    6. UTILITIES        - Reusable helper functions
+    7. MEMORY           - Connection & task lifecycle management
+    8. NOTIFICATIONS    - Toast system with queue management
+    9. LASER SYSTEM     - Visual plot scanning effects
+    10. GRID SYSTEM     - Planting position visualization
+    11. PLOT SYSTEM     - Plot detection & bed management
+    12. SEED PLACER     - Plant placement automation
+    13. CONFIG SYSTEM   - Save/load with serialization
+    14. UI SYSTEM       - Component factory & page management
+    15. INITIALIZATION  - Boot sequence & error recovery
+--]]
 
---══════════════════════════════════════════════════════--
--- UI: SCREEN GUI (create early so Notify can use it)
---══════════════════════════════════════════════════════--
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "LRX_Hub"
-ScreenGui.Parent = playerGui
-ScreenGui.ResetOnSpawn = false
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ScreenGui.DisplayOrder = 999
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 1: CONSTANTS
+-- ═══════════════════════════════════════════════════════════════════════
 
---══════════════════════════════════════════════════════--
--- CONFIGURATION
---══════════════════════════════════════════════════════--
+local CONSTANTS = {
+	-- File & attribute names
+	CONFIG_FILE = "LRX_Hub_Config.json",
+	CONFIG_ATTRIBUTE = "LRX_Hub_Config",
+
+	-- UI dimensions
+	DEFAULT_WINDOW_WIDTH = 600,
+	DEFAULT_WINDOW_HEIGHT = 400,
+	MIN_WINDOW_WIDTH = 320,
+	MIN_WINDOW_HEIGHT = 240,
+	SIDEBAR_WIDTH = 170,
+	TOPBAR_HEIGHT = 44,
+
+	-- Planting defaults
+	DEFAULT_PLACE_AMOUNT = 10,
+	DEFAULT_PLANT_SPACING = 1,
+	DEFAULT_PLANT_DELAY = 0.05,
+
+	-- Visual
+	MAX_NOTIFICATIONS = 5,
+	NOTIFICATION_HEIGHT = 70,
+	NOTIFICATION_WIDTH = 280,
+	NOTIFICATION_DURATION = 3,
+	MAX_DROPDOWN_HEIGHT = 260,
+	DROPDOWN_ANIMATION_SPEED = 0.2,
+
+	-- Grid dots
+	GRID_DOT_SIZE = 0.08,
+	GRID_DOT_BATCH_SIZE = 500,
+	GRID_DOT_BATCH_DELAY = 0.05,
+	GRID_DOT_Y_OFFSET = 0.05,
+
+	-- Laser scan
+	LASER_SCAN_DURATION = 1.5,
+	LASER_SWEEP_COUNT = 6,
+	LASER_BEAM_THICKNESS = 0.05,
+
+	-- Performance
+	PLANT_CYCLE_INTERVAL = 0.2,
+	AUTO_BUY_INTERVAL = 0.2,
+	AUTO_SAVE_DEBOUNCE = 1,
+	YIELD_INTERVAL = 200,
+
+	-- Z-Index layers
+	Z_BASE = 10,
+	Z_DROPDOWN = 50,
+	Z_NOTIFICATION = 700,
+	Z_MODAL_OVERLAY = 500,
+	Z_MODAL = 600,
+
+	-- Mobile
+	MOBILE_PADDING_X = 20,
+	MOBILE_PADDING_Y = 40,
+	MOBILE_INIT_DELAY = 0.5,
+
+	-- Position rounding
+	POSITION_PRECISION = 100,
+	OCCUPIED_LOOKUP_PRECISION = 2,
+
+	-- Occupancy
+	OCCUPANCY_TOLERANCE = 0.5,
+
+	-- Rarity colors
+	RARITY_COLORS = {
+		Common = Color3.fromRGB(169, 169, 169),
+		Uncommon = Color3.fromRGB(50, 205, 50),
+		Rare = Color3.fromRGB(30, 144, 255),
+		Epic = Color3.fromRGB(147, 112, 219),
+		Legendary = Color3.fromRGB(255, 215, 0),
+		Mythic = Color3.fromRGB(255, 69, 0),
+	},
+
+	-- Notification type colors
+	NOTIF_COLORS = {
+		Success = Color3.fromRGB(50, 205, 50),
+		Warning = Color3.fromRGB(255, 165, 0),
+		Error = Color3.fromRGB(255, 80, 80),
+		Info = Color3.fromRGB(100, 150, 255),
+	},
+
+	-- Grid dot colors
+	GRID_DOT_COLORS = {
+		Color3.fromRGB(50, 205, 50),
+		Color3.fromRGB(255, 215, 0),
+		Color3.fromRGB(0, 255, 127),
+		Color3.fromRGB(255, 165, 0),
+	},
+}
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 2: SERVICES (cached once, never re-fetched)
+-- ═══════════════════════════════════════════════════════════════════════
+
+local Services = {
+	Players = game:GetService("Players"),
+	TweenService = game:GetService("TweenService"),
+	UserInputService = game:GetService("UserInputService"),
+	RunService = game:GetService("RunService"),
+	HttpService = game:GetService("HttpService"),
+	ReplicatedStorage = game:GetService("ReplicatedStorage"),
+	Workspace = game:GetService("Workspace"),
+}
+
+local Player = Services.Players.LocalPlayer
+local PlayerGui = Player:WaitForChild("PlayerGui")
+
+-- Cache networking modules (loaded once, nil if unavailable)
+local Networking, SeedData
+pcall(function()
+	Networking = require(Services.ReplicatedStorage:WaitForChild("SharedModules"):WaitForChild("Networking"))
+	SeedData = require(Services.ReplicatedStorage.SharedModules:WaitForChild("SeedData"))
+end)
+
+-- Cache PlantRemote reference
+local PlantRemote = Networking and Networking.Plant and Networking.Plant.PlantSeed
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 3: STATE (runtime-only, not persisted)
+-- ═══════════════════════════════════════════════════════════════════════
+
+local State = {
+	ScriptRunning = true,
+	ActiveNotifs = 0,
+	CurrentPage = "Home",
+	ModalOpen = false,
+	CardOrder = 0,
+
+	-- Dropdown state
+	ActiveDropdownCard = nil,
+	ActiveDropdownFrame = nil,
+	DropdownDebounce = false,
+
+	-- Modal state
+	ActiveModal = nil,
+	ModalOverlay = nil,
+
+	-- Drag state
+	IsDraggingWindow = false,
+	IsDraggingToggle = false,
+	DragStartPos = nil,
+	FrameStartPos = nil,
+	ToggleStartPos = nil,
+	ToggleBtnStart = nil,
+
+	-- Resize state
+	IsResizing = false,
+
+	-- Auto-save debounce handle
+	AutoSaveDebounce = nil,
+
+	-- Cached plot reference
+	CachedPlot = nil,
+	CachedPlotParts = nil,
+	CachedPartOptions = nil,
+
+	-- UI references (populated during init)
+	ScreenGui = nil,
+	MainFrame = nil,
+	ContentScroll = nil,
+	SidebarScroll = nil,
+	SearchFrame = nil,
+	SuggestFrame = nil,
+	SuggestScroll = nil,
+	SearchBox = nil,
+	PageTitle = nil,
+	PageSubtitle = nil,
+	MainIcon = nil,
+	ResizeHandle = nil,
+
+	-- Collections
+	Connections = {},
+	Tasks = {},
+	SidebarButtons = {},
+	SearchableItems = {},
+	GridDots = {},
+	LaserBeams = {},
+
+	-- Folders
+	DotsFolder = nil,
+	LaserFolder = nil,
+}
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 4: CONFIG (user-persistent settings)
+-- ═══════════════════════════════════════════════════════════════════════
+
 local Config = {
-	WindowWidth = 600,
-	WindowHeight = 400,
-	MinWindowWidth = 320,
-	MinWindowHeight = 240,
-	SidebarWidth = 170,
+	-- Window
+	WindowWidth = CONSTANTS.DEFAULT_WINDOW_WIDTH,
+	WindowHeight = CONSTANTS.DEFAULT_WINDOW_HEIGHT,
+	MinWindowWidth = CONSTANTS.MIN_WINDOW_WIDTH,
+	MinWindowHeight = CONSTANTS.MIN_WINDOW_HEIGHT,
+	SidebarWidth = CONSTANTS.SIDEBAR_WIDTH,
+	WindowPosition = nil,
+	WindowSize = nil,
+
+	-- Appearance
 	ToggleButtonText = "LRX",
 	Theme = "Dark",
 	AnimationSpeed = 0.2,
 	DisableAnimations = false,
-	NotificationDuration = 3,
+	NotificationDuration = CONSTANTS.NOTIFICATION_DURATION,
 	ModalDarkening = 0.5,
 	UIScale = 1.0,
-	WindowPosition = nil,
-	WindowSize = nil,
 
 	-- Shop
 	SelectedSeeds = {},
@@ -51,22 +239,64 @@ local Config = {
 	-- Seed Placer
 	SelectedPlaceSeeds = {},
 	EnableSeedPlacer = false,
-	PlaceAmount = 10,
-	PlantingArea = "Default",
+	PlaceAmount = CONSTANTS.DEFAULT_PLACE_AMOUNT,
+	PlantingArea = "All",
 	PlantingPattern = "LeftToRight",
-	PlantSpacing = 1,
-	PlantDelay = 0.05,
+	PlantSpacing = CONSTANTS.DEFAULT_PLANT_SPACING,
+	PlantDelay = CONSTANTS.DEFAULT_PLANT_DELAY,
 
-	-- Plot Visualizer
+	-- Visualizer
 	ShowGridDots = false,
 
+	-- Performance
 	ReduceEffects = false,
+
+	-- Input
 	Keybinds = { ToggleUI = "F" },
 }
 
---══════════════════════════════════════════════════════--
--- THEMES
---══════════════════════════════════════════════════════--
+-- Config validation & defaults
+local ConfigSchema = {
+	WindowWidth = {
+		type = "number",
+		min = CONSTANTS.MIN_WINDOW_WIDTH,
+		max = 2000,
+		default = CONSTANTS.DEFAULT_WINDOW_WIDTH,
+	},
+	WindowHeight = {
+		type = "number",
+		min = CONSTANTS.MIN_WINDOW_HEIGHT,
+		max = 1500,
+		default = CONSTANTS.DEFAULT_WINDOW_HEIGHT,
+	},
+	MinWindowWidth = { type = "number", min = 200, max = 800, default = CONSTANTS.MIN_WINDOW_WIDTH },
+	MinWindowHeight = { type = "number", min = 150, max = 600, default = CONSTANTS.MIN_WINDOW_HEIGHT },
+	SidebarWidth = { type = "number", min = 120, max = 300, default = CONSTANTS.SIDEBAR_WIDTH },
+	ToggleButtonText = { type = "string", default = "LRX" },
+	Theme = { type = "string", default = "Dark" },
+	AnimationSpeed = { type = "number", min = 0, max = 2, default = 0.2 },
+	DisableAnimations = { type = "boolean", default = false },
+	NotificationDuration = { type = "number", min = 1, max = 10, default = CONSTANTS.NOTIFICATION_DURATION },
+	ModalDarkening = { type = "number", min = 0, max = 1, default = 0.5 },
+	UIScale = { type = "number", min = 0.5, max = 2, default = 1.0 },
+	SelectedSeeds = { type = "table", default = {} },
+	EnableSeedShop = { type = "boolean", default = false },
+	SelectedPlaceSeeds = { type = "table", default = {} },
+	EnableSeedPlacer = { type = "boolean", default = false },
+	PlaceAmount = { type = "number", min = 1, max = 1000, default = CONSTANTS.DEFAULT_PLACE_AMOUNT },
+	PlantingArea = { type = "string", default = "All" },
+	PlantingPattern = { type = "string", default = "LeftToRight" },
+	PlantSpacing = { type = "number", min = 0.1, max = 10, default = CONSTANTS.DEFAULT_PLANT_SPACING },
+	PlantDelay = { type = "number", min = 0, max = 5, default = CONSTANTS.DEFAULT_PLANT_DELAY },
+	ShowGridDots = { type = "boolean", default = false },
+	ReduceEffects = { type = "boolean", default = false },
+	Keybinds = { type = "table", default = { ToggleUI = "F" } },
+}
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 5: THEMES
+-- ═══════════════════════════════════════════════════════════════════════
+
 local Themes = {
 	Dark = {
 		Background = Color3.fromRGB(22, 22, 26),
@@ -92,69 +322,318 @@ local Themes = {
 	},
 }
 
-local Theme = Themes[Config.Theme]
+local Theme = Themes[Config.Theme] or Themes.Dark
 
---══════════════════════════════════════════════════════--
--- NETWORKING (load early — SeedPlacer needs it)
---══════════════════════════════════════════════════════--
-local Networking, SeedData
-pcall(function()
-	Networking = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
-	SeedData = require(game:GetService("ReplicatedStorage").SharedModules.SeedData)
-end)
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 6: UTILITY FUNCTIONS
+-- ═══════════════════════════════════════════════════════════════════════
 
---══════════════════════════════════════════════════════--
--- STATE
---══════════════════════════════════════════════════════--
-local ScriptRunning = true
-local Connections = {}
-local Tasks = {}
-local ActiveNotifs = 0
-local CurrentPage = "Home"
-local SidebarButtons = {}
-local Pages = {}
-local SearchableItems = {}
+local Utils = {}
 
-local ActiveDropdownCard = nil
-local ActiveDropdownFrame = nil
-local DropdownDebounce = false
-
-local ModalOverlay = nil
-local ActiveModal = nil
-local ModalOpen = false
-
-local CardOrder = 0
-local AutoSaveDebounce = nil
-
--- Grid dots state
-local GridDots = {}
-local DotsFolder = nil
-local RefreshGridDots -- will be assigned below
-
--- Laser state
-local LaserBeams = {}
-local LaserFolder = nil
-
---══════════════════════════════════════════════════════--
--- UTILITIES
---══════════════════════════════════════════════════════--
-local function AddConnection(eventConnection)
-	table.insert(Connections, eventConnection)
-	return eventConnection
+--[[
+    Rounds a number to specified decimal places.
+    More efficient than string formatting for position calculations.
+--]]
+function Utils.Round(num, precision)
+	precision = precision or CONSTANTS.POSITION_PRECISION
+	return math.floor(num * precision + 0.5) / precision
 end
 
-local function DisconnectAll()
-	for _, connection in ipairs(Connections) do
+--[[
+    Formats a position vector for deduplication keys.
+    Uses cached precision for consistent occupancy lookups.
+--]]
+function Utils.FormatPositionKey(pos, precision)
+	precision = precision or CONSTANTS.OCCUPIED_LOOKUP_PRECISION
+	local mult = precision * 10
+	local x = math.floor(pos.X * mult + 0.5) / mult
+	local z = math.floor(pos.Z * mult + 0.5) / mult
+	return string.format("%.1f,%.1f", x, z)
+end
+
+--[[
+    Clamps a value between min and max.
+--]]
+function Utils.Clamp(value, min, max)
+	if value < min then
+		return min
+	end
+	if value > max then
+		return max
+	end
+	return value
+end
+
+--[[
+    Validates and coerces a config value against its schema.
+    Returns the validated value (or default if invalid).
+--]]
+function Utils.ValidateConfigValue(key, value)
+	local schema = ConfigSchema[key]
+	if not schema then
+		return value -- Unknown key, pass through
+	end
+
+	local valueType = typeof(value)
+
+	if schema.type == "number" then
+		if valueType ~= "number" then
+			return schema.default
+		end
+		return Utils.Clamp(value, schema.min, schema.max)
+	elseif schema.type == "string" then
+		if valueType ~= "string" then
+			return schema.default
+		end
+		return value
+	elseif schema.type == "boolean" then
+		if valueType ~= "boolean" then
+			return schema.default
+		end
+		return value
+	elseif schema.type == "table" then
+		if valueType ~= "table" then
+			return table.clone(schema.default)
+		end
+		return value
+	end
+
+	return schema.default
+end
+
+--[[
+    Formats selected seeds for display with truncation.
+--]]
+function Utils.FormatSelectedSeeds(selectedTable, maxDisplay)
+	maxDisplay = maxDisplay or 10
+	local names = {}
+
+	for seedName, selected in pairs(selectedTable) do
+		if selected then
+			table.insert(names, seedName)
+		end
+	end
+
+	table.sort(names)
+
+	local count = #names
+	if count == 0 then
+		return "Selected (0): None"
+	end
+
+	local shown = {}
+	for i = 1, math.min(count, maxDisplay) do
+		table.insert(shown, names[i])
+	end
+
+	local text = table.concat(shown, ", ")
+	if count > maxDisplay then
+		text = text .. "..."
+	end
+
+	return string.format("Selected (%d): %s", count, text)
+end
+
+--[[
+    Formats price with K suffix for large values.
+--]]
+function Utils.FormatPrice(price)
+	if not price or price <= 0 then
+		return "$0"
+	end
+	if price >= 1000 then
+		return string.format("$%.2fK", price / 1000)
+	end
+	return "$" .. tostring(price)
+end
+
+--[[
+    Checks if a point is inside a BasePart using object-space coordinates.
+    More efficient than world-space distance checks.
+--]]
+function Utils.IsPointInPart(point, part)
+	local localPos = part.CFrame:PointToObjectSpace(point)
+	local halfSize = part.Size / 2
+	return math.abs(localPos.X) <= halfSize.X + 0.1
+		and math.abs(localPos.Y) <= halfSize.Y + 0.1
+		and math.abs(localPos.Z) <= halfSize.Z + 0.1
+end
+
+--[[
+    Gets the world-space bounds of a part.
+    Returns minX, maxX, minZ, maxZ.
+--]]
+function Utils.GetWorldBoundsXZ(part)
+	local cf = part.CFrame
+	local hs = part.Size / 2
+
+	local minX, maxX = math.huge, -math.huge
+	local minZ, maxZ = math.huge, -math.huge
+
+	-- Only check the 4 corners on the XZ plane (Y doesn't matter for planting)
+	for dx = -1, 1, 2 do
+		for dz = -1, 1, 2 do
+			local corner = cf * Vector3.new(dx * hs.X, 0, dz * hs.Z)
+			minX = math.min(minX, corner.X)
+			maxX = math.max(maxX, corner.X)
+			minZ = math.min(minZ, corner.Z)
+			maxZ = math.max(maxZ, corner.Z)
+		end
+	end
+
+	return minX, maxX, minZ, maxZ
+end
+
+--[[
+    Gets player position from HumanoidRootPart.
+    Returns nil if character not ready.
+--]]
+function Utils.GetPlayerPosition()
+	local character = Player.Character
+	if not character then
+		return nil
+	end
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	return hrp and hrp.Position or nil
+end
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 7: MEMORY MANAGEMENT
+-- ═══════════════════════════════════════════════════════════════════════
+
+local Memory = {}
+
+--[[
+    Tracks a connection for automatic cleanup.
+    Returns the connection for chaining.
+--]]
+function Memory.TrackConnection(connection)
+	table.insert(State.Connections, connection)
+	return connection
+end
+
+--[[
+    Disconnects all tracked connections and clears the table.
+    Safe to call multiple times.
+--]]
+function Memory.DisconnectAll()
+	for _, connection in ipairs(State.Connections) do
 		if connection and connection.Connected then
 			pcall(function()
 				connection:Disconnect()
 			end)
 		end
 	end
-	table.clear(Connections)
+	table.clear(State.Connections)
 end
 
-local function Tween(instance, properties, duration, callback)
+--[[
+    Cancels all tracked tasks.
+--]]
+function Memory.CancelAllTasks()
+	for _, taskHandle in ipairs(State.Tasks) do
+		if taskHandle then
+			pcall(function()
+				task.cancel(taskHandle)
+			end)
+		end
+	end
+	table.clear(State.Tasks)
+end
+
+--[[
+    Destroys all instances in a table and clears it.
+--]]
+function Memory.DestroyTableInstances(instanceTable)
+	for _, instance in ipairs(instanceTable) do
+		if instance then
+			pcall(function()
+				instance:Destroy()
+			end)
+		end
+	end
+	table.clear(instanceTable)
+end
+
+--[[
+    Ensures a folder exists in workspace, creating if necessary.
+    Returns the folder.
+--]]
+function Memory.EnsureWorkspaceFolder(folderName, stateKey)
+	local folder = State[stateKey]
+	if folder and folder.Parent then
+		return folder
+	end
+
+	folder = Instance.new("Folder")
+	folder.Name = folderName
+	folder.Parent = Services.Workspace
+	State[stateKey] = folder
+	return folder
+end
+
+--[[
+    Full cleanup on script shutdown.
+--]]
+function Memory.FullCleanup()
+	State.ScriptRunning = false
+	Memory.DisconnectAll()
+	Memory.CancelAllTasks()
+	Memory.DestroyTableInstances(State.GridDots)
+	Memory.DestroyTableInstances(State.LaserBeams)
+
+	if State.DotsFolder then
+		pcall(function()
+			State.DotsFolder:Destroy()
+		end)
+		State.DotsFolder = nil
+	end
+
+	if State.LaserFolder then
+		pcall(function()
+			State.LaserFolder:Destroy()
+		end)
+		State.LaserFolder = nil
+	end
+
+	if State.ScreenGui then
+		pcall(function()
+			State.ScreenGui:Destroy()
+		end)
+	end
+end
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 8: TWEEN SYSTEM
+-- ═══════════════════════════════════════════════════════════════════════
+
+local TweenSystem = {}
+
+--[[
+    Cached TweenInfo for common animation patterns.
+    Reduces GC pressure from creating many TweenInfo objects.
+--]]
+local TweenInfoCache = {}
+
+function TweenSystem.GetTweenInfo(duration, style, direction)
+	style = style or Enum.EasingStyle.Quad
+	direction = direction or Enum.EasingDirection.Out
+	duration = duration or Config.AnimationSpeed
+
+	local key = string.format("%.2f_%s_%s", duration, tostring(style), tostring(direction))
+
+	if not TweenInfoCache[key] then
+		TweenInfoCache[key] = TweenInfo.new(duration, style, direction)
+	end
+
+	return TweenInfoCache[key]
+end
+
+--[[
+    Applies a tween to an instance.
+    If animations are disabled, applies properties instantly.
+--]]
+function TweenSystem.Tween(instance, properties, duration, callback)
 	if Config.DisableAnimations then
 		for key, value in pairs(properties) do
 			instance[key] = value
@@ -162,91 +641,139 @@ local function Tween(instance, properties, duration, callback)
 		if callback then
 			callback()
 		end
-		return
+		return nil
 	end
-	local activeTween = TweenService:Create(
-		instance,
-		TweenInfo.new(duration or Config.AnimationSpeed, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		properties
-	)
+
+	local tweenInfo = TweenSystem.GetTweenInfo(duration)
+	local tween = Services.TweenService:Create(instance, tweenInfo, properties)
+
 	if callback then
-		activeTween.Completed:Connect(callback)
+		Memory.TrackConnection(tween.Completed:Connect(callback))
 	end
-	activeTween:Play()
+
+	tween:Play()
+	return tween
 end
 
-local function Create(className, properties)
-	local newInstance = Instance.new(className)
-	for property, value in pairs(properties or {}) do
-		newInstance[property] = value
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 9: NOTIFICATION SYSTEM
+-- ═══════════════════════════════════════════════════════════════════════
+
+local NotificationSystem = {}
+
+--[[
+    Shows a notification toast.
+    Manages a queue to prevent overflow.
+--]]
+function NotificationSystem.Notify(title, message, notifType, duration)
+	notifType = notifType or "Info"
+	duration = duration or Config.NotificationDuration
+	local accent = CONSTANTS.NOTIF_COLORS[notifType] or CONSTANTS.NOTIF_COLORS.Info
+
+	-- Wait if queue is full
+	while State.ActiveNotifs >= CONSTANTS.MAX_NOTIFICATIONS do
+		task.wait(0.1)
 	end
-	return newInstance
-end
 
-local function Corner(instance, radius)
-	local newCorner = Instance.new("UICorner")
-	newCorner.CornerRadius = UDim.new(0, radius or 6)
-	newCorner.Parent = instance
-end
+	State.ActiveNotifs += 1
+	local notifIndex = State.ActiveNotifs
 
-local function Stroke(instance, color, thickness)
-	local newStroke = Instance.new("UIStroke")
-	newStroke.Color = color or Theme.Border
-	newStroke.Thickness = thickness or 1
-	newStroke.Parent = instance
-end
+	local frame = Instance.new("Frame")
+	frame.Name = "Notification_" .. notifIndex
+	frame.Parent = State.ScreenGui
+	frame.BackgroundColor3 = Theme.Card
+	frame.BorderSizePixel = 0
+	frame.Position = UDim2.new(1, 20, 0, 20 + (notifIndex - 1) * CONSTANTS.NOTIFICATION_HEIGHT)
+	frame.Size = UDim2.new(0, CONSTANTS.NOTIFICATION_WIDTH, 0, 60)
+	frame.ZIndex = CONSTANTS.Z_NOTIFICATION
+	frame.Active = true
 
-local function FormatSelectedSeeds(selectedTable, maxDisplay)
-	local names = {}
-	for seedName, selected in pairs(selectedTable) do
-		if selected then
-			table.insert(names, seedName)
+	Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Theme.Border
+	stroke.Thickness = 1
+	stroke.Parent = frame
+
+	local bar = Instance.new("Frame")
+	bar.Parent = frame
+	bar.BackgroundColor3 = accent
+	bar.BorderSizePixel = 0
+	bar.Size = UDim2.new(0, 4, 1, 0)
+	bar.ZIndex = CONSTANTS.Z_NOTIFICATION + 1
+	Instance.new("UICorner", bar).CornerRadius = UDim.new(0, 8)
+
+	local titleLabel = Instance.new("TextLabel")
+	titleLabel.Parent = frame
+	titleLabel.BackgroundTransparency = 1
+	titleLabel.Position = UDim2.new(0, 14, 0, 8)
+	titleLabel.Size = UDim2.new(1, -28, 0, 18)
+	titleLabel.Font = Enum.Font.GothamBold
+	titleLabel.Text = title
+	titleLabel.TextColor3 = Theme.TextPrimary
+	titleLabel.TextSize = 13
+	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+	titleLabel.ZIndex = CONSTANTS.Z_NOTIFICATION + 1
+
+	local messageLabel = Instance.new("TextLabel")
+	messageLabel.Parent = frame
+	messageLabel.BackgroundTransparency = 1
+	messageLabel.Position = UDim2.new(0, 14, 0, 26)
+	messageLabel.Size = UDim2.new(1, -28, 0, 28)
+	messageLabel.Font = Enum.Font.Gotham
+	messageLabel.Text = message
+	messageLabel.TextColor3 = Theme.TextSecondary
+	messageLabel.TextSize = 11
+	messageLabel.TextWrapped = true
+	messageLabel.TextXAlignment = Enum.TextXAlignment.Left
+	messageLabel.ZIndex = CONSTANTS.Z_NOTIFICATION + 1
+
+	-- Slide in
+	TweenSystem.Tween(frame, {
+		Position = UDim2.new(1, -CONSTANTS.NOTIFICATION_WIDTH - 20, 0, frame.Position.Y.Offset),
+	}, 0.3)
+
+	-- Auto-dismiss
+	task.delay(duration, function()
+		if not frame or not frame.Parent then
+			State.ActiveNotifs = math.max(0, State.ActiveNotifs - 1)
+			return
 		end
-	end
-	table.sort(names)
 
-	local shown = {}
-	local displayLimit = maxDisplay or 10
-	for i = 1, math.min(#names, displayLimit) do
-		table.insert(shown, names[i])
-	end
-
-	local text = table.concat(shown, ", ")
-	if #names > displayLimit then
-		text = text .. "..."
-	end
-	if text == "" then
-		text = "None"
-	end
-
-	return string.format("Selected (%d): %s", #names, text)
+		TweenSystem.Tween(
+			frame,
+			{
+				Position = UDim2.new(1, 20, 0, frame.Position.Y.Offset),
+			},
+			0.3,
+			function()
+				if frame and frame.Parent then
+					frame:Destroy()
+				end
+				State.ActiveNotifs = math.max(0, State.ActiveNotifs - 1)
+			end
+		)
+	end)
 end
 
---══════════════════════════════════════════════════════--
--- LASER VISUAL EFFECT
---══════════════════════════════════════════════════════--
-local function EnsureLaserFolder()
-	if not LaserFolder or not LaserFolder.Parent then
-		LaserFolder = Instance.new("Folder")
-		LaserFolder.Name = "LRX_Lasers"
-		LaserFolder.Parent = workspace
-	end
-	return LaserFolder
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 10: LASER VISUALIZATION SYSTEM
+-- ═══════════════════════════════════════════════════════════════════════
+
+local LaserSystem = {}
+
+--[[
+    Clears all active laser beams.
+--]]
+function LaserSystem.Clear()
+	Memory.DestroyTableInstances(State.LaserBeams)
 end
 
-local function ClearLasers()
-	for _, beam in ipairs(LaserBeams) do
-		if beam then
-			pcall(function()
-				beam:Destroy()
-			end)
-		end
-	end
-	table.clear(LaserBeams)
-end
-
-local function CreateLaserBeam(startPos, endPos, color, duration)
-	local folder = EnsureLaserFolder()
+--[[
+    Creates a single laser beam between two points.
+--]]
+function LaserSystem.CreateBeam(startPos, endPos, color, duration)
+	local folder = Memory.EnsureWorkspaceFolder("LRX_Lasers", "LaserFolder")
 
 	local beamPart = Instance.new("Part")
 	beamPart.Name = "LaserBeam"
@@ -258,8 +785,10 @@ local function CreateLaserBeam(startPos, endPos, color, duration)
 	beamPart.Material = Enum.Material.Neon
 	beamPart.Color = color or Theme.Accent
 	beamPart.Transparency = 0.3
-	beamPart.Size = Vector3.new(0.05, 0.05, (endPos - startPos).Magnitude)
-	beamPart.CFrame = CFrame.lookAt(startPos, endPos) * CFrame.new(0, 0, -beamPart.Size.Z / 2)
+
+	local distance = (endPos - startPos).Magnitude
+	beamPart.Size = Vector3.new(CONSTANTS.LASER_BEAM_THICKNESS, CONSTANTS.LASER_BEAM_THICKNESS, distance)
+	beamPart.CFrame = CFrame.lookAt(startPos, endPos) * CFrame.new(0, 0, -distance / 2)
 	beamPart.Parent = folder
 
 	local glow = Instance.new("PointLight")
@@ -268,18 +797,16 @@ local function CreateLaserBeam(startPos, endPos, color, duration)
 	glow.Range = 6
 	glow.Parent = beamPart
 
-	table.insert(LaserBeams, beamPart)
+	table.insert(State.LaserBeams, beamPart)
 
 	if duration then
 		task.delay(duration, function()
-			if beamPart then
-				local tween = TweenService:Create(beamPart, TweenInfo.new(0.3), { Transparency = 1 })
-				tween.Completed:Connect(function()
-					pcall(function()
+			if beamPart and beamPart.Parent then
+				TweenSystem.Tween(beamPart, { Transparency = 1 }, 0.3, function()
+					if beamPart and beamPart.Parent then
 						beamPart:Destroy()
-					end)
+					end
 				end)
-				tween:Play()
 			end
 		end)
 	end
@@ -287,8 +814,13 @@ local function CreateLaserBeam(startPos, endPos, color, duration)
 	return beamPart
 end
 
-local function LaserScanPlot(plot, scanDuration)
-	ClearLasers()
+--[[
+    Performs a laser scan animation on a plot.
+    Uses task.delay for non-blocking sequential effects.
+--]]
+function LaserSystem.ScanPlot(plot, scanDuration)
+	LaserSystem.Clear()
+
 	if not plot then
 		return
 	end
@@ -298,20 +830,24 @@ local function LaserScanPlot(plot, scanDuration)
 		return
 	end
 
+	-- Collect PlantAreaColumn parts
 	local parts = {}
 	for _, child in ipairs(visual:GetChildren()) do
 		if child:IsA("BasePart") and child.Name:match("^PlantAreaColumn") then
 			table.insert(parts, child)
 		end
 	end
+
 	if #parts == 0 then
 		return
 	end
 
-	scanDuration = scanDuration or 1.5
+	scanDuration = scanDuration or CONSTANTS.LASER_SCAN_DURATION
 
+	-- Calculate bounds
 	local minY = math.huge
 	local allCorners = {}
+
 	for _, part in ipairs(parts) do
 		minY = math.min(minY, part.Position.Y)
 		local hs = part.Size / 2
@@ -323,57 +859,69 @@ local function LaserScanPlot(plot, scanDuration)
 		end
 	end
 
-	local center = Vector3.zero
-	for _, c in ipairs(allCorners) do
-		center = center + c
-	end
-	center = center / #allCorners
-
-	local sweepCount = 6
-	local sweepHeight = minY + 2
 	local minX, maxX = math.huge, -math.huge
 	local minZ, maxZ = math.huge, -math.huge
-	for _, c in ipairs(allCorners) do
-		minX = math.min(minX, c.X)
-		maxX = math.max(maxX, c.X)
-		minZ = math.min(minZ, c.Z)
-		maxZ = math.max(maxZ, c.Z)
+
+	for _, corner in ipairs(allCorners) do
+		minX = math.min(minX, corner.X)
+		maxX = math.max(maxX, corner.X)
+		minZ = math.min(minZ, corner.Z)
+		maxZ = math.max(maxZ, corner.Z)
 	end
 
+	local sweepHeight = minY + 2
+	local sweepCount = CONSTANTS.LASER_SWEEP_COUNT
+	local stepDelay = scanDuration / sweepCount
+
+	-- Horizontal sweeps
 	for i = 1, sweepCount do
-		task.delay((i - 1) * (scanDuration / sweepCount), function()
-			if not ScriptRunning then
+		task.delay((i - 1) * stepDelay, function()
+			if not State.ScriptRunning then
 				return
 			end
-			local t = (i - 1) / (sweepCount - 1)
+			local t = (i - 1) / math.max(1, sweepCount - 1)
 			local z = minZ + (maxZ - minZ) * t
-			local startPos = Vector3.new(minX, sweepHeight, z)
-			local endPos = Vector3.new(maxX, sweepHeight, z)
-			CreateLaserBeam(startPos, endPos, Color3.fromRGB(0, 255, 255), 0.4)
-
-			local x = minX + (maxX - minX) * t
-			local startPos2 = Vector3.new(x, sweepHeight + 0.5, minZ)
-			local endPos2 = Vector3.new(x, sweepHeight + 0.5, maxZ)
-			CreateLaserBeam(startPos2, endPos2, Color3.fromRGB(255, 0, 255), 0.4)
+			LaserSystem.CreateBeam(
+				Vector3.new(minX, sweepHeight, z),
+				Vector3.new(maxX, sweepHeight, z),
+				Color3.fromRGB(0, 255, 255),
+				0.4
+			)
 		end)
 	end
 
+	-- Vertical sweeps
+	for i = 1, sweepCount do
+		task.delay((i - 1) * stepDelay + 0.05, function()
+			if not State.ScriptRunning then
+				return
+			end
+			local t = (i - 1) / math.max(1, sweepCount - 1)
+			local x = minX + (maxX - minX) * t
+			LaserSystem.CreateBeam(
+				Vector3.new(x, sweepHeight + 0.5, minZ),
+				Vector3.new(x, sweepHeight + 0.5, maxZ),
+				Color3.fromRGB(255, 0, 255),
+				0.4
+			)
+		end)
+	end
+
+	-- Diagonal beams
 	task.delay(0.1, function()
-		CreateLaserBeam(
-			Vector3.new(minX, sweepHeight, minZ),
-			Vector3.new(maxX, sweepHeight, maxZ),
-			Color3.fromRGB(50, 205, 50),
-			0.6
-		)
-		CreateLaserBeam(
-			Vector3.new(minX, sweepHeight, maxZ),
-			Vector3.new(maxX, sweepHeight, minZ),
-			Color3.fromRGB(50, 205, 50),
-			0.6
-		)
+		if not State.ScriptRunning then
+			return
+		end
+		local h = sweepHeight
+		LaserSystem.CreateBeam(Vector3.new(minX, h, minZ), Vector3.new(maxX, h, maxZ), Color3.fromRGB(50, 205, 50), 0.6)
+		LaserSystem.CreateBeam(Vector3.new(minX, h, maxZ), Vector3.new(maxX, h, minZ), Color3.fromRGB(50, 205, 50), 0.6)
 	end)
 
+	-- Corner outline
 	task.delay(scanDuration * 0.5, function()
+		if not State.ScriptRunning then
+			return
+		end
 		local h = sweepHeight
 		local corners = {
 			Vector3.new(minX, h, minZ),
@@ -384,822 +932,776 @@ local function LaserScanPlot(plot, scanDuration)
 		for i = 1, 4 do
 			local a = corners[i]
 			local b = corners[i % 4 + 1]
-			CreateLaserBeam(a, b, Color3.fromRGB(255, 215, 0), 0.8)
+			LaserSystem.CreateBeam(a, b, Color3.fromRGB(255, 215, 0), 0.8)
 		end
 	end)
 
-	task.delay(scanDuration + 0.5, ClearLasers)
+	-- Auto-cleanup
+	task.delay(scanDuration + 0.5, LaserSystem.Clear)
 end
 
---══════════════════════════════════════════════════════--
--- MODULE: SEED PLACER (moved up — needed by grid dots)
---══════════════════════════════════════════════════════--
-local SeedPlacer = (function()
-	local module = {}
-
-	local PlantPositions = nil
-	local OwnedPlot = nil
-	local CurrentPlantIndex = 1
-	local LastConfigHash = nil
-
-	local function GetWorldBounds(part)
-		local partCFrame = part.CFrame
-		local partHalfSize = part.Size / 2
-		local worldCorners = {
-			partCFrame * Vector3.new(-partHalfSize.X, -partHalfSize.Y, -partHalfSize.Z),
-			partCFrame * Vector3.new(-partHalfSize.X, -partHalfSize.Y, partHalfSize.Z),
-			partCFrame * Vector3.new(-partHalfSize.X, partHalfSize.Y, -partHalfSize.Z),
-			partCFrame * Vector3.new(-partHalfSize.X, partHalfSize.Y, partHalfSize.Z),
-			partCFrame * Vector3.new(partHalfSize.X, -partHalfSize.Y, -partHalfSize.Z),
-			partCFrame * Vector3.new(partHalfSize.X, -partHalfSize.Y, partHalfSize.Z),
-			partCFrame * Vector3.new(partHalfSize.X, partHalfSize.Y, -partHalfSize.Z),
-			partCFrame * Vector3.new(partHalfSize.X, partHalfSize.Y, partHalfSize.Z),
-		}
-
-		local minX, maxX = math.huge, -math.huge
-		local minZ, maxZ = math.huge, -math.huge
-
-		for _, corner in ipairs(worldCorners) do
-			minX = math.min(minX, corner.X)
-			maxX = math.max(maxX, corner.X)
-			minZ = math.min(minZ, corner.Z)
-			maxZ = math.max(maxZ, corner.Z)
-		end
-
-		return minX, maxX, minZ, maxZ
-	end
-
-	local function IsPointInPart(point, part)
-		local objectSpacePoint = part.CFrame:PointToObjectSpace(point)
-		local partHalfSize = part.Size / 2
-		return math.abs(objectSpacePoint.X) <= partHalfSize.X + 0.1
-			and math.abs(objectSpacePoint.Y) <= partHalfSize.Y + 0.1
-			and math.abs(objectSpacePoint.Z) <= partHalfSize.Z + 0.1
-	end
-
-	local function FindPlayerPlot()
-		local GardensFolder = workspace:FindFirstChild("Gardens")
-		if not GardensFolder then
-			warn("[SeedPlacer] workspace.Gardens not found.")
-			return nil
-		end
-
-		for _, plot in ipairs(GardensFolder:GetChildren()) do
-			local ownerName = plot:GetAttribute("Owner")
-			local ownerId = plot:GetAttribute("OwnerUserId")
-
-			if ownerName == player.Name or ownerId == player.UserId then
-				print(string.format("[SeedPlacer] Found by Owner attribute: %s", plot.Name))
-				return plot
-			end
-		end
-
-		local character = player.Character
-		local hrp = character and character:FindFirstChild("HumanoidRootPart")
-		local playerPos = hrp and hrp.Position
-
-		if playerPos then
-			local candidates = {}
-			for _, plot in ipairs(GardensFolder:GetChildren()) do
-				local visual = plot:FindFirstChild("Visual")
-				if not visual then
-					continue
-				end
-
-				local plotColumns = {}
-				for _, child in ipairs(visual:GetChildren()) do
-					if child:IsA("BasePart") and child.Name:match("^PlantAreaColumn") then
-						table.insert(plotColumns, child)
-					end
-				end
-				if #plotColumns == 0 then
-					continue
-				end
-
-				local inside = false
-				for _, col in ipairs(plotColumns) do
-					local localPos = col.CFrame:PointToObjectSpace(playerPos)
-					local half = col.Size / 2
-					if
-						math.abs(localPos.X) <= half.X + 0.5
-						and math.abs(localPos.Y) <= half.Y + 10
-						and math.abs(localPos.Z) <= half.Z + 0.5
-					then
-						inside = true
-						break
-					end
-				end
-
-				if inside then
-					local plotCenter = Vector3.zero
-					for _, col in ipairs(plotColumns) do
-						plotCenter = plotCenter + col.Position
-					end
-					plotCenter = plotCenter / #plotColumns
-					table.insert(candidates, {
-						Plot = plot,
-						CenterDist = (plotCenter - playerPos).Magnitude,
-					})
-				end
-			end
-
-			if #candidates > 0 then
-				table.sort(candidates, function(a, b)
-					return a.CenterDist < b.CenterDist
-				end)
-				print(string.format("[SeedPlacer] Position fallback → %s", candidates[1].Plot.Name))
-				return candidates[1].Plot
-			end
-		end
-
-		warn("[SeedPlacer] Could not find plot for player:", player.Name)
-		return nil
-	end
-
-	local function DetectPlotParts(plot)
-		local visual = plot:FindFirstChild("Visual")
-		if not visual then
-			return {}
-		end
-
-		local parts = {}
-		for _, child in ipairs(visual:GetChildren()) do
-			if child:IsA("BasePart") and child.Name:match("^PlantAreaColumn") then
-				table.insert(parts, child)
-			end
-		end
-		return parts
-	end
-
-	local function BuildPartOptions(parts)
-		local nameCounts = {}
-		local options = {}
-		for _, part in ipairs(parts) do
-			local name = part.Name
-			nameCounts[name] = (nameCounts[name] or 0) + 1
-			local displayName = name
-			local value = name
-			if nameCounts[name] > 1 then
-				displayName = name .. " #" .. nameCounts[name]
-				value = name .. "_" .. nameCounts[name]
-			end
-			table.insert(options, {
-				Label = displayName,
-				Value = value,
-				Part = part,
-			})
-		end
-		return options
-	end
-
-	local function FindPartByValue(parts, value)
-		if value == "All" or not value then
-			return nil
-		end
-		local nameCounts = {}
-		for _, part in ipairs(parts) do
-			local name = part.Name
-			nameCounts[name] = (nameCounts[name] or 0) + 1
-			local checkValue = name
-			if nameCounts[name] > 1 then
-				checkValue = name .. "_" .. nameCounts[name]
-			end
-			if checkValue == value then
-				return part
-			end
-		end
-		return nil
-	end
-
-	-- FIXED: Local-space iteration guarantees full coverage including corners
-	local function GeneratePlantPositions(targetParts, spacing)
-		if #targetParts == 0 then
-			return {}
-		end
-
-		local positions = {}
-		local step = math.max(0.1, spacing)
-		local YieldInterval = 200
-		local iterationCount = 0
-		local seenKeys = {}
-
-		for _, part in ipairs(targetParts) do
-			local halfSize = part.Size / 2
-			local cf = part.CFrame
-			local plantY = part.Position.Y
-
-			-- Iterate in local XZ from edge to edge so corners are never missed
-			local startX = -halfSize.X
-			local endX = halfSize.X
-			local startZ = -halfSize.Z
-			local endZ = halfSize.Z
-
-			local localX = startX
-			while localX <= endX + 0.001 do
-				local localZ = startZ
-				while localZ <= endZ + 0.001 do
-					iterationCount = iterationCount + 1
-					if iterationCount % YieldInterval == 0 then
-						task.wait()
-					end
-
-					-- Transform local point to world space
-					local worldPos = cf * Vector3.new(localX, 0, localZ)
-
-					-- Round to reduce floating-point jitter
-					local finalPos = Vector3.new(
-						math.floor(worldPos.X * 100 + 0.5) / 100,
-						plantY,
-						math.floor(worldPos.Z * 100 + 0.5) / 100
-					)
-
-					-- Deduplicate across adjacent columns
-					local key = string.format("%.1f,%.1f", finalPos.X, finalPos.Z)
-					if not seenKeys[key] then
-						seenKeys[key] = true
-						table.insert(positions, { Pos = finalPos, Part = part })
-					end
-
-					localZ = localZ + step
-				end
-				localX = localX + step
-			end
-		end
-
-		return positions
-	end
-
-	local function ApplyPattern(positions, pattern)
-		if pattern == "LeftToRight" then
-			return positions
-		elseif pattern == "RightToLeft" then
-			local result = {}
-			for i = #positions, 1, -1 do
-				table.insert(result, positions[i])
-			end
-			return result
-		elseif pattern == "OutsideToCenter" then
-			local result = {}
-			local left = 1
-			local right = #positions
-			while left <= right do
-				table.insert(result, positions[left])
-				left = left + 1
-				if left <= right then
-					table.insert(result, positions[right])
-					right = right - 1
-				end
-			end
-			return result
-		elseif pattern == "CenterToOutside" then
-			local result = {}
-			local n = #positions
-			if n == 0 then
-				return result
-			end
-			local mid = math.ceil(n / 2)
-			table.insert(result, positions[mid])
-			local offset = 1
-			while true do
-				local added = false
-				if mid - offset >= 1 then
-					table.insert(result, positions[mid - offset])
-					added = true
-				end
-				if mid + offset <= n then
-					table.insert(result, positions[mid + offset])
-					added = true
-				end
-				if not added then
-					break
-				end
-				offset = offset + 1
-			end
-			return result
-		elseif pattern == "Middle" then
-			if #positions == 0 then
-				return {}
-			end
-
-			local grid = {}
-			local minX, maxX = math.huge, -math.huge
-			local minZ, maxZ = math.huge, -math.huge
-
-			for _, posData in ipairs(positions) do
-				local p = posData.Pos
-				minX = math.min(minX, p.X)
-				maxX = math.max(maxX, p.X)
-				minZ = math.min(minZ, p.Z)
-				maxZ = math.max(maxZ, p.Z)
-			end
-
-			local step = math.max(0.1, Config.PlantSpacing or 1)
-			local cols = math.max(1, math.floor((maxX - minX) / step + 0.5) + 1)
-			local rows = math.max(1, math.floor((maxZ - minZ) / step + 0.5) + 1)
-
-			local cellMap = {}
-			for r = 1, rows do
-				cellMap[r] = {}
-			end
-
-			for _, posData in ipairs(positions) do
-				local p = posData.Pos
-				local c = math.floor((p.X - minX) / step + 0.5) + 1
-				local r = math.floor((p.Z - minZ) / step + 0.5) + 1
-				c = math.clamp(c, 1, cols)
-				r = math.clamp(r, 1, rows)
-				if not cellMap[r][c] then
-					cellMap[r][c] = {}
-				end
-				table.insert(cellMap[r][c], posData)
-			end
-
-			local result = {}
-			local centerR = math.ceil(rows / 2)
-			local centerC = math.ceil(cols / 2)
-
-			local dr = { 0, 1, 0, -1 }
-			local dc = { 1, 0, -1, 0 }
-			local dir = 0
-			local steps = 1
-			local r, c = centerR, centerC
-
-			if cellMap[r] and cellMap[r][c] then
-				for _, posData in ipairs(cellMap[r][c]) do
-					table.insert(result, posData)
-				end
-			end
-
-			while #result < #positions do
-				for _ = 1, 2 do
-					for _ = 1, steps do
-						r = r + dr[dir + 1]
-						c = c + dc[dir + 1]
-						if r >= 1 and r <= rows and c >= 1 and c <= cols then
-							if cellMap[r] and cellMap[r][c] then
-								for _, posData in ipairs(cellMap[r][c]) do
-									table.insert(result, posData)
-								end
-							end
-						end
-					end
-					dir = (dir + 1) % 4
-				end
-				steps = steps + 1
-			end
-
-			return result
-		elseif pattern == "Random" then
-			local result = {}
-			for i, pos in ipairs(positions) do
-				result[i] = pos
-			end
-			for i = #result, 2, -1 do
-				local j = math.random(1, i)
-				result[i], result[j] = result[j], result[i]
-			end
-			return result
-		else
-			return positions
-		end
-	end
-
-	local function BuildOccupiedLookup()
-		local occupied = {}
-		local controllers = player:FindFirstChild("PlayerScripts")
-			and player.PlayerScripts:FindFirstChild("Controllers")
-		local seedInspect = controllers and controllers:FindFirstChild("SeedInspectController")
-		local fakePlot = seedInspect and seedInspect:FindFirstChild("FakePlot")
-
-		if not fakePlot then
-			return occupied
-		end
-
-		local plantsFolder = fakePlot:FindFirstChild("Plants")
-		if not plantsFolder then
-			if OwnedPlot then
-				plantsFolder = OwnedPlot:FindFirstChild("Plants")
-			end
-		end
-
-		if not plantsFolder then
-			return occupied
-		end
-
-		for _, plant in ipairs(plantsFolder:GetChildren()) do
-			local plantPos = nil
-
-			if plant:IsA("BasePart") then
-				plantPos = plant.Position
-			elseif plant:IsA("Model") then
-				if plant.PrimaryPart then
-					plantPos = plant.PrimaryPart.Position
-				else
-					for _, child in ipairs(plant:GetDescendants()) do
-						if child:IsA("BasePart") then
-							plantPos = child.Position
-							break
-						end
-					end
-				end
-			end
-
-			if plantPos then
-				local keyX = math.floor(plantPos.X * 2 + 0.5) / 2
-				local keyZ = math.floor(plantPos.Z * 2 + 0.5) / 2
-				local key = string.format("%.1f,%.1f", keyX, keyZ)
-				occupied[key] = true
-			end
-		end
-
-		return occupied
-	end
-
-	local function IsSpotEmpty(spotPosition, occupiedLookup)
-		local keyX = math.floor(spotPosition.X * 2 + 0.5) / 2
-		local keyZ = math.floor(spotPosition.Z * 2 + 0.5) / 2
-		local key = string.format("%.1f,%.1f", keyX, keyZ)
-		return not occupiedLookup[key]
-	end
-
-	local function GetConfigHash()
-		return string.format(
-			"%s|%s|%.2f",
-			Config.PlantingArea or "All",
-			Config.PlantingPattern or "LeftToRight",
-			Config.PlantSpacing or 1
-		)
-	end
-
-	function module:GetPlantPositions()
-		local currentHash = GetConfigHash()
-		if PlantPositions and LastConfigHash == currentHash then
-			return PlantPositions
-		end
-
-		if not OwnedPlot then
-			OwnedPlot = FindPlayerPlot()
-		end
-
-		if not OwnedPlot then
-			return nil
-		end
-
-		local allParts = DetectPlotParts(OwnedPlot)
-		local targetParts = {}
-
-		if Config.PlantingArea == "All" or not Config.PlantingArea or Config.PlantingArea == "" then
-			for _, part in ipairs(allParts) do
-				table.insert(targetParts, part)
-			end
-		else
-			local selectedPart = FindPartByValue(allParts, Config.PlantingArea)
-			if selectedPart then
-				table.insert(targetParts, selectedPart)
-			else
-				for _, part in ipairs(allParts) do
-					table.insert(targetParts, part)
-				end
-			end
-		end
-
-		if #targetParts == 0 then
-			warn("[SeedPlacer] No target parts found for area: " .. tostring(Config.PlantingArea))
-			return nil
-		end
-
-		local positions = GeneratePlantPositions(targetParts, Config.PlantSpacing or 1)
-		positions = ApplyPattern(positions, Config.PlantingPattern or "LeftToRight")
-
-		PlantPositions = positions
-		LastConfigHash = currentHash
-
-		print(
-			string.format(
-				"[SeedPlacer] Generated %d positions in %s (Area: %s) across %d parts.",
-				#positions,
-				OwnedPlot.Name,
-				Config.PlantingArea or "All",
-				#targetParts
-			)
-		)
-
-		return PlantPositions
-	end
-
-	function module:GetDetectionInfo()
-		local plot = OwnedPlot or FindPlayerPlot()
-		if not plot then
-			return { Parts = {}, PartOptions = {}, PartNames = {}, PlotName = "None", PlotInstance = nil }
-		end
-
-		local parts = DetectPlotParts(plot)
-		local options = BuildPartOptions(parts)
-		local names = {}
-		for _, opt in ipairs(options) do
-			table.insert(names, opt.Label)
-		end
-		return {
-			Parts = parts,
-			PartOptions = options,
-			PartNames = names,
-			PlotName = plot.Name,
-			PlotInstance = plot,
-		}
-	end
-
-	function module:ClearCache()
-		PlantPositions = nil
-		OwnedPlot = nil
-		CurrentPlantIndex = 1
-		LastConfigHash = nil
-	end
-
-	function module:FindPlayerPlot()
-		return FindPlayerPlot()
-	end
-
-	function module:RunCycle()
-		local allSpots = self:GetPlantPositions()
-		if not allSpots then
-			return
-		end
-
-		local PlantRemote = Networking and Networking.Plant and Networking.Plant.PlantSeed
-		if not PlantRemote then
-			warn("[SeedPlacer] Networking.Plant.PlantSeed not found!")
-			return
-		end
-
-		local EnabledSeedNames = {}
-		for seedName, enabled in pairs(Config.SelectedPlaceSeeds or {}) do
-			if enabled then
-				table.insert(EnabledSeedNames, seedName)
-			end
-		end
-
-		if #EnabledSeedNames == 0 then
-			return
-		end
-
-		local occupiedLookup = BuildOccupiedLookup()
-		local totalSpots = #allSpots
-		local maxPlantAmount = Config.PlaceAmount or 10
-		local plantedCount = 0
-		local seedIndex = 1
-		local checkedCount = 0
-		local delay = math.max(0, Config.PlantDelay or 0.05)
-
-		while plantedCount < maxPlantAmount and checkedCount < totalSpots do
-			if not Config.EnableSeedPlacer then
-				break
-			end
-
-			local spot = allSpots[CurrentPlantIndex]
-			if not spot or not spot.Part then
-				CurrentPlantIndex = 1
-				break
-			end
-
-			checkedCount = checkedCount + 1
-
-			if IsSpotEmpty(spot.Pos, occupiedLookup) then
-				local seedName = EnabledSeedNames[seedIndex]
-				seedIndex = seedIndex % #EnabledSeedNames + 1
-
-				local success, err = pcall(function()
-					PlantRemote:Fire(spot.Pos, seedName, spot.Part)
-				end)
-
-				if not success then
-					warn("[SeedPlacer] PlantSeed failed at spot " .. tostring(CurrentPlantIndex) .. ":", err)
-				end
-
-				plantedCount = plantedCount + 1
-
-				if plantedCount < maxPlantAmount then
-					task.wait(delay)
-				end
-			end
-
-			CurrentPlantIndex = CurrentPlantIndex + 1
-			if CurrentPlantIndex > totalSpots then
-				CurrentPlantIndex = 1
-			end
-		end
-
-		if plantedCount > 0 then
-			print(string.format("[SeedPlacer] Planted %d seeds this cycle.", plantedCount))
-		end
-	end
-
-	return module
-end)()
-
---══════════════════════════════════════════════════════--
--- GRID DOTS VISUAL (defined BEFORE UI so ClearAllVisuals works in CloseBtn)
---══════════════════════════════════════════════════════--
-local function EnsureDotsFolder()
-	if not DotsFolder or not DotsFolder.Parent then
-		DotsFolder = Instance.new("Folder")
-		DotsFolder.Name = "LRX_GridDots"
-		DotsFolder.Parent = workspace
-	end
-	return DotsFolder
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 11: GRID DOTS VISUALIZATION SYSTEM
+-- ═══════════════════════════════════════════════════════════════════════
+
+local GridSystem = {}
+
+--[[
+    Clears all grid dots.
+--]]
+function GridSystem.Clear()
+	Memory.DestroyTableInstances(State.GridDots)
 end
 
-local function ClearGridDots()
-	for _, dot in ipairs(GridDots) do
-		if dot then
-			pcall(function()
-				dot:Destroy()
-			end)
-		end
-	end
-	table.clear(GridDots)
-end
+--[[
+    Refreshes grid dots based on current planting positions.
+    Uses batched creation to prevent frame drops.
+--]]
+function GridSystem.Refresh()
+	GridSystem.Clear()
 
--- Properly assign to the local variable so all closures capture it correctly
-RefreshGridDots = function()
-	ClearGridDots()
 	if not Config.ShowGridDots then
 		return
 	end
 
-	local plot = SeedPlacer:FindPlayerPlot()
+	local plot = PlotSystem.FindPlayerPlot()
 	if not plot then
 		warn("[GridDots] Could not find player plot.")
 		return
 	end
 
-	SeedPlacer:ClearCache()
-	local positions = SeedPlacer:GetPlantPositions()
+	SeedPlacer.ClearCache()
+	local positions = SeedPlacer.GetPlantPositions()
+
 	if not positions or #positions == 0 then
 		warn("[GridDots] No plant positions generated.")
 		return
 	end
 
-	local folder = EnsureDotsFolder()
-
-	local GridDotColors = {
-		Color3.fromRGB(50, 205, 50),
-		Color3.fromRGB(255, 215, 0),
-		Color3.fromRGB(0, 255, 127),
-		Color3.fromRGB(255, 165, 0),
-	}
-
+	local folder = Memory.EnsureWorkspaceFolder("LRX_GridDots", "DotsFolder")
+	local colors = CONSTANTS.GRID_DOT_COLORS
+	local colorCount = #colors
+	local dotSize = Vector3.new(CONSTANTS.GRID_DOT_SIZE, CONSTANTS.GRID_DOT_SIZE, CONSTANTS.GRID_DOT_SIZE)
+	local yOffset = Vector3.new(0, CONSTANTS.GRID_DOT_Y_OFFSET, 0)
+	local batchSize = CONSTANTS.GRID_DOT_BATCH_SIZE
+	local batchDelay = CONSTANTS.GRID_DOT_BATCH_DELAY
 	local total = #positions
-	local batchSize = 500
-	local batchDelay = 0.05
 
+	-- Create dots in batches
 	for batchStart = 1, total, batchSize do
-		local batchEnd = math.min(batchStart + batchSize - 1, total)
+		task.delay(math.floor((batchStart - 1) / batchSize) * batchDelay, function()
+			if not State.ScriptRunning or not Config.ShowGridDots then
+				return
+			end
 
-		for i = batchStart, batchEnd do
-			local posData = positions[i]
-			local dot = Instance.new("Part")
-			dot.Name = "GridDot"
-			dot.Anchored = true
-			dot.CanCollide = false
-			dot.CanQuery = false
-			dot.CanTouch = false
-			dot.CastShadow = false
-			dot.Material = Enum.Material.Neon
-			dot.Color = GridDotColors[((i - 1) % #GridDotColors) + 1]
-			dot.Shape = Enum.PartType.Ball
-			dot.Size = Vector3.new(0.08, 0.08, 0.08)
-			dot.Position = posData.Pos + Vector3.new(0, 0.05, 0)
-			dot.Parent = folder
-			dot.Transparency = 0.15
+			local batchEnd = math.min(batchStart + batchSize - 1, total)
 
-			table.insert(GridDots, dot)
-		end
+			for i = batchStart, batchEnd do
+				local posData = positions[i]
+				local dot = Instance.new("Part")
+				dot.Name = "GridDot"
+				dot.Anchored = true
+				dot.CanCollide = false
+				dot.CanQuery = false
+				dot.CanTouch = false
+				dot.CastShadow = false
+				dot.Material = Enum.Material.Neon
+				dot.Color = colors[((i - 1) % colorCount) + 1]
+				dot.Shape = Enum.PartType.Ball
+				dot.Size = dotSize
+				dot.Position = posData.Pos + yOffset
+				dot.Parent = folder
+				dot.Transparency = 0.15
 
-		if batchEnd < total then
-			task.wait(batchDelay)
-		end
-	end
-
-	Notify("Plot Visualizer", string.format("Showing %d grid dots (all spots)", #GridDots), "Success", 2)
-end
-
-local function ClearAllVisuals()
-	ClearLasers()
-	ClearGridDots()
-end
-
---══════════════════════════════════════════════════════--
--- NOTIFICATIONS (moved before Save/Load so they can call it)
---══════════════════════════════════════════════════════--
-function Notify(title, message, notifType, duration)
-	notifType = notifType or "Info"
-	duration = duration or Config.NotificationDuration
-
-	local colors = {
-		Success = Color3.fromRGB(50, 205, 50),
-		Warning = Color3.fromRGB(255, 165, 0),
-		Error = Color3.fromRGB(255, 80, 80),
-		Info = Color3.fromRGB(100, 150, 255),
-	}
-	local accent = colors[notifType] or colors.Info
-
-	while ActiveNotifs >= 5 do
-		task.wait(0.1)
-	end
-	ActiveNotifs = ActiveNotifs + 1
-
-	local NotifFrame = Instance.new("Frame")
-	NotifFrame.Parent = ScreenGui
-	NotifFrame.BackgroundColor3 = Theme.Card
-	NotifFrame.BorderSizePixel = 0
-	NotifFrame.Position = UDim2.new(1, 20, 0, 20 + (ActiveNotifs - 1) * 70)
-	NotifFrame.Size = UDim2.new(0, 280, 0, 60)
-	NotifFrame.ZIndex = 700
-	NotifFrame.Active = true
-
-	local NotifCorner = Instance.new("UICorner")
-	NotifCorner.CornerRadius = UDim.new(0, 8)
-	NotifCorner.Parent = NotifFrame
-
-	local NotifStroke = Instance.new("UIStroke")
-	NotifStroke.Color = Theme.Border
-	NotifStroke.Thickness = 1
-	NotifStroke.Parent = NotifFrame
-
-	local NotifBar = Instance.new("Frame")
-	NotifBar.Parent = NotifFrame
-	NotifBar.BackgroundColor3 = accent
-	NotifBar.BorderSizePixel = 0
-	NotifBar.Size = UDim2.new(0, 4, 1, 0)
-	NotifBar.ZIndex = 701
-
-	local NotifBarCorner = Instance.new("UICorner")
-	NotifBarCorner.CornerRadius = UDim.new(0, 8)
-	NotifBarCorner.Parent = NotifBar
-
-	local NotifTitle = Instance.new("TextLabel")
-	NotifTitle.Parent = NotifFrame
-	NotifTitle.BackgroundTransparency = 1
-	NotifTitle.Position = UDim2.new(0, 14, 0, 8)
-	NotifTitle.Size = UDim2.new(1, -28, 0, 18)
-	NotifTitle.Font = Enum.Font.GothamBold
-	NotifTitle.Text = title
-	NotifTitle.TextColor3 = Theme.TextPrimary
-	NotifTitle.TextSize = 13
-	NotifTitle.TextXAlignment = Enum.TextXAlignment.Left
-	NotifTitle.ZIndex = 701
-
-	local NotifMessage = Instance.new("TextLabel")
-	NotifMessage.Parent = NotifFrame
-	NotifMessage.BackgroundTransparency = 1
-	NotifMessage.Position = UDim2.new(0, 14, 0, 26)
-	NotifMessage.Size = UDim2.new(1, -28, 0, 28)
-	NotifMessage.Font = Enum.Font.Gotham
-	NotifMessage.Text = message
-	NotifMessage.TextColor3 = Theme.TextSecondary
-	NotifMessage.TextSize = 11
-	NotifMessage.TextWrapped = true
-	NotifMessage.TextXAlignment = Enum.TextXAlignment.Left
-	NotifMessage.ZIndex = 701
-
-	TweenService:Create(NotifFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		Position = UDim2.new(1, -300, 0, NotifFrame.Position.Y.Offset),
-	}):Play()
-
-	task.delay(duration, function()
-		local tween =
-			TweenService:Create(NotifFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-				Position = UDim2.new(1, 20, 0, NotifFrame.Position.Y.Offset),
-			})
-		tween.Completed:Connect(function()
-			NotifFrame:Destroy()
-			ActiveNotifs = ActiveNotifs - 1
+				table.insert(State.GridDots, dot)
+			end
 		end)
-		tween:Play()
-	end)
+	end
+
+	NotificationSystem.Notify("Plot Visualizer", string.format("Showing %d grid dots", total), "Success", 2)
 end
 
---══════════════════════════════════════════════════════--
--- AUTO JSON FILTER
---══════════════════════════════════════════════════════--
-local CONFIG_FILE = "LRX_Hub_Config.json"
-local CONFIG_ATTRIBUTE = "LRX_Hub_Config"
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 12: PLOT DETECTION SYSTEM
+-- ═══════════════════════════════════════════════════════════════════════
 
-local function IsBasicSerializable(value)
+local PlotSystem = {}
+
+--[[
+    Finds the player's plot using multiple strategies:
+    1. Owner attribute match (fastest)
+    2. OwnerUserId attribute match
+    3. Position-based detection (fallback)
+
+    Results are cached until explicitly cleared.
+--]]
+function PlotSystem.FindPlayerPlot()
+	-- Return cached plot if still valid
+	if State.CachedPlot and State.CachedPlot.Parent then
+		return State.CachedPlot
+	end
+
+	local gardensFolder = Services.Workspace:FindFirstChild("Gardens")
+	if not gardensFolder then
+		warn("[PlotSystem] workspace.Gardens not found.")
+		return nil
+	end
+
+	local plots = gardensFolder:GetChildren()
+
+	-- Strategy 1 & 2: Owner attribute match
+	for _, plot in ipairs(plots) do
+		local ownerName = plot:GetAttribute("Owner")
+		local ownerId = plot:GetAttribute("OwnerUserId")
+
+		if ownerName == Player.Name or ownerId == Player.UserId then
+			State.CachedPlot = plot
+			State.CachedPlotParts = nil -- Invalidate parts cache
+			State.CachedPartOptions = nil -- Invalidate options cache
+			return plot
+		end
+	end
+
+	-- Strategy 3: Position-based detection
+	local playerPos = Utils.GetPlayerPosition()
+	if not playerPos then
+		warn("[PlotSystem] Could not find plot for player:", Player.Name)
+		return nil
+	end
+
+	local candidates = {}
+
+	for _, plot in ipairs(plots) do
+		local visual = plot:FindFirstChild("Visual")
+		if not visual then
+			continue
+		end
+
+		local columns = {}
+		for _, child in ipairs(visual:GetChildren()) do
+			if child:IsA("BasePart") and child.Name:match("^PlantAreaColumn") then
+				table.insert(columns, child)
+			end
+		end
+
+		if #columns == 0 then
+			continue
+		end
+
+		-- Check if player is inside any column
+		local inside = false
+		for _, col in ipairs(columns) do
+			local localPos = col.CFrame:PointToObjectSpace(playerPos)
+			local half = col.Size / 2
+			if
+				math.abs(localPos.X) <= half.X + CONSTANTS.OCCUPANCY_TOLERANCE
+				and math.abs(localPos.Y) <= half.Y + 10
+				and math.abs(localPos.Z) <= half.Z + CONSTANTS.OCCUPANCY_TOLERANCE
+			then
+				inside = true
+				break
+			end
+		end
+
+		if inside then
+			-- Calculate center distance for ranking
+			local center = Vector3.zero
+			for _, col in ipairs(columns) do
+				center += col.Position
+			end
+			center /= #columns
+
+			table.insert(candidates, {
+				Plot = plot,
+				Distance = (center - playerPos).Magnitude,
+			})
+		end
+	end
+
+	if #candidates > 0 then
+		table.sort(candidates, function(a, b)
+			return a.Distance < b.Distance
+		end)
+
+		State.CachedPlot = candidates[1].Plot
+		State.CachedPlotParts = nil
+		State.CachedPartOptions = nil
+		return candidates[1].Plot
+	end
+
+	warn("[PlotSystem] Could not find plot for player:", Player.Name)
+	return nil
+end
+
+--[[
+    Detects PlantAreaColumn parts within a plot's Visual folder.
+    Results are cached per-plot.
+--]]
+function PlotSystem.DetectPlotParts(plot)
+	if not plot then
+		return {}
+	end
+
+	-- Return cached parts if available
+	if State.CachedPlotParts and State.CachedPlot and State.CachedPlot == plot then
+		return State.CachedPlotParts
+	end
+
+	local visual = plot:FindFirstChild("Visual")
+	if not visual then
+		return {}
+	end
+
+	local parts = {}
+	for _, child in ipairs(visual:GetChildren()) do
+		if child:IsA("BasePart") and child.Name:match("^PlantAreaColumn") then
+			table.insert(parts, child)
+		end
+	end
+
+	State.CachedPlotParts = parts
+	return parts
+end
+
+--[[
+    Builds display options for plot parts with deduplication labels.
+--]]
+function PlotSystem.BuildPartOptions(parts)
+	if State.CachedPartOptions then
+		return State.CachedPartOptions
+	end
+
+	local nameCounts = {}
+	local options = {}
+
+	for _, part in ipairs(parts) do
+		local name = part.Name
+		nameCounts[name] = (nameCounts[name] or 0) + 1
+
+		local displayName = name
+		local value = name
+		if nameCounts[name] > 1 then
+			displayName = name .. " #" .. nameCounts[name]
+			value = name .. "_" .. nameCounts[name]
+		end
+
+		table.insert(options, {
+			Label = displayName,
+			Value = value,
+			Part = part,
+		})
+	end
+
+	State.CachedPartOptions = options
+	return options
+end
+
+--[[
+    Finds a specific part by its option value.
+--]]
+function PlotSystem.FindPartByValue(parts, value)
+	if value == "All" or not value then
+		return nil
+	end
+
+	local nameCounts = {}
+	for _, part in ipairs(parts) do
+		local name = part.Name
+		nameCounts[name] = (nameCounts[name] or 0) + 1
+		local checkValue = name
+		if nameCounts[name] > 1 then
+			checkValue = name .. "_" .. nameCounts[name]
+		end
+		if checkValue == value then
+			return part
+		end
+	end
+
+	return nil
+end
+
+--[[
+    Clears all plot caches. Call when plot changes or config changes.
+--]]
+function PlotSystem.ClearCache()
+	State.CachedPlot = nil
+	State.CachedPlotParts = nil
+	State.CachedPartOptions = nil
+end
+
+--[[
+    Gets comprehensive detection info for UI display.
+--]]
+function PlotSystem.GetDetectionInfo()
+	local plot = PlotSystem.FindPlayerPlot()
+	if not plot then
+		return {
+			Parts = {},
+			PartOptions = {},
+			PartNames = {},
+			PlotName = "None",
+			PlotInstance = nil,
+		}
+	end
+
+	local parts = PlotSystem.DetectPlotParts(plot)
+	local options = PlotSystem.BuildPartOptions(parts)
+	local names = {}
+
+	for _, opt in ipairs(options) do
+		table.insert(names, opt.Label)
+	end
+
+	return {
+		Parts = parts,
+		PartOptions = options,
+		PartNames = names,
+		PlotName = plot.Name,
+		PlotInstance = plot,
+	}
+end
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 13: SEED PLACER SYSTEM
+-- ═══════════════════════════════════════════════════════════════════════
+
+local SeedPlacer = {}
+
+-- Private state
+local PlantPositions = nil
+local CurrentPlantIndex = 1
+local LastConfigHash = nil
+
+--[[
+    Generates a hash of current planting configuration.
+    Used to invalidate cached positions when settings change.
+--]]
+local function GetConfigHash()
+	return string.format(
+		"%s|%s|%.2f",
+		Config.PlantingArea or "All",
+		Config.PlantingPattern or "LeftToRight",
+		Config.PlantSpacing or CONSTANTS.DEFAULT_PLANT_SPACING
+	)
+end
+
+--[[
+    Generates planting positions within target parts.
+    Uses local-space iteration for accurate corner coverage.
+    Optimized with deduplication and yielding for large counts.
+--]]
+local function GeneratePlantPositions(targetParts, spacing)
+	if #targetParts == 0 then
+		return {}
+	end
+
+	spacing = math.max(0.1, spacing)
+	local positions = {}
+	local seenKeys = {}
+	local iterationCount = 0
+	local yieldInterval = CONSTANTS.YIELD_INTERVAL
+
+	for _, part in ipairs(targetParts) do
+		local halfSize = part.Size / 2
+		local cf = part.CFrame
+		local plantY = part.Position.Y
+
+		-- Iterate in local XZ space from edge to edge
+		local startX = -halfSize.X
+		local endX = halfSize.X
+		local startZ = -halfSize.Z
+		local endZ = halfSize.Z
+
+		local localX = startX
+		while localX <= endX + 0.001 do
+			local localZ = startZ
+			while localZ <= endZ + 0.001 do
+				iterationCount += 1
+				if iterationCount % yieldInterval == 0 then
+					task.wait()
+				end
+
+				-- Transform to world space
+				local worldPos = cf * Vector3.new(localX, 0, localZ)
+
+				-- Round to reduce floating-point jitter
+				local finalPos = Vector3.new(Utils.Round(worldPos.X), plantY, Utils.Round(worldPos.Z))
+
+				-- Deduplicate across adjacent columns
+				local key = Utils.FormatPositionKey(finalPos)
+				if not seenKeys[key] then
+					seenKeys[key] = true
+					table.insert(positions, { Pos = finalPos, Part = part })
+				end
+
+				localZ += spacing
+			end
+			localX += spacing
+		end
+	end
+
+	return positions
+end
+
+--[[
+    Applies planting pattern to position array.
+    Patterns: LeftToRight, RightToLeft, OutsideToCenter, CenterToOutside, Middle, Random
+--]]
+local function ApplyPattern(positions, pattern)
+	local count = #positions
+	if count == 0 then
+		return positions
+	end
+
+	if pattern == "LeftToRight" then
+		return positions
+	elseif pattern == "RightToLeft" then
+		local result = table.create(count)
+		for i = count, 1, -1 do
+			result[count - i + 1] = positions[i]
+		end
+		return result
+	elseif pattern == "OutsideToCenter" then
+		local result = table.create(count)
+		local left = 1
+		local right = count
+		while left <= right do
+			table.insert(result, positions[left])
+			left += 1
+			if left <= right then
+				table.insert(result, positions[right])
+				right -= 1
+			end
+		end
+		return result
+	elseif pattern == "CenterToOutside" then
+		local result = table.create(count)
+		local mid = math.ceil(count / 2)
+		table.insert(result, positions[mid])
+
+		local offset = 1
+		while true do
+			local added = false
+			if mid - offset >= 1 then
+				table.insert(result, positions[mid - offset])
+				added = true
+			end
+			if mid + offset <= count then
+				table.insert(result, positions[mid + offset])
+				added = true
+			end
+			if not added then
+				break
+			end
+			offset += 1
+		end
+		return result
+	elseif pattern == "Middle" then
+		-- Build a grid map for spiral ordering
+		local minX, maxX = math.huge, -math.huge
+		local minZ, maxZ = math.huge, -math.huge
+
+		for _, posData in ipairs(positions) do
+			local p = posData.Pos
+			minX = math.min(minX, p.X)
+			maxX = math.max(maxX, p.X)
+			minZ = math.min(minZ, p.Z)
+			maxZ = math.max(maxZ, p.Z)
+		end
+
+		local step = math.max(0.1, Config.PlantSpacing or CONSTANTS.DEFAULT_PLANT_SPACING)
+		local cols = math.max(1, math.floor((maxX - minX) / step + 0.5) + 1)
+		local rows = math.max(1, math.floor((maxZ - minZ) / step + 0.5) + 1)
+
+		-- Map positions to grid cells
+		local cellMap = table.create(rows)
+		for r = 1, rows do
+			cellMap[r] = table.create(cols)
+		end
+
+		for _, posData in ipairs(positions) do
+			local p = posData.Pos
+			local c = math.floor((p.X - minX) / step + 0.5) + 1
+			local r = math.floor((p.Z - minZ) / step + 0.5) + 1
+			c = math.clamp(c, 1, cols)
+			r = math.clamp(r, 1, rows)
+
+			if not cellMap[r][c] then
+				cellMap[r][c] = {}
+			end
+			table.insert(cellMap[r][c], posData)
+		end
+
+		-- Spiral from center
+		local result = table.create(count)
+		local centerR = math.ceil(rows / 2)
+		local centerC = math.ceil(cols / 2)
+		local dr = { 0, 1, 0, -1 }
+		local dc = { 1, 0, -1, 0 }
+		local dir = 0
+		local steps = 1
+		local r, c = centerR, centerC
+
+		if cellMap[r] and cellMap[r][c] then
+			for _, posData in ipairs(cellMap[r][c]) do
+				table.insert(result, posData)
+			end
+		end
+
+		while #result < count do
+			for _ = 1, 2 do
+				for _ = 1, steps do
+					r += dr[dir + 1]
+					c += dc[dir + 1]
+					if r >= 1 and r <= rows and c >= 1 and c <= cols then
+						if cellMap[r] and cellMap[r][c] then
+							for _, posData in ipairs(cellMap[r][c]) do
+								table.insert(result, posData)
+							end
+						end
+					end
+				end
+				dir = (dir + 1) % 4
+			end
+			steps += 1
+		end
+
+		return result
+	elseif pattern == "Random" then
+		local result = table.create(count)
+		for i = 1, count do
+			result[i] = positions[i]
+		end
+		for i = count, 2, -1 do
+			local j = math.random(1, i)
+			result[i], result[j] = result[j], result[i]
+		end
+		return result
+	end
+
+	return positions
+end
+
+--[[
+    Builds an occupancy lookup table from existing plants.
+    Checks FakePlot first, then falls back to plot's Plants folder.
+--]]
+local function BuildOccupiedLookup()
+	local occupied = {}
+
+	local controllers = Player:FindFirstChild("PlayerScripts")
+	local seedInspect = controllers and controllers:FindFirstChild("SeedInspectController")
+	local fakePlot = seedInspect and seedInspect:FindFirstChild("FakePlot")
+
+	local plantsFolder = fakePlot and fakePlot:FindFirstChild("Plants")
+
+	if not plantsFolder then
+		local plot = PlotSystem.FindPlayerPlot()
+		plantsFolder = plot and plot:FindFirstChild("Plants")
+	end
+
+	if not plantsFolder then
+		return occupied
+	end
+
+	for _, plant in ipairs(plantsFolder:GetChildren()) do
+		local plantPos = nil
+
+		if plant:IsA("BasePart") then
+			plantPos = plant.Position
+		elseif plant:IsA("Model") then
+			if plant.PrimaryPart then
+				plantPos = plant.PrimaryPart.Position
+			else
+				for _, child in ipairs(plant:GetDescendants()) do
+					if child:IsA("BasePart") then
+						plantPos = child.Position
+						break
+					end
+				end
+			end
+		end
+
+		if plantPos then
+			local key = Utils.FormatPositionKey(plantPos)
+			occupied[key] = true
+		end
+	end
+
+	return occupied
+end
+
+--[[
+    Checks if a planting spot is empty.
+--]]
+local function IsSpotEmpty(spotPosition, occupiedLookup)
+	local key = Utils.FormatPositionKey(spotPosition)
+	return not occupiedLookup[key]
+end
+
+--[[
+    Gets all plant positions for the current configuration.
+    Uses caching to avoid regenerating positions unnecessarily.
+--]]
+function SeedPlacer.GetPlantPositions()
+	local currentHash = GetConfigHash()
+	if PlantPositions and LastConfigHash == currentHash then
+		return PlantPositions
+	end
+
+	local plot = PlotSystem.FindPlayerPlot()
+	if not plot then
+		return nil
+	end
+
+	local allParts = PlotSystem.DetectPlotParts(plot)
+	local targetParts = {}
+
+	if Config.PlantingArea == "All" or not Config.PlantingArea or Config.PlantingArea == "" then
+		for _, part in ipairs(allParts) do
+			table.insert(targetParts, part)
+		end
+	else
+		local selectedPart = PlotSystem.FindPartByValue(allParts, Config.PlantingArea)
+		if selectedPart then
+			table.insert(targetParts, selectedPart)
+		else
+			-- Fallback to all parts if specific part not found
+			for _, part in ipairs(allParts) do
+				table.insert(targetParts, part)
+			end
+		end
+	end
+
+	if #targetParts == 0 then
+		warn("[SeedPlacer] No target parts found for area: " .. tostring(Config.PlantingArea))
+		return nil
+	end
+
+	local positions = GeneratePlantPositions(targetParts, Config.PlantSpacing or CONSTANTS.DEFAULT_PLANT_SPACING)
+	positions = ApplyPattern(positions, Config.PlantingPattern or "LeftToRight")
+
+	PlantPositions = positions
+	LastConfigHash = currentHash
+
+	return positions
+end
+
+--[[
+    Clears cached plant positions. Call when config changes.
+--]]
+function SeedPlacer.ClearCache()
+	PlantPositions = nil
+	CurrentPlantIndex = 1
+	LastConfigHash = nil
+end
+
+--[[
+    Runs a single planting cycle.
+    Plants up to Config.PlaceAmount seeds in empty spots.
+--]]
+function SeedPlacer.RunCycle()
+	if not PlantRemote then
+		warn("[SeedPlacer] PlantSeed remote not available.")
+		return
+	end
+
+	local allSpots = SeedPlacer.GetPlantPositions()
+	if not allSpots then
+		return
+	end
+
+	-- Collect enabled seed names
+	local enabledSeeds = {}
+	for seedName, enabled in pairs(Config.SelectedPlaceSeeds or {}) do
+		if enabled then
+			table.insert(enabledSeeds, seedName)
+		end
+	end
+
+	if #enabledSeeds == 0 then
+		return
+	end
+
+	local occupiedLookup = BuildOccupiedLookup()
+	local totalSpots = #allSpots
+	local maxPlantAmount = Config.PlaceAmount or CONSTANTS.DEFAULT_PLACE_AMOUNT
+	local plantedCount = 0
+	local seedIndex = 1
+	local checkedCount = 0
+	local delay = math.max(0, Config.PlantDelay or CONSTANTS.DEFAULT_PLANT_DELAY)
+
+	while plantedCount < maxPlantAmount and checkedCount < totalSpots do
+		if not Config.EnableSeedPlacer then
+			break
+		end
+
+		local spot = allSpots[CurrentPlantIndex]
+		if not spot or not spot.Part then
+			CurrentPlantIndex = 1
+			break
+		end
+
+		checkedCount += 1
+
+		if IsSpotEmpty(spot.Pos, occupiedLookup) then
+			local seedName = enabledSeeds[seedIndex]
+			seedIndex = seedIndex % #enabledSeeds + 1
+
+			local success, err = pcall(function()
+				PlantRemote:Fire(spot.Pos, seedName, spot.Part)
+			end)
+
+			if not success then
+				warn("[SeedPlacer] PlantSeed failed at spot " .. tostring(CurrentPlantIndex) .. ":", err)
+			end
+
+			plantedCount += 1
+
+			if plantedCount < maxPlantAmount then
+				task.wait(delay)
+			end
+		end
+
+		CurrentPlantIndex += 1
+		if CurrentPlantIndex > totalSpots then
+			CurrentPlantIndex = 1
+		end
+	end
+
+	if plantedCount > 0 then
+		print(string.format("[SeedPlacer] Planted %d seeds this cycle.", plantedCount))
+	end
+end
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 14: CONFIGURATION SYSTEM
+-- ═══════════════════════════════════════════════════════════════════════
+
+local ConfigSystem = {}
+
+--[[
+    Checks if a value is JSON-serializable.
+--]]
+local function IsSerializable(value)
 	local valueType = typeof(value)
 	return valueType == "nil" or valueType == "boolean" or valueType == "number" or valueType == "string"
 end
 
+--[[
+    Recursively filters a table to only serializable values.
+--]]
 local function FilterSerializable(data)
 	if typeof(data) ~= "table" then
-		return IsBasicSerializable(data) and data or nil
+		return IsSerializable(data) and data or nil
 	end
+
 	local result = {}
 	for key, value in pairs(data) do
 		if typeof(key) == "string" or typeof(key) == "number" then
 			if typeof(value) == "table" then
 				result[key] = FilterSerializable(value)
-			elseif IsBasicSerializable(value) then
+			elseif IsSerializable(value) then
 				result[key] = value
 			end
 		end
@@ -1207,97 +1709,113 @@ local function FilterSerializable(data)
 	return result
 end
 
-local function BuildSaveData()
+--[[
+    Builds save data from current config.
+--]]
+function ConfigSystem.BuildSaveData()
 	return FilterSerializable(Config)
 end
 
-local function ApplyLoadedData(data)
+--[[
+    Validates and applies loaded data to Config.
+--]]
+function ConfigSystem.ApplyLoadedData(data)
 	if typeof(data) ~= "table" then
 		return false
 	end
+
 	for key, value in pairs(data) do
-		if typeof(key) == "string" then
-			Config[key] = value
+		if typeof(key) == "string" and ConfigSchema[key] then
+			Config[key] = Utils.ValidateConfigValue(key, value)
 		end
 	end
+
 	return true
 end
 
---══════════════════════════════════════════════════════--
--- SAVE SYSTEM
---══════════════════════════════════════════════════════--
-function SaveConfig(silent)
-	local saveTable = BuildSaveData()
+--[[
+    Saves configuration to file, attribute, or StringValue.
+    Tries methods in order of preference.
+--]]
+function ConfigSystem.Save(silent)
+	local saveTable = ConfigSystem.BuildSaveData()
 	local jsonString
+
 	local success, errorMessage = pcall(function()
-		jsonString = HttpService:JSONEncode(saveTable)
+		jsonString = Services.HttpService:JSONEncode(saveTable)
 	end)
+
 	if not success then
 		warn("[Config] JSON Encode failed:", errorMessage)
 		return false, "encode_failed"
 	end
 
+	-- Method 1: File
 	if writefile then
 		local fileOk = pcall(function()
-			writefile(CONFIG_FILE, jsonString)
+			writefile(CONSTANTS.CONFIG_FILE, jsonString)
 		end)
 		if fileOk then
 			if not silent then
-				Notify("Config", "Saved to file!", "Success", 2)
+				NotificationSystem.Notify("Config", "Saved to file!", "Success", 2)
 			end
 			return true, "file"
 		end
 	end
 
+	-- Method 2: Player attribute
 	local attrOk = pcall(function()
-		player:SetAttribute(CONFIG_ATTRIBUTE, jsonString)
+		Player:SetAttribute(CONSTANTS.CONFIG_ATTRIBUTE, jsonString)
 	end)
 	if attrOk then
 		if not silent then
-			Notify("Config", "Saved (attribute)", "Info", 2)
+			NotificationSystem.Notify("Config", "Saved (attribute)", "Info", 2)
 		end
 		return true, "attribute"
 	end
 
+	-- Method 3: StringValue
 	local valOk = pcall(function()
-		local existing = playerGui:FindFirstChild(CONFIG_ATTRIBUTE)
+		local existing = PlayerGui:FindFirstChild(CONSTANTS.CONFIG_ATTRIBUTE)
 		if existing then
 			existing:Destroy()
 		end
 		local val = Instance.new("StringValue")
-		val.Name = CONFIG_ATTRIBUTE
+		val.Name = CONSTANTS.CONFIG_ATTRIBUTE
 		val.Value = jsonString
-		val.Parent = playerGui
+		val.Parent = PlayerGui
 	end)
 	if valOk then
 		if not silent then
-			Notify("Config", "Saved (StringValue)", "Info", 2)
+			NotificationSystem.Notify("Config", "Saved (StringValue)", "Info", 2)
 		end
 		return true, "stringvalue"
 	end
 
-	Notify("Config", "Failed to save", "Error", 3)
+	NotificationSystem.Notify("Config", "Failed to save", "Error", 3)
 	return false, "none"
 end
 
---══════════════════════════════════════════════════════--
--- LOAD SYSTEM
---══════════════════════════════════════════════════════--
-function LoadConfig()
+--[[
+    Loads configuration from file, attribute, or StringValue.
+--]]
+function ConfigSystem.Load()
 	local jsonString = nil
 	local method = "none"
 
-	if isfile and isfile(CONFIG_FILE) then
-		local success, result = pcall(readfile, CONFIG_FILE)
+	-- Method 1: File
+	if isfile and isfile(CONSTANTS.CONFIG_FILE) then
+		local success, result = pcall(readfile, CONSTANTS.CONFIG_FILE)
 		if success and result and #result > 0 then
 			jsonString = result
 			method = "file"
 		end
 	end
 
+	-- Method 2: Player attribute
 	if not jsonString then
 		local success, result = pcall(function()
-			return player:GetAttribute(CONFIG_ATTRIBUTE)
+			return Player:GetAttribute(CONSTANTS.CONFIG_ATTRIBUTE)
 		end)
 		if success and result and typeof(result) == "string" and #result > 0 then
 			jsonString = result
@@ -1305,9 +1823,10 @@ function LoadConfig()
 		end
 	end
 
+	-- Method 3: StringValue
 	if not jsonString then
 		local success, result = pcall(function()
-			local val = playerGui:FindFirstChild(CONFIG_ATTRIBUTE)
+			local val = PlayerGui:FindFirstChild(CONSTANTS.CONFIG_ATTRIBUTE)
 			return val and val.Value
 		end)
 		if success and result and typeof(result) == "string" and #result > 0 then
@@ -1318,519 +1837,130 @@ function LoadConfig()
 
 	if jsonString then
 		local success, data = pcall(function()
-			return HttpService:JSONDecode(jsonString)
+			return Services.HttpService:JSONDecode(jsonString)
 		end)
-		if success and data and ApplyLoadedData(data) then
+		if success and data and ConfigSystem.ApplyLoadedData(data) then
 			if Config.Theme and Themes[Config.Theme] then
 				Theme = Themes[Config.Theme]
 			end
-			Notify("Config", "Loaded from " .. method, "Success", 2)
+			NotificationSystem.Notify("Config", "Loaded from " .. method, "Success", 2)
 			return true, method
 		end
 	end
+
 	return false, "none"
 end
 
-function ResetConfig()
+--[[
+    Resets configuration to defaults.
+--]]
+function ConfigSystem.Reset()
+	-- Delete saved data
 	if delfile then
 		pcall(function()
-			delfile(CONFIG_FILE)
+			delfile(CONSTANTS.CONFIG_FILE)
 		end)
 	end
 	pcall(function()
-		player:SetAttribute(CONFIG_ATTRIBUTE, nil)
+		Player:SetAttribute(CONSTANTS.CONFIG_ATTRIBUTE, nil)
 	end)
 	pcall(function()
-		local val = playerGui:FindFirstChild(CONFIG_ATTRIBUTE)
+		local val = PlayerGui:FindFirstChild(CONSTANTS.CONFIG_ATTRIBUTE)
 		if val then
 			val:Destroy()
 		end
 	end)
 
-	Config = {
-		WindowWidth = 600,
-		WindowHeight = 400,
-		MinWindowWidth = 320,
-		MinWindowHeight = 240,
-		SidebarWidth = 170,
-		ToggleButtonText = "LRX",
-		Theme = "Dark",
-		AnimationSpeed = 0.2,
-		DisableAnimations = false,
-		NotificationDuration = 3,
-		ModalDarkening = 0.5,
-		UIScale = 1.0,
-		WindowPosition = nil,
-		WindowSize = nil,
-		SelectedSeeds = {},
-		EnableSeedShop = false,
-		SelectedPlaceSeeds = {},
-		EnableSeedPlacer = false,
-		PlaceAmount = 10,
-		PlantingArea = "Default",
-		PlantingPattern = "LeftToRight",
-		PlantSpacing = 1,
-		PlantDelay = 0.05,
-		ShowGridDots = false,
-		ReduceEffects = false,
-		Keybinds = { ToggleUI = "F" },
-	}
+	-- Reset to defaults
+	for key, schema in pairs(ConfigSchema) do
+		Config[key] = schema.default
+	end
 
 	Theme = Themes.Dark
-	if RefreshGridDots then
-		RefreshGridDots()
-	end
-	Notify("Config", "Reset to defaults", "Warning", 3)
+	SeedPlacer.ClearCache()
+	PlotSystem.ClearCache()
+	GridSystem.Refresh()
+
+	NotificationSystem.Notify("Config", "Reset to defaults", "Warning", 3)
 end
 
-function AutoSaveConfig()
-	if AutoSaveDebounce then
+--[[
+    Debounced auto-save. Only saves after changes stop for 1 second.
+--]]
+function ConfigSystem.AutoSave()
+	if State.AutoSaveDebounce then
 		pcall(function()
-			task.cancel(AutoSaveDebounce)
+			task.cancel(State.AutoSaveDebounce)
 		end)
 	end
-	AutoSaveDebounce = task.delay(1, function()
-		SaveConfig(true)
-		AutoSaveDebounce = nil
+
+	State.AutoSaveDebounce = task.delay(CONSTANTS.AUTO_SAVE_DEBOUNCE, function()
+		ConfigSystem.Save(true)
+		State.AutoSaveDebounce = nil
 	end)
 end
 
---══════════════════════════════════════════════════════--
--- UI: MAIN FRAME
---══════════════════════════════════════════════════════--
-local MainFrame = Instance.new("Frame")
-MainFrame.Name = "MainFrame"
-MainFrame.Parent = ScreenGui
-MainFrame.BackgroundColor3 = Theme.Background
-MainFrame.BorderSizePixel = 0
-MainFrame.Position = UDim2.new(0.5, -Config.WindowWidth / 2, 0.5, -Config.WindowHeight / 2)
-MainFrame.Size = UDim2.new(0, Config.WindowWidth, 0, Config.WindowHeight)
-MainFrame.ClipsDescendants = false
-MainFrame.Active = true
-MainFrame.ZIndex = 10
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 15: UI COMPONENT FACTORY
+-- ═══════════════════════════════════════════════════════════════════════
 
-local mainCorner = Instance.new("UICorner")
-mainCorner.CornerRadius = UDim.new(0, 8)
-mainCorner.Parent = MainFrame
+local UI = {}
 
-local mainStroke = Instance.new("UIStroke")
-mainStroke.Color = Theme.Border
-mainStroke.Thickness = 2
-mainStroke.Parent = MainFrame
-
-if Config.WindowPosition then
-	MainFrame.Position = UDim2.new(
-		Config.WindowPosition[1],
-		Config.WindowPosition[2],
-		Config.WindowPosition[3],
-		Config.WindowPosition[4]
-	)
-end
-if Config.WindowSize then
-	MainFrame.Size = UDim2.new(Config.WindowSize[1], Config.WindowSize[2], Config.WindowSize[3], Config.WindowSize[4])
+--[[
+    Creates a base instance with properties.
+--]]
+function UI.Create(className, properties)
+	local instance = Instance.new(className)
+	for property, value in pairs(properties or {}) do
+		instance[property] = value
+	end
+	return instance
 end
 
---══════════════════════════════════════════════════════--
--- UI: TOGGLE BUTTON
---══════════════════════════════════════════════════════--
-local MainIcon = Create("TextButton", {
-	Name = "MainIcon",
-	Parent = ScreenGui,
-	BackgroundColor3 = Color3.fromRGB(15, 15, 15),
-	BorderSizePixel = 0,
-	Position = UDim2.new(0, 8, 0, 8),
-	Size = UDim2.new(0, 60, 0, 32),
-	Font = Enum.Font.GothamBold,
-	Text = Config.ToggleButtonText,
-	TextColor3 = Theme.AccentYellow,
-	TextSize = 13,
-	ZIndex = 10,
-	Active = true,
-	AutoButtonColor = false,
-})
-Corner(MainIcon, 6)
-Stroke(MainIcon, Theme.Border, 1)
+--[[
+    Adds a UICorner to an instance.
+--]]
+function UI.AddCorner(instance, radius)
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, radius or 6)
+	corner.Parent = instance
+	return corner
+end
 
-local toggleDragging = false
-local toggleStartPos, toggleBtnStart
+--[[
+    Adds a UIStroke to an instance.
+--]]
+function UI.AddStroke(instance, color, thickness)
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = color or Theme.Border
+	stroke.Thickness = thickness or 1
+	stroke.Parent = instance
+	return stroke
+end
 
-AddConnection(MainIcon.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		toggleDragging = true
-		toggleStartPos = input.Position
-		toggleBtnStart = MainIcon.Position
-	end
-end))
-
-AddConnection(UserInputService.InputChanged:Connect(function(input)
-	if
-		toggleDragging
-		and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch)
-	then
-		local delta = input.Position - toggleStartPos
-		MainIcon.Position = UDim2.new(
-			toggleBtnStart.X.Scale,
-			toggleBtnStart.X.Offset + delta.X,
-			toggleBtnStart.Y.Scale,
-			toggleBtnStart.Y.Offset + delta.Y
-		)
-	end
-end))
-
-AddConnection(UserInputService.InputEnded:Connect(function(input)
-	if toggleDragging then
-		local delta = input.Position - toggleStartPos
-		toggleDragging = false
-		if math.abs(delta.X) <= 8 and math.abs(delta.Y) <= 8 then
-			MainFrame.Visible = not MainFrame.Visible
-			Tween(
-				MainIcon,
-				{ BackgroundColor3 = MainFrame.Visible and Color3.fromRGB(15, 15, 15) or Color3.fromRGB(30, 30, 30) },
-				0.2
-			)
-		end
-	end
-end))
-
---══════════════════════════════════════════════════════--
--- UI: TOP BAR
---══════════════════════════════════════════════════════--
-local TopBar = Create("Frame", {
-	Name = "TopBar",
-	Parent = MainFrame,
-	BackgroundColor3 = Theme.Sidebar,
-	BorderSizePixel = 0,
-	Size = UDim2.new(1, 0, 0, 44),
-	ZIndex = 10,
-})
-
-Create("TextLabel", {
-	Name = "Title",
-	Parent = TopBar,
-	BackgroundTransparency = 1,
-	Position = UDim2.new(0, 14, 0, 0),
-	Size = UDim2.new(0, 70, 1, 0),
-	Font = Enum.Font.GothamBold,
-	Text = " LRX",
-	TextColor3 = Theme.TextPrimary,
-	TextSize = 20,
-	TextXAlignment = Enum.TextXAlignment.Left,
-	ZIndex = 11,
-})
-
-local PageTitle = Create("TextLabel", {
-	Name = "PageTitle",
-	Parent = TopBar,
-	BackgroundTransparency = 1,
-	Position = UDim2.new(0, 180, 0, 6),
-	Size = UDim2.new(0, 140, 0, 20),
-	Font = Enum.Font.GothamBold,
-	Text = "Home",
-	TextColor3 = Theme.TextPrimary,
-	TextSize = 16,
-	TextXAlignment = Enum.TextXAlignment.Left,
-	ZIndex = 11,
-})
-
-local PageSubtitle = Create("TextLabel", {
-	Name = "PageSubtitle",
-	Parent = TopBar,
-	BackgroundTransparency = 1,
-	Position = UDim2.new(0, 180, 0, 26),
-	Size = UDim2.new(0, 140, 0, 16),
-	Font = Enum.Font.Gotham,
-	Text = "",
-	TextColor3 = Theme.TextMuted,
-	TextSize = 11,
-	TextXAlignment = Enum.TextXAlignment.Left,
-	ZIndex = 11,
-})
-
--- Search Bar
-local SearchFrame = Create("Frame", {
-	Name = "SearchFrame",
-	Parent = TopBar,
-	BackgroundColor3 = Theme.Content,
-	BorderSizePixel = 0,
-	Position = UDim2.new(1, -230, 0.5, -14),
-	Size = UDim2.new(0, 200, 0, 28),
-	ZIndex = 12,
-})
-Corner(SearchFrame, 12)
-Stroke(SearchFrame, Theme.Border, 1)
-
-Create("TextLabel", {
-	Name = "SearchIcon",
-	Parent = SearchFrame,
-	BackgroundTransparency = 1,
-	Position = UDim2.new(0, 8, 0, 0),
-	Size = UDim2.new(0, 22, 1, 0),
-	Font = Enum.Font.GothamBold,
-	Text = "🔍",
-	TextColor3 = Theme.TextMuted,
-	TextSize = 12,
-	ZIndex = 13,
-})
-
-local SearchBox = Create("TextBox", {
-	Name = "SearchBox",
-	Parent = SearchFrame,
-	BackgroundTransparency = 1,
-	Position = UDim2.new(0, 32, 0, 0),
-	Size = UDim2.new(1, -44, 1, 0),
-	Font = Enum.Font.Gotham,
-	Text = "Search",
-	TextColor3 = Theme.TextMuted,
-	TextSize = 12,
-	ZIndex = 13,
-	ClearTextOnFocus = true,
-	Active = true,
-})
-
-local SuggestFrame = Create("Frame", {
-	Name = "Suggestions",
-	Parent = ScreenGui,
-	BackgroundColor3 = Theme.DropdownBg,
-	BorderSizePixel = 0,
-	Position = UDim2.new(0, 0, 0, 0),
-	Size = UDim2.new(0, 200, 0, 0),
-	Visible = false,
-	ZIndex = 200,
-	ClipsDescendants = true,
-	Active = true,
-})
-Corner(SuggestFrame, 6)
-Stroke(SuggestFrame, Theme.Border, 1)
-
-local SuggestScroll = Create("ScrollingFrame", {
-	Name = "SuggestScroll",
-	Parent = SuggestFrame,
-	BackgroundTransparency = 1,
-	Position = UDim2.new(0, 0, 0, 5),
-	Size = UDim2.new(1, 0, 1, -10),
-	ScrollBarThickness = 2,
-	ScrollBarImageColor3 = Theme.ScrollBar,
-	CanvasSize = UDim2.new(0, 0, 0, 0),
-	ZIndex = 201,
-	ScrollingEnabled = true,
-	Active = true,
-})
-
-Create("UIListLayout", {
-	Parent = SuggestScroll,
-	Padding = UDim.new(0, 2),
-	SortOrder = Enum.SortOrder.LayoutOrder,
-})
-
--- Close Button
-local CloseBtn = Create("TextButton", {
-	Name = "CloseBtn",
-	Parent = TopBar,
-	BackgroundTransparency = 1,
-	Position = UDim2.new(1, -34, 0, 6),
-	Size = UDim2.new(0, 28, 0, 28),
-	Font = Enum.Font.GothamBold,
-	Text = "×",
-	TextColor3 = Theme.TextSecondary,
-	TextSize = 24,
-	ZIndex = 11,
-	Active = true,
-	AutoButtonColor = false,
-})
-
-AddConnection(CloseBtn.MouseEnter:Connect(function()
-	Tween(CloseBtn, { TextColor3 = Theme.AccentRed }, 0.15)
-end))
-AddConnection(CloseBtn.MouseLeave:Connect(function()
-	Tween(CloseBtn, { TextColor3 = Theme.TextSecondary }, 0.15)
-end))
-
-AddConnection(CloseBtn.Activated:Connect(function()
-	Config.WindowPosition = {
-		MainFrame.Position.X.Scale,
-		MainFrame.Position.X.Offset,
-		MainFrame.Position.Y.Scale,
-		MainFrame.Position.Y.Offset,
-	}
-	Config.WindowSize = {
-		MainFrame.Size.X.Scale,
-		MainFrame.Size.X.Offset,
-		MainFrame.Size.Y.Scale,
-		MainFrame.Size.Y.Offset,
-	}
-	SaveConfig()
-	ScriptRunning = false
-	DisconnectAll()
-	ClearAllVisuals() -- now properly defined above
-	ScreenGui:Destroy()
-end))
-
---══════════════════════════════════════════════════════--
--- UI: SIDEBAR
---══════════════════════════════════════════════════════--
-local Sidebar = Create("Frame", {
-	Name = "Sidebar",
-	Parent = MainFrame,
-	BackgroundColor3 = Theme.Sidebar,
-	BorderSizePixel = 0,
-	Position = UDim2.new(0, 2, 0, 46),
-	Size = UDim2.new(0, Config.SidebarWidth, 1, -48),
-	ZIndex = 10,
-})
-
-local SidebarScroll = Create("ScrollingFrame", {
-	Name = "SidebarScroll",
-	Parent = Sidebar,
-	BackgroundTransparency = 1,
-	Position = UDim2.new(0, 0, 0, 4),
-	Size = UDim2.new(1, 0, 1, -8),
-	ScrollBarThickness = 2,
-	ScrollBarImageColor3 = Theme.ScrollBar,
-	CanvasSize = UDim2.new(0, 0, 0, 0),
-	ZIndex = 11,
-	ScrollingEnabled = true,
-	Active = true,
-})
-
-local SidebarLayout = Create("UIListLayout", {
-	Parent = SidebarScroll,
-	Padding = UDim.new(0, 3),
-	SortOrder = Enum.SortOrder.LayoutOrder,
-})
-
---══════════════════════════════════════════════════════--
--- UI: CONTENT AREA
---══════════════════════════════════════════════════════--
-local ContentFrame = Create("Frame", {
-	Name = "ContentFrame",
-	Parent = MainFrame,
-	BackgroundColor3 = Theme.Content,
-	BorderSizePixel = 0,
-	Position = UDim2.new(0, Config.SidebarWidth, 0, 46),
-	Size = UDim2.new(1, -Config.SidebarWidth, 1, -48),
-	ZIndex = 10,
-	ClipsDescendants = true,
-})
-
-local ContentScroll = Create("ScrollingFrame", {
-	Name = "ContentScroll",
-	Parent = ContentFrame,
-	BackgroundTransparency = 1,
-	Position = UDim2.new(0, 12, 0, 12),
-	Size = UDim2.new(1, -24, 1, -24),
-	ScrollBarThickness = 3,
-	ScrollBarImageColor3 = Theme.ScrollBar,
-	CanvasSize = UDim2.new(0, 0, 0, 0),
-	ZIndex = 11,
-	ScrollingEnabled = true,
-	Active = true,
-	ClipsDescendants = true,
-})
-
--- Create UIListLayout ONCE and keep it alive
-local ContentList = Create("UIListLayout", {
-	Parent = ContentScroll,
-	Padding = UDim.new(0, 6),
-	SortOrder = Enum.SortOrder.LayoutOrder,
-})
-
--- Auto-update CanvasSize so content actually scrolls
-AddConnection(ContentList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-	ContentScroll.CanvasSize = UDim2.new(0, 0, 0, ContentList.AbsoluteContentSize.Y + 20)
-end))
-ContentScroll.CanvasSize = UDim2.new(0, 0, 0, ContentList.AbsoluteContentSize.Y + 20)
-
---══════════════════════════════════════════════════════--
--- UI: RESIZE HANDLE
---══════════════════════════════════════════════════════--
-local ResizeHandle = Create("Frame", {
-	Name = "ResizeHandle",
-	Parent = MainFrame,
-	BackgroundTransparency = 1,
-	BorderSizePixel = 0,
-	Position = UDim2.new(1, -16, 1, -16),
-	Size = UDim2.new(0, 16, 0, 16),
-	ZIndex = 15,
-})
-
-Create("TextLabel", {
-	Parent = ResizeHandle,
-	BackgroundTransparency = 1,
-	Size = UDim2.new(1, 0, 1, 0),
-	Font = Enum.Font.GothamBold,
-	Text = "//",
-	TextColor3 = Color3.fromRGB(255, 255, 255),
-	TextSize = 10,
-	TextTransparency = 0.4,
-	ZIndex = 16,
-})
-
-local ResizeBtn = Create("TextButton", {
-	Parent = ResizeHandle,
-	BackgroundTransparency = 1,
-	Size = UDim2.new(1, 0, 1, 0),
-	Text = "",
-	ZIndex = 16,
-	Active = true,
-	AutoButtonColor = false,
-})
-
-AddConnection(ResizeBtn.InputBegan:Connect(function(input)
-	if ModalOpen then
-		return
-	end
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		local startSize = MainFrame.Size
-		local startPos = input.Position
-		local resizeConnection
-
-		resizeConnection = AddConnection(RunService.RenderStepped:Connect(function()
-			if not resizeConnection then
-				return
-			end
-			local mouse = UserInputService:GetMouseLocation()
-			local delta = mouse - Vector2.new(startPos.X, startPos.Y)
-			MainFrame.Size = UDim2.new(
-				0,
-				math.max(Config.MinWindowWidth, startSize.X.Offset + delta.X),
-				0,
-				math.max(Config.MinWindowHeight, startSize.Y.Offset + delta.Y)
-			)
-		end))
-
-		AddConnection(input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then
-				if resizeConnection then
-					resizeConnection:Disconnect()
-				end
-				resizeConnection = nil
-			end
-		end))
-	end
-end))
-
---══════════════════════════════════════════════════════--
--- COMPONENTS
---══════════════════════════════════════════════════════--
-local function CreateCard(parent, title, icon, iconColor)
-	local card = Create("TextButton", {
+--[[
+    Creates a card component.
+--]]
+function UI.CreateCard(parent, title, icon, iconColor)
+	local card = UI.Create("TextButton", {
 		Name = title,
 		Parent = parent,
 		BackgroundColor3 = Theme.Card,
 		BorderSizePixel = 0,
 		Size = UDim2.new(1, 0, 0, 42),
-		LayoutOrder = CardOrder * 2,
+		LayoutOrder = State.CardOrder * 2,
 		Font = Enum.Font.Gotham,
 		Text = "",
-		ZIndex = 50,
+		ZIndex = CONSTANTS.Z_DROPDOWN,
 		Active = true,
 		AutoButtonColor = false,
 	})
-	CardOrder = CardOrder + 1
-	Corner(card, 6)
-	Stroke(card, Theme.Border, 1)
 
-	Create("TextLabel", {
+	State.CardOrder += 1
+	UI.AddCorner(card, 6)
+	UI.AddStroke(card, Theme.Border, 1)
+
+	UI.Create("TextLabel", {
 		Name = "Icon",
 		Parent = card,
 		BackgroundTransparency = 1,
@@ -1840,10 +1970,10 @@ local function CreateCard(parent, title, icon, iconColor)
 		Text = icon or "⚙",
 		TextColor3 = iconColor or Theme.Accent,
 		TextSize = 16,
-		ZIndex = 51,
+		ZIndex = CONSTANTS.Z_DROPDOWN + 1,
 	})
 
-	Create("TextLabel", {
+	UI.Create("TextLabel", {
 		Name = "Title",
 		Parent = card,
 		BackgroundTransparency = 1,
@@ -1854,10 +1984,10 @@ local function CreateCard(parent, title, icon, iconColor)
 		TextColor3 = Theme.TextPrimary,
 		TextSize = 13,
 		TextXAlignment = Enum.TextXAlignment.Left,
-		ZIndex = 51,
+		ZIndex = CONSTANTS.Z_DROPDOWN + 1,
 	})
 
-	Create("TextLabel", {
+	UI.Create("TextLabel", {
 		Name = "Arrow",
 		Parent = card,
 		BackgroundTransparency = 1,
@@ -1867,70 +1997,31 @@ local function CreateCard(parent, title, icon, iconColor)
 		Text = ">",
 		TextColor3 = Theme.TextSecondary,
 		TextSize = 14,
-		ZIndex = 51,
+		ZIndex = CONSTANTS.Z_DROPDOWN + 1,
 	})
 
-	AddConnection(card.MouseEnter:Connect(function()
-		Tween(card, { BackgroundColor3 = Theme.CardHover }, 0.15)
+	Memory.TrackConnection(card.MouseEnter:Connect(function()
+		TweenSystem.Tween(card, { BackgroundColor3 = Theme.CardHover }, 0.15)
 	end))
-	AddConnection(card.MouseLeave:Connect(function()
-		Tween(card, { BackgroundColor3 = Theme.Card }, 0.15)
+	Memory.TrackConnection(card.MouseLeave:Connect(function()
+		TweenSystem.Tween(card, { BackgroundColor3 = Theme.Card }, 0.15)
 	end))
 
 	return card
 end
 
-local function CreateInput(parent, title, defaultText, callback)
-	local container = Create("Frame", {
-		Parent = parent,
-		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -8, 0, 50),
-	})
-
-	Create("TextLabel", {
-		Parent = container,
-		BackgroundTransparency = 1,
-		Size = UDim2.new(1, 0, 0, 16),
-		Font = Enum.Font.Gotham,
-		Text = title,
-		TextColor3 = Theme.TextPrimary,
-		TextSize = 12,
-		TextXAlignment = Enum.TextXAlignment.Left,
-	})
-
-	local box = Create("TextBox", {
-		Parent = container,
-		BackgroundColor3 = Theme.Card,
-		BorderSizePixel = 0,
-		Position = UDim2.new(0, 0, 0, 20),
-		Size = UDim2.new(1, 0, 0, 26),
-		Font = Enum.Font.Gotham,
-		Text = defaultText or "",
-		PlaceholderText = "Enter value...",
-		TextColor3 = Theme.TextPrimary,
-		PlaceholderColor3 = Theme.TextMuted,
-		TextSize = 12,
-		ClearTextOnFocus = false,
-	})
-
-	Corner(box, 4)
-
-	AddConnection(box.FocusLost:Connect(function()
-		callback(box.Text)
-	end))
-
-	return container, box
-end
-
-local function CreateToggle(parent, text, defaultState, callback)
-	local container = Create("Frame", {
+--[[
+    Creates a toggle component.
+--]]
+function UI.CreateToggle(parent, text, defaultState, callback)
+	local container = UI.Create("Frame", {
 		Parent = parent,
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, -8, 0, 32),
 		ZIndex = 120,
 	})
 
-	Create("TextLabel", {
+	UI.Create("TextLabel", {
 		Parent = container,
 		BackgroundTransparency = 1,
 		Position = UDim2.new(0, 4, 0, 0),
@@ -1943,7 +2034,7 @@ local function CreateToggle(parent, text, defaultState, callback)
 		ZIndex = 120,
 	})
 
-	local toggleBg = Create("TextButton", {
+	local toggleBg = UI.Create("TextButton", {
 		Parent = container,
 		BackgroundColor3 = defaultState and Theme.ToggleOn or Theme.ToggleBg,
 		BorderSizePixel = 0,
@@ -1954,9 +2045,9 @@ local function CreateToggle(parent, text, defaultState, callback)
 		AutoButtonColor = false,
 		Text = "",
 	})
-	Corner(toggleBg, 10)
+	UI.AddCorner(toggleBg, 10)
 
-	local knob = Create("Frame", {
+	local knob = UI.Create("Frame", {
 		Parent = toggleBg,
 		BackgroundColor3 = Color3.fromRGB(255, 255, 255),
 		BorderSizePixel = 0,
@@ -1964,14 +2055,14 @@ local function CreateToggle(parent, text, defaultState, callback)
 		Size = UDim2.new(0, 16, 0, 16),
 		ZIndex = 121,
 	})
-	Corner(knob, 8)
+	UI.AddCorner(knob, 8)
 
 	local state = defaultState or false
 
-	AddConnection(toggleBg.Activated:Connect(function()
+	Memory.TrackConnection(toggleBg.Activated:Connect(function()
 		state = not state
-		Tween(toggleBg, { BackgroundColor3 = state and Theme.ToggleOn or Theme.ToggleBg }, 0.2)
-		Tween(knob, { Position = state and UDim2.new(1, -18, 0, 2) or UDim2.new(0, 2, 0, 2) }, 0.2)
+		TweenSystem.Tween(toggleBg, { BackgroundColor3 = state and Theme.ToggleOn or Theme.ToggleBg }, 0.2)
+		TweenSystem.Tween(knob, { Position = state and UDim2.new(1, -18, 0, 2) or UDim2.new(0, 2, 0, 2) }, 0.2)
 
 		if callback then
 			local ok, err = pcall(callback, state)
@@ -1980,7 +2071,7 @@ local function CreateToggle(parent, text, defaultState, callback)
 			end
 		end
 
-		AutoSaveConfig()
+		ConfigSystem.AutoSave()
 	end))
 
 	return container, function()
@@ -1988,12 +2079,15 @@ local function CreateToggle(parent, text, defaultState, callback)
 	end
 end
 
-local function CreateButton(parent, text, bgColor, width, height, callback)
+--[[
+    Creates a button component.
+--]]
+function UI.CreateButton(parent, text, bgColor, width, height, callback)
 	bgColor = bgColor or Theme.Card
 	width = width or 70
 	height = height or 28
 
-	local btn = Create("TextButton", {
+	local btn = UI.Create("TextButton", {
 		Parent = parent,
 		BackgroundColor3 = bgColor,
 		BorderSizePixel = 0,
@@ -2006,18 +2100,18 @@ local function CreateButton(parent, text, bgColor, width, height, callback)
 		Active = true,
 		AutoButtonColor = false,
 	})
-	Corner(btn, 5)
-	Stroke(btn, Theme.Border, 1)
+	UI.AddCorner(btn, 5)
+	UI.AddStroke(btn, Theme.Border, 1)
 
-	AddConnection(btn.MouseEnter:Connect(function()
-		Tween(btn, { BackgroundColor3 = Theme.CardHover }, 0.15)
+	Memory.TrackConnection(btn.MouseEnter:Connect(function()
+		TweenSystem.Tween(btn, { BackgroundColor3 = Theme.CardHover }, 0.15)
 	end))
-	AddConnection(btn.MouseLeave:Connect(function()
-		Tween(btn, { BackgroundColor3 = bgColor }, 0.15)
+	Memory.TrackConnection(btn.MouseLeave:Connect(function()
+		TweenSystem.Tween(btn, { BackgroundColor3 = bgColor }, 0.15)
 	end))
 
 	if callback then
-		AddConnection(btn.Activated:Connect(function()
+		Memory.TrackConnection(btn.Activated:Connect(function()
 			local ok, err = pcall(callback)
 			if not ok then
 				warn("[Button Error]", err)
@@ -2028,8 +2122,11 @@ local function CreateButton(parent, text, bgColor, width, height, callback)
 	return btn
 end
 
-local function CreateLabel(parent, text, textColor, fontSize)
-	return Create("TextLabel", {
+--[[
+    Creates a label component.
+--]]
+function UI.CreateLabel(parent, text, textColor, fontSize)
+	return UI.Create("TextLabel", {
 		Parent = parent,
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, -8, 0, fontSize or 20),
@@ -2043,206 +2140,281 @@ local function CreateLabel(parent, text, textColor, fontSize)
 	})
 end
 
---══════════════════════════════════════════════════════--
--- DROPDOWN SYSTEM
---══════════════════════════════════════════════════════--
-local function CloseDropdown()
-	if not ActiveDropdownFrame then
+--[[
+    Creates an input component.
+--]]
+function UI.CreateInput(parent, title, defaultText, callback)
+	local container = UI.Create("Frame", {
+		Parent = parent,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -8, 0, 50),
+	})
+
+	UI.Create("TextLabel", {
+		Parent = container,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 16),
+		Font = Enum.Font.Gotham,
+		Text = title,
+		TextColor3 = Theme.TextPrimary,
+		TextSize = 12,
+		TextXAlignment = Enum.TextXAlignment.Left,
+	})
+
+	local box = UI.Create("TextBox", {
+		Parent = container,
+		BackgroundColor3 = Theme.Card,
+		BorderSizePixel = 0,
+		Position = UDim2.new(0, 0, 0, 20),
+		Size = UDim2.new(1, 0, 0, 26),
+		Font = Enum.Font.Gotham,
+		Text = defaultText or "",
+		PlaceholderText = "Enter value...",
+		TextColor3 = Theme.TextPrimary,
+		PlaceholderColor3 = Theme.TextMuted,
+		TextSize = 12,
+		ClearTextOnFocus = false,
+	})
+	UI.AddCorner(box, 4)
+
+	Memory.TrackConnection(box.FocusLost:Connect(function()
+		callback(box.Text)
+	end))
+
+	return container, box
+end
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 16: DROPDOWN SYSTEM
+-- ═══════════════════════════════════════════════════════════════════════
+
+local DropdownSystem = {}
+
+--[[
+    Closes the active dropdown.
+--]]
+function DropdownSystem.Close()
+	if not State.ActiveDropdownFrame then
 		return
 	end
 
-	if ActiveDropdownCard then
-		local arrow = ActiveDropdownCard:FindFirstChild("Arrow")
+	if State.ActiveDropdownCard then
+		local arrow = State.ActiveDropdownCard:FindFirstChild("Arrow")
 		if arrow then
 			arrow.Text = ">"
 		end
-		Tween(ActiveDropdownCard, { BackgroundColor3 = Theme.Card }, 0.15)
-		ActiveDropdownCard = nil
+		TweenSystem.Tween(State.ActiveDropdownCard, { BackgroundColor3 = Theme.Card }, 0.15)
+		State.ActiveDropdownCard = nil
 	end
 
-	local DropdownFrame = ActiveDropdownFrame
-	ActiveDropdownFrame = nil
-	Tween(DropdownFrame, { Size = UDim2.new(1, 0, 0, 0) }, 0.15, function()
-		if DropdownFrame and DropdownFrame.Parent then
-			DropdownFrame:Destroy()
+	local frame = State.ActiveDropdownFrame
+	State.ActiveDropdownFrame = nil
+
+	TweenSystem.Tween(frame, { Size = UDim2.new(1, 0, 0, 0) }, 0.15, function()
+		if frame and frame.Parent then
+			frame:Destroy()
 		end
 	end)
 end
 
-local function ToggleDropdown(card, buildFunc)
-	if DropdownDebounce then
+--[[
+    Toggles a dropdown for a card.
+--]]
+function DropdownSystem.Toggle(card, buildFunc)
+	if State.DropdownDebounce then
 		return
 	end
 
-	if ActiveDropdownCard == card then
-		CloseDropdown()
+	if State.ActiveDropdownCard == card then
+		DropdownSystem.Close()
 		return
 	end
-	DropdownDebounce = true
 
-	CloseDropdown()
+	State.DropdownDebounce = true
+	DropdownSystem.Close()
 
-	ActiveDropdownCard = card
-	Tween(card, { BackgroundColor3 = Theme.CardHover }, 0.15)
+	State.ActiveDropdownCard = card
+	TweenSystem.Tween(card, { BackgroundColor3 = Theme.CardHover }, 0.15)
+
 	local arrow = card:FindFirstChild("Arrow")
 	if arrow then
 		arrow.Text = "v"
 	end
 
-	local DropdownFrame = Create("Frame", {
+	local frame = UI.Create("Frame", {
 		Name = "Dropdown",
-		Parent = ContentScroll,
+		Parent = State.ContentScroll,
 		BackgroundColor3 = Theme.DropdownBg,
 		BorderSizePixel = 0,
 		Size = UDim2.new(1, 0, 0, 0),
 		LayoutOrder = card.LayoutOrder + 1,
 		ClipsDescendants = true,
-		ZIndex = 50,
+		ZIndex = CONSTANTS.Z_DROPDOWN,
 	})
-	Corner(DropdownFrame, 6)
-	Stroke(DropdownFrame, Theme.Border, 1)
+	UI.AddCorner(frame, 6)
+	UI.AddStroke(frame, Theme.Border, 1)
 
-	local DropdownScroll = Create("ScrollingFrame", {
-		Parent = DropdownFrame,
+	local scroll = UI.Create("ScrollingFrame", {
+		Parent = frame,
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 1, 0),
 		ScrollBarThickness = 3,
 		ScrollBarImageColor3 = Theme.ScrollBar,
 		CanvasSize = UDim2.new(0, 0, 0, 0),
-		ZIndex = 51,
+		ZIndex = CONSTANTS.Z_DROPDOWN + 1,
 		ClipsDescendants = true,
 		Active = true,
 		ScrollingEnabled = true,
 		ScrollingDirection = Enum.ScrollingDirection.Y,
 	})
 
-	local DropdownList = Create("UIListLayout", {
-		Parent = DropdownScroll,
+	local list = UI.Create("UIListLayout", {
+		Parent = scroll,
 		Padding = UDim.new(0, 6),
 		SortOrder = Enum.SortOrder.LayoutOrder,
 		HorizontalAlignment = Enum.HorizontalAlignment.Center,
 	})
 
-	Create("UIPadding", {
-		Parent = DropdownScroll,
+	UI.Create("UIPadding", {
+		Parent = scroll,
 		PaddingTop = UDim.new(0, 8),
 		PaddingBottom = UDim.new(0, 8),
 		PaddingLeft = UDim.new(0, 8),
 		PaddingRight = UDim.new(0, 8),
 	})
 
-	local ok, err = pcall(buildFunc, DropdownScroll)
+	local ok, err = pcall(buildFunc, scroll)
 	if not ok then
 		warn("[Dropdown Build Error]", err)
 	end
 
 	task.wait()
 
-	local contentHeight = DropdownList.AbsoluteContentSize.Y + 16
-	local maxHeight = math.min(contentHeight, 260)
+	local contentHeight = list.AbsoluteContentSize.Y + 16
+	local maxHeight = math.min(contentHeight, CONSTANTS.MAX_DROPDOWN_HEIGHT)
 
-	DropdownScroll.CanvasSize = UDim2.new(0, 0, 0, contentHeight)
-	ActiveDropdownFrame = DropdownFrame
+	scroll.CanvasSize = UDim2.new(0, 0, 0, contentHeight)
+	State.ActiveDropdownFrame = frame
 
-	Tween(DropdownFrame, { Size = UDim2.new(1, 0, 0, maxHeight) }, 0.2)
+	TweenSystem.Tween(frame, { Size = UDim2.new(1, 0, 0, maxHeight) }, CONSTANTS.DROPDOWN_ANIMATION_SPEED)
 
 	task.delay(0.25, function()
-		DropdownDebounce = false
+		State.DropdownDebounce = false
 	end)
 end
 
---══════════════════════════════════════════════════════--
--- MODAL SYSTEM
---══════════════════════════════════════════════════════--
-local function SetModalState(isOpen)
-	ModalOpen = isOpen
-	MainFrame.Active = not isOpen
-	SidebarScroll.ScrollingEnabled = not isOpen
-	ContentScroll.ScrollingEnabled = not isOpen
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 17: MODAL SYSTEM
+-- ═══════════════════════════════════════════════════════════════════════
+
+local ModalSystem = {}
+
+--[[
+    Sets modal interaction state (disables background UI).
+--]]
+function ModalSystem.SetState(isOpen)
+	State.ModalOpen = isOpen
+	State.MainFrame.Active = not isOpen
+	State.SidebarScroll.ScrollingEnabled = not isOpen
+	State.ContentScroll.ScrollingEnabled = not isOpen
 end
 
-function CloseModal()
-	if ActiveModal then
-		Tween(
-			ActiveModal,
-			{ Position = UDim2.new(0.5, -ActiveModal.Size.X.Offset / 2, 0.5, -ActiveModal.Size.Y.Offset / 2 + 20) },
+--[[
+    Closes the active modal.
+--]]
+function ModalSystem.Close()
+	if State.ActiveModal then
+		TweenSystem.Tween(
+			State.ActiveModal,
+			{
+				Position = UDim2.new(
+					0.5,
+					-State.ActiveModal.Size.X.Offset / 2,
+					0.5,
+					-State.ActiveModal.Size.Y.Offset / 2 + 20
+				),
+			},
 			0.2,
 			function()
-				if ActiveModal then
-					ActiveModal:Destroy()
+				if State.ActiveModal then
+					State.ActiveModal:Destroy()
+					State.ActiveModal = nil
 				end
-				ActiveModal = nil
 			end
 		)
 	end
 
-	if ModalOverlay then
-		Tween(ModalOverlay, { BackgroundTransparency = 1 }, 0.2, function()
-			ModalOverlay.Visible = false
-			SetModalState(false)
+	if State.ModalOverlay then
+		TweenSystem.Tween(State.ModalOverlay, { BackgroundTransparency = 1 }, 0.2, function()
+			State.ModalOverlay.Visible = false
+			ModalSystem.SetState(false)
 		end)
 	end
 end
 
-function ShowModal(title, buildFunc, width, height)
+--[[
+    Shows a modal with the given title and content builder.
+--]]
+function ModalSystem.Show(title, buildFunc, width, height)
 	width = width or 520
 	height = height or 420
 
-	if not ModalOverlay then
-		ModalOverlay = Create("Frame", {
+	-- Create overlay if needed
+	if not State.ModalOverlay then
+		State.ModalOverlay = UI.Create("Frame", {
 			Name = "ModalOverlay",
-			Parent = ScreenGui,
+			Parent = State.ScreenGui,
 			BackgroundColor3 = Theme.Overlay,
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
 			Size = UDim2.new(1, 0, 1, 0),
-			ZIndex = 500,
+			ZIndex = CONSTANTS.Z_MODAL_OVERLAY,
 			Active = false,
 			Visible = false,
 		})
 
-		local blocker = Create("TextButton", {
-			Parent = ModalOverlay,
+		local blocker = UI.Create("TextButton", {
+			Parent = State.ModalOverlay,
 			BackgroundTransparency = 1,
 			Size = UDim2.new(1, 0, 1, 0),
 			Text = "",
-			ZIndex = 500,
+			ZIndex = CONSTANTS.Z_MODAL_OVERLAY,
 			Active = true,
 			AutoButtonColor = false,
 		})
 	end
 
-	SetModalState(true)
-	ModalOverlay.Visible = true
-	Tween(ModalOverlay, { BackgroundTransparency = Config.ModalDarkening }, 0.2)
+	ModalSystem.SetState(true)
+	State.ModalOverlay.Visible = true
+	TweenSystem.Tween(State.ModalOverlay, { BackgroundTransparency = Config.ModalDarkening }, 0.2)
 
-	if ActiveModal then
-		ActiveModal:Destroy()
+	if State.ActiveModal then
+		State.ActiveModal:Destroy()
 	end
 
-	local ModalFrame = Create("Frame", {
+	local modalFrame = UI.Create("Frame", {
 		Name = "ModalFrame",
-		Parent = ModalOverlay,
+		Parent = State.ModalOverlay,
 		BackgroundColor3 = Theme.Background,
 		BorderSizePixel = 0,
 		Position = UDim2.new(0.5, -width / 2, 0.5, -height / 2),
 		Size = UDim2.new(0, width, 0, height),
-		ZIndex = 600,
+		ZIndex = CONSTANTS.Z_MODAL,
 		Active = true,
 	})
-	Corner(ModalFrame, 8)
-	Stroke(ModalFrame, Theme.Border, 1)
+	UI.AddCorner(modalFrame, 8)
+	UI.AddStroke(modalFrame, Theme.Border, 1)
 
-	local ModalTitleBar = Create("Frame", {
-		Parent = ModalFrame,
+	local titleBar = UI.Create("Frame", {
+		Parent = modalFrame,
 		BackgroundTransparency = 1,
 		Position = UDim2.new(0, 15, 0, 12),
 		Size = UDim2.new(1, -30, 0, 28),
-		ZIndex = 620,
+		ZIndex = CONSTANTS.Z_MODAL + 20,
 	})
 
-	Create("TextLabel", {
-		Parent = ModalTitleBar,
+	UI.Create("TextLabel", {
+		Parent = titleBar,
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, -80, 1, 0),
 		Font = Enum.Font.GothamBold,
@@ -2250,11 +2422,11 @@ function ShowModal(title, buildFunc, width, height)
 		TextColor3 = Theme.TextPrimary,
 		TextSize = 16,
 		TextXAlignment = Enum.TextXAlignment.Left,
-		ZIndex = 620,
+		ZIndex = CONSTANTS.Z_MODAL + 20,
 	})
 
-	local ModalCloseBtn = Create("TextButton", {
-		Parent = ModalTitleBar,
+	local closeBtn = UI.Create("TextButton", {
+		Parent = titleBar,
 		BackgroundColor3 = Theme.AccentRed,
 		BorderSizePixel = 0,
 		Position = UDim2.new(1, -28, 0, 0),
@@ -2263,38 +2435,44 @@ function ShowModal(title, buildFunc, width, height)
 		Text = "×",
 		TextColor3 = Color3.fromRGB(255, 255, 255),
 		TextSize = 18,
-		ZIndex = 620,
+		ZIndex = CONSTANTS.Z_MODAL + 20,
 		Active = true,
 		AutoButtonColor = false,
 	})
-	Corner(ModalCloseBtn, 6)
-	AddConnection(ModalCloseBtn.Activated:Connect(CloseModal))
+	UI.AddCorner(closeBtn, 6)
+	Memory.TrackConnection(closeBtn.Activated:Connect(ModalSystem.Close))
 
-	local ModalContent = Create("Frame", {
-		Parent = ModalFrame,
+	local content = UI.Create("Frame", {
+		Parent = modalFrame,
 		BackgroundTransparency = 1,
 		Position = UDim2.new(0, 15, 0, 50),
 		Size = UDim2.new(1, -30, 1, -65),
-		ZIndex = 620,
+		ZIndex = CONSTANTS.Z_MODAL + 20,
 		ClipsDescendants = true,
 	})
 
-	ActiveModal = ModalFrame
-	Tween(ModalFrame, { Position = UDim2.new(0.5, -width / 2, 0.5, -height / 2) }, 0.3)
+	State.ActiveModal = modalFrame
+	TweenSystem.Tween(modalFrame, { Position = UDim2.new(0.5, -width / 2, 0.5, -height / 2) }, 0.3)
 
 	if buildFunc then
-		local ok, err = pcall(buildFunc, ModalFrame, ModalContent)
+		local ok, err = pcall(buildFunc, modalFrame, content)
 		if not ok then
 			warn("[Modal Build Error]", err)
 		end
 	end
 end
 
---══════════════════════════════════════════════════════--
--- SEARCH SYSTEM
---══════════════════════════════════════════════════════--
-local function RegisterSearch(itemName, targetPage, itemIcon, itemAction)
-	table.insert(SearchableItems, {
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 18: SEARCH SYSTEM
+-- ═══════════════════════════════════════════════════════════════════════
+
+local SearchSystem = {}
+
+--[[
+    Registers an item for search.
+--]]
+function SearchSystem.Register(itemName, targetPage, itemIcon, itemAction)
+	table.insert(State.SearchableItems, {
 		Name = itemName,
 		Page = targetPage,
 		Icon = itemIcon,
@@ -2302,44 +2480,54 @@ local function RegisterSearch(itemName, targetPage, itemIcon, itemAction)
 	})
 end
 
-local function Search(searchQuery)
-	local searchResults = {}
-	local lowerSearchQuery = searchQuery:lower()
-	for _, item in ipairs(SearchableItems) do
-		if item.Name:lower():find(lowerSearchQuery, 1, true) then
-			table.insert(searchResults, item)
+--[[
+    Performs a search query.
+--]]
+function SearchSystem.Query(searchQuery)
+	local results = {}
+	local lowerQuery = searchQuery:lower()
+
+	for _, item in ipairs(State.SearchableItems) do
+		if item.Name:lower():find(lowerQuery, 1, true) then
+			table.insert(results, item)
 		end
 	end
-	return searchResults
+
+	return results
 end
 
-local function UpdateSuggestions()
-	for _, child in pairs(SuggestScroll:GetChildren()) do
+--[[
+    Updates search suggestions UI.
+--]]
+function SearchSystem.UpdateSuggestions()
+	-- Clear existing suggestions
+	for _, child in pairs(State.SuggestScroll:GetChildren()) do
 		if child:IsA("TextButton") then
 			child:Destroy()
 		end
 	end
 
-	local searchText = SearchBox.Text:lower()
+	local searchText = State.SearchBox.Text:lower()
 	if searchText == "" or searchText == "search" then
-		SuggestFrame.Visible = false
+		State.SuggestFrame.Visible = false
 		return
 	end
 
-	local suggestionMatches = Search(searchText)
-	if #suggestionMatches == 0 then
-		SuggestFrame.Visible = false
+	local matches = SearchSystem.Query(searchText)
+	if #matches == 0 then
+		State.SuggestFrame.Visible = false
 		return
 	end
 
-	local searchAbsPos = SearchFrame.AbsolutePosition
-	local searchAbsSize = SearchFrame.AbsoluteSize
-	SuggestFrame.Position = UDim2.new(0, searchAbsPos.X, 0, searchAbsPos.Y + searchAbsSize.Y + 4)
-	SuggestFrame.Size = UDim2.new(0, searchAbsSize.X, 0, math.min(#suggestionMatches * 34 + 10, 220))
+	-- Position suggestion frame below search box
+	local searchAbsPos = State.SearchFrame.AbsolutePosition
+	local searchAbsSize = State.SearchFrame.AbsoluteSize
+	State.SuggestFrame.Position = UDim2.new(0, searchAbsPos.X, 0, searchAbsPos.Y + searchAbsSize.Y + 4)
+	State.SuggestFrame.Size = UDim2.new(0, searchAbsSize.X, 0, math.min(#matches * 34 + 10, 220))
 
-	for _, item in ipairs(suggestionMatches) do
-		local SuggestionBtn = Create("TextButton", {
-			Parent = SuggestScroll,
+	for _, item in ipairs(matches) do
+		local btn = UI.Create("TextButton", {
+			Parent = State.SuggestScroll,
 			BackgroundColor3 = Theme.Card,
 			BorderSizePixel = 0,
 			Size = UDim2.new(1, -10, 0, 32),
@@ -2353,18 +2541,18 @@ local function UpdateSuggestions()
 			Active = true,
 			AutoButtonColor = false,
 		})
-		Corner(SuggestionBtn, 4)
+		UI.AddCorner(btn, 4)
 
-		AddConnection(SuggestionBtn.MouseEnter:Connect(function()
-			Tween(SuggestionBtn, { BackgroundColor3 = Theme.CardHover }, 0.15)
+		Memory.TrackConnection(btn.MouseEnter:Connect(function()
+			TweenSystem.Tween(btn, { BackgroundColor3 = Theme.CardHover }, 0.15)
 		end))
-		AddConnection(SuggestionBtn.MouseLeave:Connect(function()
-			Tween(SuggestionBtn, { BackgroundColor3 = Theme.Card }, 0.15)
+		Memory.TrackConnection(btn.MouseLeave:Connect(function()
+			TweenSystem.Tween(btn, { BackgroundColor3 = Theme.Card }, 0.15)
 		end))
 
-		AddConnection(SuggestionBtn.Activated:Connect(function()
-			SuggestFrame.Visible = false
-			SearchBox.Text = "Search"
+		Memory.TrackConnection(btn.Activated:Connect(function()
+			State.SuggestFrame.Visible = false
+			State.SearchBox.Text = "Search"
 			if item.Action then
 				local ok, err = pcall(item.Action)
 				if not ok then
@@ -2374,54 +2562,60 @@ local function UpdateSuggestions()
 		end))
 	end
 
-	SuggestScroll.CanvasSize = UDim2.new(0, 0, 0, #suggestionMatches * 34)
-	SuggestFrame.Visible = true
+	State.SuggestScroll.CanvasSize = UDim2.new(0, 0, 0, #matches * 34)
+	State.SuggestFrame.Visible = true
 end
 
-AddConnection(SearchBox:GetPropertyChangedSignal("Text"):Connect(UpdateSuggestions))
-AddConnection(SearchBox.FocusLost:Connect(function()
-	if SearchBox.Text == "" then
-		SearchBox.Text = "Search"
-	end
-	task.wait(0.2)
-	SuggestFrame.Visible = false
-end))
-AddConnection(SearchBox.Focused:Connect(function()
-	if SearchBox.Text ~= "Search" and SearchBox.Text ~= "" then
-		UpdateSuggestions()
-	end
-end))
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 19: PAGE SYSTEM
+-- ═══════════════════════════════════════════════════════════════════════
 
---══════════════════════════════════════════════════════--
--- PAGE SYSTEM
---══════════════════════════════════════════════════════--
-local function ClearContent()
-	ContentScroll.CanvasPosition = Vector2.new(0, 0)
-	CloseDropdown()
-	for _, child in pairs(ContentScroll:GetChildren()) do
+local PageSystem = {}
+local Pages = {}
+
+--[[
+    Clears the content area.
+--]]
+function PageSystem.ClearContent()
+	State.ContentScroll.CanvasPosition = Vector2.new(0, 0)
+	DropdownSystem.Close()
+
+	for _, child in pairs(State.ContentScroll:GetChildren()) do
 		if child:IsA("Frame") or child:IsA("TextButton") or child:IsA("TextLabel") or child:IsA("UIPadding") then
 			child:Destroy()
 		end
 	end
-	CardOrder = 0
+
+	State.CardOrder = 0
 end
 
-local function SwitchPage(targetPage, pageTitle, pageSubtitle, pageBuilder)
-	CurrentPage = targetPage
-	PageTitle.Text = pageTitle
-	PageSubtitle.Text = pageSubtitle or ""
-	ClearContent()
+--[[
+    Switches to a page.
+--]]
+function PageSystem.SwitchTo(targetPage, pageTitle, pageSubtitle, pageBuilder)
+	State.CurrentPage = targetPage
+	State.PageTitle.Text = pageTitle
+	State.PageSubtitle.Text = pageSubtitle or ""
+	PageSystem.ClearContent()
+
 	local ok, err = pcall(pageBuilder)
 	if not ok then
 		warn("[Page Error]", err)
 	end
 end
 
---══════════════════════════════════════════════════════--
--- SEED SELECTION MODAL
---══════════════════════════════════════════════════════--
-local function ShowSeedSelectionModal(title, selectedTable, updateCallback)
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 20: SEED SELECTION MODAL
+-- ═══════════════════════════════════════════════════════════════════════
+
+local SeedModalSystem = {}
+
+--[[
+    Shows a seed selection modal.
+--]]
+function SeedModalSystem.Show(title, selectedTable, updateCallback)
 	local seedItems = {}
+
 	if SeedData then
 		for _, seed in ipairs(SeedData) do
 			if seed.SeedName then
@@ -2434,18 +2628,19 @@ local function ShowSeedSelectionModal(title, selectedTable, updateCallback)
 		end
 	end
 
-	ShowModal("Select Seeds", function(ModalFrame, ModalContent)
-		local ModalSearchContainer = Create("Frame", {
-			Parent = ModalContent,
+	ModalSystem.Show(title, function(modalFrame, modalContent)
+		-- Search bar
+		local searchContainer = UI.Create("Frame", {
+			Parent = modalContent,
 			BackgroundColor3 = Theme.Content,
 			BorderSizePixel = 0,
 			Size = UDim2.new(1, 0, 0, 32),
 			Position = UDim2.new(0, 0, 0, 0),
-			ZIndex = 620,
+			ZIndex = CONSTANTS.Z_MODAL + 20,
 		})
 
-		Create("TextLabel", {
-			Parent = ModalSearchContainer,
+		UI.Create("TextLabel", {
+			Parent = searchContainer,
 			BackgroundTransparency = 1,
 			Position = UDim2.new(0, 8, 0, 0),
 			Size = UDim2.new(0, 22, 1, 0),
@@ -2453,11 +2648,11 @@ local function ShowSeedSelectionModal(title, selectedTable, updateCallback)
 			Text = "🔍",
 			TextColor3 = Theme.TextMuted,
 			TextSize = 12,
-			ZIndex = 621,
+			ZIndex = CONSTANTS.Z_MODAL + 21,
 		})
 
-		local ModalSearchBox = Create("TextBox", {
-			Parent = ModalSearchContainer,
+		local searchBox = UI.Create("TextBox", {
+			Parent = searchContainer,
 			BackgroundTransparency = 1,
 			Position = UDim2.new(0, 32, 0, 0),
 			Size = UDim2.new(1, -44, 1, 0),
@@ -2465,50 +2660,32 @@ local function ShowSeedSelectionModal(title, selectedTable, updateCallback)
 			Text = "Search seeds...",
 			TextColor3 = Theme.TextMuted,
 			TextSize = 12,
-			ZIndex = 621,
+			ZIndex = CONSTANTS.Z_MODAL + 21,
 			ClearTextOnFocus = true,
 			Active = true,
 		})
 
-		local ModalSeedScroll = Create("ScrollingFrame", {
-			Parent = ModalContent,
+		-- Scroll area
+		local scroll = UI.Create("ScrollingFrame", {
+			Parent = modalContent,
 			BackgroundTransparency = 1,
 			Position = UDim2.new(0, 0, 0, 40),
 			Size = UDim2.new(1, 0, 1, -80),
 			ScrollBarThickness = 3,
 			ScrollBarImageColor3 = Theme.ScrollBar,
 			CanvasSize = UDim2.new(0, 0, 0, 0),
-			ZIndex = 620,
+			ZIndex = CONSTANTS.Z_MODAL + 20,
 			ClipsDescendants = true,
 		})
 
-		local ModalSeedList = Create("UIListLayout", {
-			Parent = ModalSeedScroll,
+		local list = UI.Create("UIListLayout", {
+			Parent = scroll,
 			Padding = UDim.new(0, 3),
 			SortOrder = Enum.SortOrder.LayoutOrder,
 		})
 
-		local RarityColors = {
-			Common = Color3.fromRGB(169, 169, 169),
-			Uncommon = Color3.fromRGB(50, 205, 50),
-			Rare = Color3.fromRGB(30, 144, 255),
-			Epic = Color3.fromRGB(147, 112, 219),
-			Legendary = Color3.fromRGB(255, 215, 0),
-			Mythic = Color3.fromRGB(255, 69, 0),
-		}
-
-		local function FormatPrice(price)
-			if not price then
-				return "$0"
-			end
-			if price >= 1000 then
-				return string.format("$%.2fK", price / 1000)
-			end
-			return "$" .. tostring(price)
-		end
-
-		local function BuildModalRows(filterText)
-			for _, child in pairs(ModalSeedScroll:GetChildren()) do
+		local function BuildRows(filterText)
+			for _, child in pairs(scroll:GetChildren()) do
 				if child:IsA("TextButton") or child:IsA("TextLabel") then
 					child:Destroy()
 				end
@@ -2522,25 +2699,25 @@ local function ShowSeedSelectionModal(title, selectedTable, updateCallback)
 					continue
 				end
 
-				visibleCount = visibleCount + 1
+				visibleCount += 1
 				local isSelected = selectedTable[seedItem.Name] == true
 
-				local SeedRow = Create("TextButton", {
-					Parent = ModalSeedScroll,
+				local row = UI.Create("TextButton", {
+					Parent = scroll,
 					BackgroundColor3 = isSelected and Color3.fromRGB(55, 45, 75) or Theme.Card,
 					BorderSizePixel = 0,
 					Size = UDim2.new(1, 0, 0, 34),
 					LayoutOrder = i,
 					Font = Enum.Font.Gotham,
 					Text = "",
-					ZIndex = 620,
+					ZIndex = CONSTANTS.Z_MODAL + 20,
 					Active = true,
 					AutoButtonColor = false,
 				})
-				Corner(SeedRow, 4)
+				UI.AddCorner(row, 4)
 
-				Create("TextLabel", {
-					Parent = SeedRow,
+				UI.Create("TextLabel", {
+					Parent = row,
 					BackgroundTransparency = 1,
 					Position = UDim2.new(0, 10, 0, 0),
 					Size = UDim2.new(0.32, 0, 1, 0),
@@ -2549,25 +2726,25 @@ local function ShowSeedSelectionModal(title, selectedTable, updateCallback)
 					TextColor3 = Theme.TextPrimary,
 					TextSize = 12,
 					TextXAlignment = Enum.TextXAlignment.Left,
-					ZIndex = 621,
+					ZIndex = CONSTANTS.Z_MODAL + 21,
 				})
 
-				Create("TextLabel", {
-					Parent = SeedRow,
+				UI.Create("TextLabel", {
+					Parent = row,
 					BackgroundTransparency = 1,
 					Position = UDim2.new(0.36, 0, 0, 0),
 					Size = UDim2.new(0.24, 0, 1, 0),
 					Font = Enum.Font.Gotham,
-					Text = FormatPrice(seedItem.Price),
+					Text = Utils.FormatPrice(seedItem.Price),
 					TextColor3 = Theme.AccentYellow,
 					TextSize = 11,
 					TextXAlignment = Enum.TextXAlignment.Left,
-					ZIndex = 621,
+					ZIndex = CONSTANTS.Z_MODAL + 21,
 				})
 
-				local rarityColor = RarityColors[seedItem.Rarity] or Theme.TextSecondary
-				Create("TextLabel", {
-					Parent = SeedRow,
+				local rarityColor = CONSTANTS.RARITY_COLORS[seedItem.Rarity] or Theme.TextSecondary
+				UI.Create("TextLabel", {
+					Parent = row,
 					BackgroundTransparency = 1,
 					Position = UDim2.new(0.62, 0, 0, 0),
 					Size = UDim2.new(0.18, 0, 1, 0),
@@ -2576,12 +2753,12 @@ local function ShowSeedSelectionModal(title, selectedTable, updateCallback)
 					TextColor3 = rarityColor,
 					TextSize = 11,
 					TextXAlignment = Enum.TextXAlignment.Left,
-					ZIndex = 621,
+					ZIndex = CONSTANTS.Z_MODAL + 21,
 				})
 
 				if isSelected then
-					Create("TextLabel", {
-						Parent = SeedRow,
+					UI.Create("TextLabel", {
+						Parent = row,
 						BackgroundTransparency = 1,
 						Position = UDim2.new(1, -30, 0, 0),
 						Size = UDim2.new(0, 20, 1, 0),
@@ -2589,25 +2766,25 @@ local function ShowSeedSelectionModal(title, selectedTable, updateCallback)
 						Text = "✓",
 						TextColor3 = Theme.Accent,
 						TextSize = 14,
-						ZIndex = 621,
+						ZIndex = CONSTANTS.Z_MODAL + 21,
 					})
 				end
 
-				AddConnection(SeedRow.Activated:Connect(function()
+				Memory.TrackConnection(row.Activated:Connect(function()
 					selectedTable[seedItem.Name] = not selectedTable[seedItem.Name]
-					AutoSaveConfig()
+					ConfigSystem.AutoSave()
 					if updateCallback then
 						updateCallback()
 					end
-					BuildModalRows(ModalSearchBox.Text ~= "Search seeds..." and ModalSearchBox.Text or "")
+					BuildRows(searchBox.Text ~= "Search seeds..." and searchBox.Text or "")
 				end))
 			end
 
-			ModalSeedScroll.CanvasSize = UDim2.new(0, 0, 0, visibleCount * 37)
+			scroll.CanvasSize = UDim2.new(0, 0, 0, visibleCount * 37)
 
 			if visibleCount == 0 and lowerFilter ~= "" then
-				Create("TextLabel", {
-					Parent = ModalSeedScroll,
+				UI.Create("TextLabel", {
+					Parent = scroll,
 					BackgroundTransparency = 1,
 					Size = UDim2.new(1, 0, 0, 60),
 					Font = Enum.Font.Gotham,
@@ -2615,47 +2792,47 @@ local function ShowSeedSelectionModal(title, selectedTable, updateCallback)
 					TextColor3 = Theme.TextMuted,
 					TextSize = 12,
 					TextWrapped = true,
-					ZIndex = 620,
+					ZIndex = CONSTANTS.Z_MODAL + 20,
 				})
-				ModalSeedScroll.CanvasSize = UDim2.new(0, 0, 0, 70)
+				scroll.CanvasSize = UDim2.new(0, 0, 0, 70)
 			end
 		end
 
-		BuildModalRows("")
+		BuildRows("")
 
-		AddConnection(ModalSearchBox:GetPropertyChangedSignal("Text"):Connect(function()
-			local text = ModalSearchBox.Text
+		Memory.TrackConnection(searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+			local text = searchBox.Text
 			if text == "Search seeds..." then
 				text = ""
 			end
-			BuildModalRows(text)
+			BuildRows(text)
 		end))
 
-		local doneBtn = CreateButton(ModalContent, "Done", Theme.Accent, 80, 32, function()
-			CloseModal()
+		local doneBtn = UI.CreateButton(modalContent, "Done", Theme.Accent, 80, 32, function()
+			ModalSystem.Close()
 		end)
 		doneBtn.Position = UDim2.new(1, -80, 1, -36)
 	end, 480, 400)
 end
 
---══════════════════════════════════════════════════════--
--- REUSABLE SELECTION MODAL
---══════════════════════════════════════════════════════--
-local function ShowSelectionModal(title, options, currentValue, onSelect)
-	ShowModal(title, function(ModalFrame, ModalContent)
-		local scroll = Create("ScrollingFrame", {
-			Parent = ModalContent,
+--[[
+    Shows a generic selection modal.
+--]]
+function SeedModalSystem.ShowSelection(title, options, currentValue, onSelect)
+	ModalSystem.Show(title, function(modalFrame, modalContent)
+		local scroll = UI.Create("ScrollingFrame", {
+			Parent = modalContent,
 			BackgroundTransparency = 1,
 			Position = UDim2.new(0, 0, 0, 0),
 			Size = UDim2.new(1, 0, 1, -40),
 			ScrollBarThickness = 3,
 			ScrollBarImageColor3 = Theme.ScrollBar,
 			CanvasSize = UDim2.new(0, 0, 0, 0),
-			ZIndex = 620,
+			ZIndex = CONSTANTS.Z_MODAL + 20,
 			ClipsDescendants = true,
 		})
 
-		local list = Create("UIListLayout", {
+		local list = UI.Create("UIListLayout", {
 			Parent = scroll,
 			Padding = UDim.new(0, 3),
 			SortOrder = Enum.SortOrder.LayoutOrder,
@@ -2663,7 +2840,7 @@ local function ShowSelectionModal(title, options, currentValue, onSelect)
 
 		for i, opt in ipairs(options) do
 			local isSelected = currentValue == opt.Value
-			local btn = Create("TextButton", {
+			local btn = UI.Create("TextButton", {
 				Parent = scroll,
 				BackgroundColor3 = isSelected and Theme.Accent or Theme.Card,
 				BorderSizePixel = 0,
@@ -2675,34 +2852,35 @@ local function ShowSelectionModal(title, options, currentValue, onSelect)
 				TextColor3 = Theme.TextPrimary,
 				TextSize = 12,
 				TextXAlignment = Enum.TextXAlignment.Left,
-				ZIndex = 621,
+				ZIndex = CONSTANTS.Z_MODAL + 21,
 				Active = true,
 				AutoButtonColor = false,
 			})
-			Corner(btn, 4)
-			Stroke(btn, Theme.Border, 1)
+			UI.AddCorner(btn, 4)
+			UI.AddStroke(btn, Theme.Border, 1)
 
-			AddConnection(btn.Activated:Connect(function()
+			Memory.TrackConnection(btn.Activated:Connect(function()
 				onSelect(opt.Value)
-				CloseModal()
+				ModalSystem.Close()
 			end))
 		end
 
 		scroll.CanvasSize = UDim2.new(0, 0, 0, #options * 35)
 
-		local doneBtn = CreateButton(ModalContent, "Done", Theme.Accent, 80, 32, function()
-			CloseModal()
+		local doneBtn = UI.CreateButton(modalContent, "Done", Theme.Accent, 80, 32, function()
+			ModalSystem.Close()
 		end)
 		doneBtn.Position = UDim2.new(1, -80, 1, -36)
 	end, 400, 350)
 end
 
---══════════════════════════════════════════════════════--
--- SEED PLACER CONFIG MODAL
---══════════════════════════════════════════════════════--
-local function ShowSeedPlacerConfigModal()
-	local info = SeedPlacer:GetDetectionInfo()
+--[[
+    Shows the seed placer configuration modal.
+--]]
+function SeedModalSystem.ShowPlacerConfig()
+	local info = PlotSystem.GetDetectionInfo()
 	local partOptions = { { Label = "All (every detected column)", Value = "All" } }
+
 	for _, opt in ipairs(info.PartOptions or {}) do
 		table.insert(partOptions, { Label = opt.Label, Value = opt.Value })
 	end
@@ -2716,19 +2894,18 @@ local function ShowSeedPlacerConfigModal()
 		{ Label = "Random", Value = "Random" },
 	}
 
-	ShowModal("Planting Configuration", function(ModalFrame, ModalContent)
+	ModalSystem.Show("Planting Configuration", function(modalFrame, modalContent)
 		local yOffset = 0
 		local rowHeight = 34
 		local labelHeight = 18
 		local gap = 8
 
-		local areaLabel = CreateLabel(ModalContent, "Planting Area", Theme.Accent, 13)
-		areaLabel.Position = UDim2.new(0, 4, 0, yOffset)
-		areaLabel.Size = UDim2.new(1, -8, 0, labelHeight)
-		yOffset = yOffset + labelHeight + 2
+		-- Area selection
+		UI.CreateLabel(modalContent, "Planting Area", Theme.Accent, 13).Position = UDim2.new(0, 4, 0, yOffset)
+		yOffset += labelHeight + 2
 
-		local areaRow = Create("TextButton", {
-			Parent = ModalContent,
+		local areaRow = UI.Create("TextButton", {
+			Parent = modalContent,
 			BackgroundColor3 = Theme.Card,
 			BorderSizePixel = 0,
 			Size = UDim2.new(1, -10, 0, rowHeight),
@@ -2738,31 +2915,36 @@ local function ShowSeedPlacerConfigModal()
 			TextColor3 = Theme.TextPrimary,
 			TextSize = 12,
 			TextXAlignment = Enum.TextXAlignment.Left,
-			ZIndex = 620,
+			ZIndex = CONSTANTS.Z_MODAL + 20,
 			Active = true,
 			AutoButtonColor = false,
 		})
-		Corner(areaRow, 4)
-		Stroke(areaRow, Theme.Border, 1)
-		AddConnection(areaRow.Activated:Connect(function()
-			ShowSelectionModal("Select Planting Area", partOptions, Config.PlantingArea or "All", function(value)
-				Config.PlantingArea = value
-				SeedPlacer:ClearCache()
-				if Config.ShowGridDots then
-					RefreshGridDots()
+		UI.AddCorner(areaRow, 4)
+		UI.AddStroke(areaRow, Theme.Border, 1)
+
+		Memory.TrackConnection(areaRow.Activated:Connect(function()
+			SeedModalSystem.ShowSelection(
+				"Select Planting Area",
+				partOptions,
+				Config.PlantingArea or "All",
+				function(value)
+					Config.PlantingArea = value
+					SeedPlacer.ClearCache()
+					if Config.ShowGridDots then
+						GridSystem.Refresh()
+					end
+					ConfigSystem.AutoSave()
 				end
-				AutoSaveConfig()
-			end)
+			)
 		end))
-		yOffset = yOffset + rowHeight + gap
+		yOffset += rowHeight + gap
 
-		local patternLabel = CreateLabel(ModalContent, "Planting Pattern", Theme.Accent, 13)
-		patternLabel.Position = UDim2.new(0, 4, 0, yOffset)
-		patternLabel.Size = UDim2.new(1, -8, 0, labelHeight)
-		yOffset = yOffset + labelHeight + 2
+		-- Pattern selection
+		UI.CreateLabel(modalContent, "Planting Pattern", Theme.Accent, 13).Position = UDim2.new(0, 4, 0, yOffset)
+		yOffset += labelHeight + 2
 
-		local patternRow = Create("TextButton", {
-			Parent = ModalContent,
+		local patternRow = UI.Create("TextButton", {
+			Parent = modalContent,
 			BackgroundColor3 = Theme.Card,
 			BorderSizePixel = 0,
 			Size = UDim2.new(1, -10, 0, rowHeight),
@@ -2772,164 +2954,177 @@ local function ShowSeedPlacerConfigModal()
 			TextColor3 = Theme.TextPrimary,
 			TextSize = 12,
 			TextXAlignment = Enum.TextXAlignment.Left,
-			ZIndex = 620,
+			ZIndex = CONSTANTS.Z_MODAL + 20,
 			Active = true,
 			AutoButtonColor = false,
 		})
-		Corner(patternRow, 4)
-		Stroke(patternRow, Theme.Border, 1)
-		AddConnection(patternRow.Activated:Connect(function()
-			ShowSelectionModal(
+		UI.AddCorner(patternRow, 4)
+		UI.AddStroke(patternRow, Theme.Border, 1)
+
+		Memory.TrackConnection(patternRow.Activated:Connect(function()
+			SeedModalSystem.ShowSelection(
 				"Select Pattern",
 				patternOptions,
 				Config.PlantingPattern or "LeftToRight",
 				function(value)
 					Config.PlantingPattern = value
-					SeedPlacer:ClearCache()
+					SeedPlacer.ClearCache()
 					if Config.ShowGridDots then
-						RefreshGridDots()
+						GridSystem.Refresh()
 					end
-					AutoSaveConfig()
+					ConfigSystem.AutoSave()
 				end
 			)
 		end))
-		yOffset = yOffset + rowHeight + gap
+		yOffset += rowHeight + gap
 
-		local doneBtn = CreateButton(ModalContent, "Done", Theme.Accent, 80, 32, function()
-			CloseModal()
+		local doneBtn = UI.CreateButton(modalContent, "Done", Theme.Accent, 80, 32, function()
+			ModalSystem.Close()
 		end)
 		doneBtn.Position = UDim2.new(1, -90, 0, yOffset)
 	end, 480, 280)
 end
 
---══════════════════════════════════════════════════════--
--- PAGE: HOME
---══════════════════════════════════════════════════════--
-function Pages.Home()
-	SwitchPage("Home", "Home", "Game Version: ----", function()
-		-- Seed Placer Card
-		local SeedPlacerCard = CreateCard(ContentScroll, "Seed Placer", "🏠", Theme.Accent)
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 21: PAGE DEFINITIONS
+-- ═══════════════════════════════════════════════════════════════════════
 
-		AddConnection(SeedPlacerCard.Activated:Connect(function()
-			ToggleDropdown(SeedPlacerCard, function(DropdownScroll)
+--[[
+    Home page - Seed Placer, Plot Visualizer, Auto Collect
+--]]
+function Pages.Home()
+	PageSystem.SwitchTo("Home", "Home", "Game Version: ----", function()
+		-- Seed Placer Card
+		local seedPlacerCard = UI.CreateCard(State.ContentScroll, "Seed Placer", "🏠", Theme.Accent)
+
+		Memory.TrackConnection(seedPlacerCard.Activated:Connect(function()
+			DropdownSystem.Toggle(seedPlacerCard, function(dropdownScroll)
 				Config.SelectedPlaceSeeds = Config.SelectedPlaceSeeds or {}
-				Config.PlaceAmount = Config.PlaceAmount or 10
+				Config.PlaceAmount = Config.PlaceAmount or CONSTANTS.DEFAULT_PLACE_AMOUNT
 				Config.PlantingArea = Config.PlantingArea or "All"
 				Config.PlantingPattern = Config.PlantingPattern or "LeftToRight"
-				Config.PlantSpacing = Config.PlantSpacing or 1
-				Config.PlantDelay = Config.PlantDelay or 0.05
+				Config.PlantSpacing = Config.PlantSpacing or CONSTANTS.DEFAULT_PLANT_SPACING
+				Config.PlantDelay = Config.PlantDelay or CONSTANTS.DEFAULT_PLANT_DELAY
 				if Config.EnableSeedPlacer == nil then
 					Config.EnableSeedPlacer = false
 				end
 
-				CreateLabel(DropdownScroll, "Seed Placer", Theme.Accent, 12)
+				UI.CreateLabel(dropdownScroll, "Seed Placer", Theme.Accent, 12)
 
-				local SelectedSeedsLabel = CreateLabel(DropdownScroll, "Selected: None", Theme.TextMuted, 10)
+				local selectedLabel = UI.CreateLabel(dropdownScroll, "Selected: None", Theme.TextMuted, 10)
 
 				local function UpdateSelectedLabel()
-					SelectedSeedsLabel.Text = FormatSelectedSeeds(Config.SelectedPlaceSeeds, 10)
+					selectedLabel.Text = Utils.FormatSelectedSeeds(Config.SelectedPlaceSeeds, 10)
 				end
 
 				UpdateSelectedLabel()
 
-				local SelectSeedsBtn = CreateButton(DropdownScroll, "Select Seeds...", Theme.Card, 100, 30, function()
-					ShowSeedSelectionModal("Select Seeds", Config.SelectedPlaceSeeds, UpdateSelectedLabel)
-				end)
-				SelectSeedsBtn.Size = UDim2.new(1, -8, 0, 30)
+				local selectSeedsBtn = UI.CreateButton(
+					dropdownScroll,
+					"Select Seeds...",
+					Theme.Card,
+					100,
+					30,
+					function()
+						SeedModalSystem.Show("Select Seeds", Config.SelectedPlaceSeeds, UpdateSelectedLabel)
+					end
+				)
+				selectSeedsBtn.Size = UDim2.new(1, -8, 0, 30)
 
-				local SeedActionFrame = Create("Frame", {
-					Parent = DropdownScroll,
+				local actionFrame = UI.Create("Frame", {
+					Parent = dropdownScroll,
 					BackgroundTransparency = 1,
 					Size = UDim2.new(1, -8, 0, 30),
 				})
 
-				local SelectAllBtn = CreateButton(SeedActionFrame, "Select All", Theme.Accent, 100, 30, function()
+				local selectAllBtn = UI.CreateButton(actionFrame, "Select All", Theme.Accent, 100, 30, function()
 					for _, seed in ipairs(SeedData or {}) do
 						if seed.SeedName then
 							Config.SelectedPlaceSeeds[seed.SeedName] = true
 						end
 					end
-					AutoSaveConfig()
+					ConfigSystem.AutoSave()
 					UpdateSelectedLabel()
 				end)
-				SelectAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
+				selectAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
 
-				local ClearAllBtn = CreateButton(
-					SeedActionFrame,
+				local clearAllBtn = UI.CreateButton(
+					actionFrame,
 					"Clear All",
 					Color3.fromRGB(185, 65, 65),
 					100,
 					30,
 					function()
 						table.clear(Config.SelectedPlaceSeeds)
-						AutoSaveConfig()
+						ConfigSystem.AutoSave()
 						UpdateSelectedLabel()
 					end
 				)
-				ClearAllBtn.Position = UDim2.new(0.5, 3, 0, 0)
-				ClearAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
+				clearAllBtn.Position = UDim2.new(0.5, 3, 0, 0)
+				clearAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
 
-				local info = SeedPlacer:GetDetectionInfo()
+				local info = PlotSystem.GetDetectionInfo()
 				local totalPos = 0
-				local cached = SeedPlacer:GetPlantPositions()
+				local cached = SeedPlacer.GetPlantPositions()
 				if cached then
 					totalPos = #cached
 				end
 
-				CreateLabel(DropdownScroll, "Plot: " .. (info and info.PlotName or "None"), Theme.TextSecondary, 11)
-				CreateLabel(
-					DropdownScroll,
+				UI.CreateLabel(dropdownScroll, "Plot: " .. (info and info.PlotName or "None"), Theme.TextSecondary, 11)
+				UI.CreateLabel(
+					dropdownScroll,
 					"Columns Detected: " .. (info and #info.PartNames or 0),
 					Theme.TextSecondary,
 					11
 				)
-				CreateLabel(DropdownScroll, "Total Positions: " .. totalPos, Theme.TextSecondary, 11)
+				UI.CreateLabel(dropdownScroll, "Total Positions: " .. totalPos, Theme.TextSecondary, 11)
 
-				CreateLabel(DropdownScroll, "Detected Columns:", Theme.Accent, 12)
+				UI.CreateLabel(dropdownScroll, "Detected Columns:", Theme.Accent, 12)
 				local partNames = info and info.PartNames or {}
 				if #partNames == 0 then
-					CreateLabel(DropdownScroll, "  (none)", Theme.TextMuted, 11)
+					UI.CreateLabel(dropdownScroll, "  (none)", Theme.TextMuted, 11)
 				else
-					for i, name in ipairs(partNames) do
-						CreateLabel(DropdownScroll, "  " .. name, Theme.TextSecondary, 11)
+					for _, name in ipairs(partNames) do
+						UI.CreateLabel(dropdownScroll, "  " .. name, Theme.TextSecondary, 11)
 					end
 				end
 
-				CreateLabel(DropdownScroll, "Current Settings:", Theme.Accent, 12)
-				CreateLabel(DropdownScroll, "  Area: " .. (Config.PlantingArea or "All"), Theme.TextSecondary, 11)
-				CreateLabel(
-					DropdownScroll,
+				UI.CreateLabel(dropdownScroll, "Current Settings:", Theme.Accent, 12)
+				UI.CreateLabel(dropdownScroll, "  Area: " .. (Config.PlantingArea or "All"), Theme.TextSecondary, 11)
+				UI.CreateLabel(
+					dropdownScroll,
 					"  Pattern: " .. (Config.PlantingPattern or "LeftToRight"),
 					Theme.TextSecondary,
 					11
 				)
 
-				local ConfigBtn = CreateButton(
-					DropdownScroll,
+				local configBtn = UI.CreateButton(
+					dropdownScroll,
 					"Configure Planting...",
 					Theme.Accent,
 					100,
 					30,
 					function()
-						ShowSeedPlacerConfigModal()
+						SeedModalSystem.ShowPlacerConfig()
 					end
 				)
-				ConfigBtn.Size = UDim2.new(1, -8, 0, 30)
+				configBtn.Size = UDim2.new(1, -8, 0, 30)
 
-				CreateLabel(DropdownScroll, "Settings", Theme.Accent, 12)
-				local SettingsRow = Create("Frame", {
-					Parent = DropdownScroll,
+				UI.CreateLabel(dropdownScroll, "Settings", Theme.Accent, 12)
+				local settingsRow = UI.Create("Frame", {
+					Parent = dropdownScroll,
 					BackgroundTransparency = 1,
 					Size = UDim2.new(1, -8, 0, 50),
 				})
 
-				local SpacingContainer = Create("Frame", {
-					Parent = SettingsRow,
+				-- Spacing input
+				local spacingContainer = UI.Create("Frame", {
+					Parent = settingsRow,
 					BackgroundTransparency = 1,
 					Size = UDim2.new(0.33, -4, 1, 0),
 				})
-				Create("TextLabel", {
-					Parent = SpacingContainer,
+				UI.Create("TextLabel", {
+					Parent = spacingContainer,
 					BackgroundTransparency = 1,
 					Size = UDim2.new(1, 0, 0, 16),
 					Font = Enum.Font.Gotham,
@@ -2938,8 +3133,8 @@ function Pages.Home()
 					TextSize = 11,
 					TextXAlignment = Enum.TextXAlignment.Left,
 				})
-				local SpacingBox = Create("TextBox", {
-					Parent = SpacingContainer,
+				local spacingBox = UI.Create("TextBox", {
+					Parent = spacingContainer,
 					BackgroundColor3 = Theme.Card,
 					BorderSizePixel = 0,
 					Position = UDim2.new(0, 0, 0, 18),
@@ -2952,27 +3147,28 @@ function Pages.Home()
 					TextSize = 12,
 					ClearTextOnFocus = false,
 				})
-				Corner(SpacingBox, 4)
-				AddConnection(SpacingBox.FocusLost:Connect(function()
-					local val = tonumber(SpacingBox.Text)
+				UI.AddCorner(spacingBox, 4)
+				Memory.TrackConnection(spacingBox.FocusLost:Connect(function()
+					local val = tonumber(spacingBox.Text)
 					if val and val >= 0.1 then
 						Config.PlantSpacing = val
-						SeedPlacer:ClearCache()
+						SeedPlacer.ClearCache()
 						if Config.ShowGridDots then
-							RefreshGridDots()
+							GridSystem.Refresh()
 						end
-						AutoSaveConfig()
+						ConfigSystem.AutoSave()
 					end
 				end))
 
-				local DelayContainer = Create("Frame", {
-					Parent = SettingsRow,
+				-- Delay input
+				local delayContainer = UI.Create("Frame", {
+					Parent = settingsRow,
 					BackgroundTransparency = 1,
 					Size = UDim2.new(0.33, -4, 1, 0),
 					Position = UDim2.new(0.33, 2, 0, 0),
 				})
-				Create("TextLabel", {
-					Parent = DelayContainer,
+				UI.Create("TextLabel", {
+					Parent = delayContainer,
 					BackgroundTransparency = 1,
 					Size = UDim2.new(1, 0, 0, 16),
 					Font = Enum.Font.Gotham,
@@ -2981,8 +3177,8 @@ function Pages.Home()
 					TextSize = 11,
 					TextXAlignment = Enum.TextXAlignment.Left,
 				})
-				local DelayBox = Create("TextBox", {
-					Parent = DelayContainer,
+				local delayBox = UI.Create("TextBox", {
+					Parent = delayContainer,
 					BackgroundColor3 = Theme.Card,
 					BorderSizePixel = 0,
 					Position = UDim2.new(0, 0, 0, 18),
@@ -2995,23 +3191,24 @@ function Pages.Home()
 					TextSize = 12,
 					ClearTextOnFocus = false,
 				})
-				Corner(DelayBox, 4)
-				AddConnection(DelayBox.FocusLost:Connect(function()
-					local val = tonumber(DelayBox.Text)
+				UI.AddCorner(delayBox, 4)
+				Memory.TrackConnection(delayBox.FocusLost:Connect(function()
+					local val = tonumber(delayBox.Text)
 					if val and val >= 0 then
 						Config.PlantDelay = val
-						AutoSaveConfig()
+						ConfigSystem.AutoSave()
 					end
 				end))
 
-				local AmountContainer = Create("Frame", {
-					Parent = SettingsRow,
+				-- Amount input
+				local amountContainer = UI.Create("Frame", {
+					Parent = settingsRow,
 					BackgroundTransparency = 1,
 					Size = UDim2.new(0.33, -4, 1, 0),
 					Position = UDim2.new(0.67, 4, 0, 0),
 				})
-				Create("TextLabel", {
-					Parent = AmountContainer,
+				UI.Create("TextLabel", {
+					Parent = amountContainer,
 					BackgroundTransparency = 1,
 					Size = UDim2.new(1, 0, 0, 16),
 					Font = Enum.Font.Gotham,
@@ -3020,8 +3217,8 @@ function Pages.Home()
 					TextSize = 11,
 					TextXAlignment = Enum.TextXAlignment.Left,
 				})
-				local AmountBox = Create("TextBox", {
-					Parent = AmountContainer,
+				local amountBox = UI.Create("TextBox", {
+					Parent = amountContainer,
 					BackgroundColor3 = Theme.Card,
 					BorderSizePixel = 0,
 					Position = UDim2.new(0, 0, 0, 18),
@@ -3034,129 +3231,140 @@ function Pages.Home()
 					TextSize = 12,
 					ClearTextOnFocus = false,
 				})
-				Corner(AmountBox, 4)
-				AddConnection(AmountBox.FocusLost:Connect(function()
-					local val = tonumber(AmountBox.Text)
+				UI.AddCorner(amountBox, 4)
+				Memory.TrackConnection(amountBox.FocusLost:Connect(function()
+					local val = tonumber(amountBox.Text)
 					if val and val > 0 then
 						Config.PlaceAmount = math.floor(val)
-						AutoSaveConfig()
+						ConfigSystem.AutoSave()
 					end
 				end))
 
-				CreateToggle(DropdownScroll, "Enable Seed Placer", Config.EnableSeedPlacer, function(state)
+				UI.CreateToggle(dropdownScroll, "Enable Seed Placer", Config.EnableSeedPlacer, function(state)
 					Config.EnableSeedPlacer = state
-					AutoSaveConfig()
-					print("[SeedPlacer] Toggle set to:", state)
+					ConfigSystem.AutoSave()
 				end)
 			end)
 		end))
 
 		-- Plot Visualizer Card
-		local PlotVisualizerCard = CreateCard(ContentScroll, "Plot Visualizer", "✨", Theme.AccentCyan)
+		local plotVisualizerCard = UI.CreateCard(State.ContentScroll, "Plot Visualizer", "✨", Theme.AccentCyan)
 
-		AddConnection(PlotVisualizerCard.Activated:Connect(function()
-			ToggleDropdown(PlotVisualizerCard, function(DropdownScroll)
-				CreateLabel(DropdownScroll, "Plot Visualizer", Theme.AccentCyan, 12)
+		Memory.TrackConnection(plotVisualizerCard.Activated:Connect(function()
+			DropdownSystem.Toggle(plotVisualizerCard, function(dropdownScroll)
+				UI.CreateLabel(dropdownScroll, "Plot Visualizer", Theme.AccentCyan, 12)
 
-				local info = SeedPlacer:GetDetectionInfo()
-				local plotName = info and info.PlotName or "None"
-				CreateLabel(DropdownScroll, "Detected Plot: " .. plotName, Theme.TextSecondary, 11)
+				local info = PlotSystem.GetDetectionInfo()
+				UI.CreateLabel(
+					dropdownScroll,
+					"Detected Plot: " .. (info and info.PlotName or "None"),
+					Theme.TextSecondary,
+					11
+				)
 
-				-- Laser Scan Button (one-time effect)
-				local LaserBtn = CreateButton(DropdownScroll, "🔦 Laser Scan", Theme.AccentCyan, 100, 32, function()
-					local detectedPlot = SeedPlacer:FindPlayerPlot()
-					if detectedPlot then
-						LaserScanPlot(detectedPlot, 1.2)
-						Notify("Plot Visualizer", "Laser scan on " .. detectedPlot.Name, "Success", 2)
-					else
-						Notify("Plot Visualizer", "Could not find your plot!", "Error", 3)
+				local laserBtn = UI.CreateButton(
+					dropdownScroll,
+					"🔦 Laser Scan",
+					Theme.AccentCyan,
+					100,
+					32,
+					function()
+						local detectedPlot = PlotSystem.FindPlayerPlot()
+						if detectedPlot then
+							LaserSystem.ScanPlot(detectedPlot, 1.2)
+							NotificationSystem.Notify(
+								"Plot Visualizer",
+								"Laser scan on " .. detectedPlot.Name,
+								"Success",
+								2
+							)
+						else
+							NotificationSystem.Notify("Plot Visualizer", "Could not find your plot!", "Error", 3)
+						end
 					end
-				end)
-				LaserBtn.Size = UDim2.new(1, -8, 0, 32)
+				)
+				laserBtn.Size = UDim2.new(1, -8, 0, 32)
 
-				-- Grid Dots is now a persistent toggle
-				CreateToggle(DropdownScroll, "Show Grid Dots", Config.ShowGridDots, function(state)
+				UI.CreateToggle(dropdownScroll, "Show Grid Dots", Config.ShowGridDots, function(state)
 					Config.ShowGridDots = state
-					AutoSaveConfig()
+					ConfigSystem.AutoSave()
 					if state then
-						RefreshGridDots()
+						GridSystem.Refresh()
 					else
-						ClearGridDots()
+						GridSystem.Clear()
 					end
 				end)
 
-				-- Clear Visuals Button
-				local ClearBtn = CreateButton(
-					DropdownScroll,
+				local clearBtn = UI.CreateButton(
+					dropdownScroll,
 					"🧹 Clear All Visuals",
 					Color3.fromRGB(185, 65, 65),
 					100,
 					32,
 					function()
-						ClearAllVisuals()
+						LaserSystem.Clear()
+						GridSystem.Clear()
 						Config.ShowGridDots = false
-						AutoSaveConfig()
-						Notify("Plot Visualizer", "All visuals cleared", "Info", 2)
+						ConfigSystem.AutoSave()
+						NotificationSystem.Notify("Plot Visualizer", "All visuals cleared", "Info", 2)
 					end
 				)
-				ClearBtn.Size = UDim2.new(1, -8, 0, 32)
+				clearBtn.Size = UDim2.new(1, -8, 0, 32)
 			end)
 		end))
 
 		-- Auto Collect Fruits Card (placeholder)
-		local autoCollectFruitsCard = CreateCard(ContentScroll, "Auto Collect Fruits", "🍎", Theme.Accent)
-		AddConnection(autoCollectFruitsCard.Activated:Connect(function()
+		local autoCollectCard = UI.CreateCard(State.ContentScroll, "Auto Collect Fruits", "🍎", Theme.Accent)
+		Memory.TrackConnection(autoCollectCard.Activated:Connect(function()
 			-- Placeholder for future implementation
 		end))
 	end)
 end
 
---══════════════════════════════════════════════════════--
--- PAGE: SHOP
---══════════════════════════════════════════════════════--
-local function GetSelectedSeedNames()
-	local names = {}
-	for name, selected in pairs(Config.SelectedSeeds) do
-		if selected then
-			table.insert(names, name)
-		end
-	end
-	if #names == 0 then
-		return "None"
-	end
-	return table.concat(names, ", ")
-end
-
+--[[
+    Shop page - Auto Buy Seeds
+--]]
 function Pages.Shop()
-	SwitchPage("Shop", "Shop", "ShopFeatures", function()
-		local SeedShopCard = CreateCard(ContentScroll, "Seed Shop", "🌱", Theme.Accent)
+	PageSystem.SwitchTo("Shop", "Shop", "ShopFeatures", function()
+		local seedShopCard = UI.CreateCard(State.ContentScroll, "Seed Shop", "🌱", Theme.Accent)
 
-		AddConnection(SeedShopCard.Activated:Connect(function()
-			ToggleDropdown(SeedShopCard, function(DropdownScroll)
-				CreateLabel(DropdownScroll, "Auto Buy Seeds", Theme.Accent, 12)
+		Memory.TrackConnection(seedShopCard.Activated:Connect(function()
+			DropdownSystem.Toggle(seedShopCard, function(dropdownScroll)
+				UI.CreateLabel(dropdownScroll, "Auto Buy Seeds", Theme.Accent, 12)
 
-				local SelectedSeedsLabel =
-					CreateLabel(DropdownScroll, "Selected: " .. GetSelectedSeedNames(), Theme.TextMuted, 10)
-				SelectedSeedsLabel.Name = "SelectedLabel"
+				local selectedLabel = UI.CreateLabel(
+					dropdownScroll,
+					"Selected: " .. Utils.FormatSelectedSeeds(Config.SelectedSeeds, 10),
+					Theme.TextMuted,
+					10
+				)
+				selectedLabel.Name = "SelectedLabel"
 
 				local function UpdateSelectedLabel()
-					SelectedSeedsLabel.Text = FormatSelectedSeeds(Config.SelectedSeeds, 10)
+					selectedLabel.Text = Utils.FormatSelectedSeeds(Config.SelectedSeeds, 10)
 				end
 
 				UpdateSelectedLabel()
 
-				local SelectSeedsBtn = CreateButton(DropdownScroll, "Select Seeds...", Theme.Card, 100, 30, function()
-					ShowSeedSelectionModal("Select Seeds", Config.SelectedSeeds, UpdateSelectedLabel)
-				end)
-				SelectSeedsBtn.Size = UDim2.new(1, -8, 0, 30)
+				local selectSeedsBtn = UI.CreateButton(
+					dropdownScroll,
+					"Select Seeds...",
+					Theme.Card,
+					100,
+					30,
+					function()
+						SeedModalSystem.Show("Select Seeds", Config.SelectedSeeds, UpdateSelectedLabel)
+					end
+				)
+				selectSeedsBtn.Size = UDim2.new(1, -8, 0, 30)
 
-				local SeedActionFrame = Create("Frame", {
-					Parent = DropdownScroll,
+				local actionFrame = UI.Create("Frame", {
+					Parent = dropdownScroll,
 					BackgroundTransparency = 1,
 					Size = UDim2.new(1, -8, 0, 30),
 				})
 
-				local SelectAllBtn = CreateButton(SeedActionFrame, "Select All", Theme.Accent, 100, 30, function()
+				local selectAllBtn = UI.CreateButton(actionFrame, "Select All", Theme.Accent, 100, 30, function()
 					if SeedData then
 						for _, seed in ipairs(SeedData) do
 							if seed.SeedName then
@@ -3164,304 +3372,754 @@ function Pages.Shop()
 							end
 						end
 					end
-					AutoSaveConfig()
+					ConfigSystem.AutoSave()
 					UpdateSelectedLabel()
 				end)
-				SelectAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
+				selectAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
 
-				local ClearAllBtn = CreateButton(
-					SeedActionFrame,
+				local clearAllBtn = UI.CreateButton(
+					actionFrame,
 					"Clear All",
 					Color3.fromRGB(185, 65, 65),
 					100,
 					30,
 					function()
 						table.clear(Config.SelectedSeeds)
-						AutoSaveConfig()
+						ConfigSystem.AutoSave()
 						UpdateSelectedLabel()
 					end
 				)
-				ClearAllBtn.Position = UDim2.new(0.5, 3, 0, 0)
-				ClearAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
+				clearAllBtn.Position = UDim2.new(0.5, 3, 0, 0)
+				clearAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
 
-				CreateToggle(DropdownScroll, "Enable Auto Buy", Config.EnableSeedShop, function(state)
+				UI.CreateToggle(dropdownScroll, "Enable Auto Buy", Config.EnableSeedShop, function(state)
 					Config.EnableSeedShop = state
-					AutoSaveConfig()
+					ConfigSystem.AutoSave()
 				end)
 			end)
 		end))
 	end)
 end
 
---══════════════════════════════════════════════════════--
--- PAGE: ACCOUNT
---══════════════════════════════════════════════════════--
+--[[
+    Account page - User Profile
+--]]
 function Pages.Account()
-	SwitchPage("Account", "Account", "User Profile", function()
-		local card = CreateCard(ContentScroll, "Account Info", "👤", Theme.Accent)
-		AddConnection(card.Activated:Connect(function()
-			ToggleDropdown(card, function(DropdownScroll)
-				CreateLabel(DropdownScroll, "Username: " .. player.Name, Theme.TextPrimary, 12)
-				CreateLabel(DropdownScroll, "User ID: " .. player.UserId, Theme.TextSecondary, 11)
+	PageSystem.SwitchTo("Account", "Account", "User Profile", function()
+		local card = UI.CreateCard(State.ContentScroll, "Account Info", "👤", Theme.Accent)
+		Memory.TrackConnection(card.Activated:Connect(function()
+			DropdownSystem.Toggle(card, function(dropdownScroll)
+				UI.CreateLabel(dropdownScroll, "Username: " .. Player.Name, Theme.TextPrimary, 12)
+				UI.CreateLabel(dropdownScroll, "User ID: " .. Player.UserId, Theme.TextSecondary, 11)
 			end)
 		end))
 	end)
 end
 
---══════════════════════════════════════════════════════--
--- PAGE: PREMIUM
---══════════════════════════════════════════════════════--
+--[[
+    Premium page - Placeholder
+--]]
 function Pages.Premium()
-	SwitchPage("Premium", "Premium", "Premium Features", function() end)
+	PageSystem.SwitchTo("Premium", "Premium", "Premium Features", function() end)
 end
 
---══════════════════════════════════════════════════════--
--- PAGE: SETTINGS
---══════════════════════════════════════════════════════--
+--[[
+    Settings page - Preferences
+--]]
 function Pages.Settings()
-	SwitchPage("Settings", "Settings", "Preferences", function()
-		CreateLabel(ContentScroll, "UI Settings", Theme.Accent, 14)
+	PageSystem.SwitchTo("Settings", "Settings", "Preferences", function()
+		UI.CreateLabel(State.ContentScroll, "UI Settings", Theme.Accent, 14)
 
-		CreateToggle(ContentScroll, "Disable Animations", Config.DisableAnimations, function(state)
+		UI.CreateToggle(State.ContentScroll, "Disable Animations", Config.DisableAnimations, function(state)
 			Config.DisableAnimations = state
-			AutoSaveConfig()
+			ConfigSystem.AutoSave()
 		end)
 
-		CreateToggle(ContentScroll, "Reduce Effects", Config.ReduceEffects, function(state)
+		UI.CreateToggle(State.ContentScroll, "Reduce Effects", Config.ReduceEffects, function(state)
 			Config.ReduceEffects = state
-			AutoSaveConfig()
+			ConfigSystem.AutoSave()
 		end)
 
-		CreateLabel(ContentScroll, " ", Theme.TextSecondary, 8)
+		UI.CreateLabel(State.ContentScroll, " ", Theme.TextSecondary, 8)
 
-		CreateButton(ContentScroll, "Save Now", Theme.AccentGreen, 120, 32, function()
-			SaveConfig()
+		UI.CreateButton(State.ContentScroll, "Save Now", Theme.AccentGreen, 120, 32, function()
+			ConfigSystem.Save()
 		end)
 
-		CreateButton(ContentScroll, "Load Config", Theme.Accent, 120, 32, function()
-			LoadConfig()
+		UI.CreateButton(State.ContentScroll, "Load Config", Theme.Accent, 120, 32, function()
+			ConfigSystem.Load()
 		end)
 
-		CreateLabel(ContentScroll, " ", Theme.TextSecondary, 8)
+		UI.CreateLabel(State.ContentScroll, " ", Theme.TextSecondary, 8)
 
-		CreateButton(ContentScroll, "Reset Config", Theme.AccentRed, 120, 32, function()
-			ResetConfig()
+		UI.CreateButton(State.ContentScroll, "Reset Config", Theme.AccentRed, 120, 32, function()
+			ConfigSystem.Reset()
 		end)
 	end)
 end
 
---══════════════════════════════════════════════════════--
--- BACKGROUND TASKS
---══════════════════════════════════════════════════════--
-table.insert(
-	Tasks,
-	task.spawn(function()
-		while ScriptRunning do
-			task.wait(0.2)
-			if Config.EnableSeedPlacer then
-				local ok, err = pcall(function()
-					SeedPlacer:RunCycle()
-				end)
-				if not ok then
-					warn("[SeedPlacer Loop Error]", err)
-				end
-			end
-		end
-	end)
-)
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 22: UI INITIALIZATION
+-- ═══════════════════════════════════════════════════════════════════════
 
-table.insert(
-	Tasks,
-	task.spawn(function()
-		while ScriptRunning do
-			task.wait(0.2)
-			if Config.EnableSeedShop and Networking and SeedData then
-				local ok, err = pcall(function()
-					local leaderstats = player:FindFirstChild("leaderstats")
-					local sheckles = leaderstats and leaderstats:FindFirstChild("Sheckles")
-					if sheckles then
-						for _, seed in ipairs(SeedData) do
-							if Config.SelectedSeeds[seed.SeedName] and sheckles.Value >= (seed.PurchasePrice or 0) then
-								Networking.SeedShop.PurchaseSeed:Fire(seed.SeedName)
-							end
-						end
-					end
-				end)
-				if not ok then
-					warn("[AutoBuy Loop Error]", err)
-				end
-			end
-		end
-	end)
-)
+local UIInit = {}
 
---══════════════════════════════════════════════════════--
--- SIDEBAR SETUP
---══════════════════════════════════════════════════════--
-local SidebarItems = {
-	{ Name = "Account", Icon = "👤", Color = Theme.Accent, Page = Pages.Account },
-	{ Name = "Home", Icon = "🏠", Color = Theme.Accent, Page = Pages.Home },
-	{ Name = "Premium", Icon = "💎", Color = Theme.AccentPink, Page = Pages.Premium },
-	{ Name = "Shop", Icon = "🏪", Color = Theme.Accent, Page = Pages.Shop },
-	{ Name = "Settings", Icon = "⚙️", Color = Theme.AccentCyan, Page = Pages.Settings },
-}
+--[[
+    Creates the ScreenGui.
+--]]
+function UIInit.CreateScreenGui()
+	local screenGui = Instance.new("ScreenGui")
+	screenGui.Name = "LRX_Hub"
+	screenGui.Parent = PlayerGui
+	screenGui.ResetOnSpawn = false
+	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	screenGui.DisplayOrder = 999
 
-for itemIndex, item in ipairs(SidebarItems) do
-	local SidebarBtn = Create("TextButton", {
-		Name = item.Name,
-		Parent = SidebarScroll,
-		BackgroundColor3 = (itemIndex == 2) and Theme.Card or Theme.Sidebar,
+	State.ScreenGui = screenGui
+	return screenGui
+end
+
+--[[
+    Creates the main frame.
+--]]
+function UIInit.CreateMainFrame(screenGui)
+	local mainFrame = UI.Create("Frame", {
+		Name = "MainFrame",
+		Parent = screenGui,
+		BackgroundColor3 = Theme.Background,
 		BorderSizePixel = 0,
-		Size = UDim2.new(1, -10, 0, 36),
-		Position = UDim2.new(0, 5, 0, 0),
-		Font = Enum.Font.Gotham,
-		Text = "  " .. item.Icon .. "  " .. item.Name,
-		TextColor3 = item.Color,
-		TextSize = 13,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		AutoButtonColor = false,
-		ZIndex = 12,
+		Position = UDim2.new(0.5, -Config.WindowWidth / 2, 0.5, -Config.WindowHeight / 2),
+		Size = UDim2.new(0, Config.WindowWidth, 0, Config.WindowHeight),
+		ClipsDescendants = false,
 		Active = true,
+		ZIndex = CONSTANTS.Z_BASE,
 	})
-	Corner(SidebarBtn, 4)
+	UI.AddCorner(mainFrame, 8)
+	UI.AddStroke(mainFrame, Theme.Border, 2)
 
-	SidebarButtons[item.Name] = function()
-		CurrentPage = item.Name
-		for _, child in pairs(SidebarScroll:GetChildren()) do
-			if child:IsA("TextButton") then
-				local isSelected = (child.Name == item.Name)
-				Tween(child, { BackgroundColor3 = isSelected and Theme.Card or Theme.Sidebar }, 0.2)
-			end
-		end
-		item.Page()
-	end
-
-	AddConnection(SidebarBtn.MouseEnter:Connect(function()
-		if CurrentPage ~= item.Name then
-			Tween(SidebarBtn, { BackgroundColor3 = Theme.CardHover }, 0.15)
-		end
-	end))
-	AddConnection(SidebarBtn.MouseLeave:Connect(function()
-		if CurrentPage ~= item.Name then
-			Tween(SidebarBtn, { BackgroundColor3 = Theme.Sidebar }, 0.15)
-		end
-	end))
-
-	AddConnection(SidebarBtn.Activated:Connect(SidebarButtons[item.Name]))
-	RegisterSearch(item.Name, item.Name, item.Icon, SidebarButtons[item.Name])
-end
-
-AddConnection(SidebarLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-	SidebarScroll.CanvasSize = UDim2.new(0, 0, 0, SidebarLayout.AbsoluteContentSize.Y + 10)
-end))
-SidebarScroll.CanvasSize = UDim2.new(0, 0, 0, #SidebarItems * 39 + 10)
-
---══════════════════════════════════════════════════════--
--- GLOBAL INPUT HANDLER
---══════════════════════════════════════════════════════--
-AddConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	if gameProcessed then
-		return
-	end
-	if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
-		return
-	end
-
-	local pos = input.Position
-	local function isInside(gui)
-		if not gui or not gui.Parent then
-			return false
-		end
-		local ap = gui.AbsolutePosition
-		local as = gui.AbsoluteSize
-		return pos.X >= ap.X and pos.X <= ap.X + as.X and pos.Y >= ap.Y and pos.Y <= ap.Y + as.Y
-	end
-
-	if SuggestFrame and SuggestFrame.Visible then
-		if not isInside(SearchFrame) and not isInside(SuggestFrame) then
-			SuggestFrame.Visible = false
-		end
-	end
-
-	if ActiveDropdownFrame and ActiveDropdownFrame.Parent then
-		if isInside(ActiveDropdownFrame) then
-			return
-		end
-		if ActiveDropdownCard and isInside(ActiveDropdownCard) then
-			return
-		end
-		CloseDropdown()
-	end
-end))
-
---══════════════════════════════════════════════════════--
--- WINDOW DRAG
---══════════════════════════════════════════════════════--
-local dragging = false
-local dragStart, frameStart
-
-AddConnection(MainFrame.InputBegan:Connect(function(input)
-	if ModalOpen then
-		return
-	end
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		dragging = true
-		dragStart = input.Position
-		frameStart = MainFrame.Position
-	end
-end))
-
-AddConnection(UserInputService.InputChanged:Connect(function(input)
-	if
-		dragging
-		and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch)
-	then
-		local delta = input.Position - dragStart
-		MainFrame.Position = UDim2.new(
-			frameStart.X.Scale,
-			frameStart.X.Offset + delta.X,
-			frameStart.Y.Scale,
-			frameStart.Y.Offset + delta.Y
+	-- Restore saved position/size
+	if Config.WindowPosition then
+		mainFrame.Position = UDim2.new(
+			Config.WindowPosition[1],
+			Config.WindowPosition[2],
+			Config.WindowPosition[3],
+			Config.WindowPosition[4]
 		)
 	end
-end))
+	if Config.WindowSize then
+		mainFrame.Size =
+			UDim2.new(Config.WindowSize[1], Config.WindowSize[2], Config.WindowSize[3], Config.WindowSize[4])
+	end
 
-AddConnection(UserInputService.InputEnded:Connect(function(input)
-	if dragging then
-		dragging = false
-	end
-end))
-
---══════════════════════════════════════════════════════--
--- MOBILE SUPPORT & SAFEGUARDS
---══════════════════════════════════════════════════════--
-local function GetSafeViewportSize()
-	local camera = workspace.CurrentCamera
-	if not camera then
-		return Vector2.new(800, 600)
-	end
-	local viewport = camera.ViewportSize
-	if viewport.X < 100 or viewport.Y < 100 then
-		return Vector2.new(800, 600)
-	end
-	return viewport
+	State.MainFrame = mainFrame
+	return mainFrame
 end
 
-local function ApplyMobileSizing()
-	local success, err = pcall(function()
-		if not UserInputService.TouchEnabled then
+--[[
+    Creates the toggle button.
+--]]
+function UIInit.CreateToggleButton(screenGui)
+	local btn = UI.Create("TextButton", {
+		Name = "MainIcon",
+		Parent = screenGui,
+		BackgroundColor3 = Color3.fromRGB(15, 15, 15),
+		BorderSizePixel = 0,
+		Position = UDim2.new(0, 8, 0, 8),
+		Size = UDim2.new(0, 60, 0, 32),
+		Font = Enum.Font.GothamBold,
+		Text = Config.ToggleButtonText,
+		TextColor3 = Theme.AccentYellow,
+		TextSize = 13,
+		ZIndex = CONSTANTS.Z_BASE,
+		Active = true,
+		AutoButtonColor = false,
+	})
+	UI.AddCorner(btn, 6)
+	UI.AddStroke(btn, Theme.Border, 1)
+
+	-- Dragging
+	Memory.TrackConnection(btn.InputBegan:Connect(function(input)
+		if
+			input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch
+		then
+			State.IsDraggingToggle = true
+			State.ToggleStartPos = input.Position
+			State.ToggleBtnStart = btn.Position
+		end
+	end))
+
+	Memory.TrackConnection(Services.UserInputService.InputChanged:Connect(function(input)
+		if
+			State.IsDraggingToggle
+			and (
+				input.UserInputType == Enum.UserInputType.MouseMovement
+				or input.UserInputType == Enum.UserInputType.Touch
+			)
+		then
+			local delta = input.Position - State.ToggleStartPos
+			btn.Position = UDim2.new(
+				State.ToggleBtnStart.X.Scale,
+				State.ToggleBtnStart.X.Offset + delta.X,
+				State.ToggleBtnStart.Y.Scale,
+				State.ToggleBtnStart.Y.Offset + delta.Y
+			)
+		end
+	end))
+
+	Memory.TrackConnection(Services.UserInputService.InputEnded:Connect(function(input)
+		if State.IsDraggingToggle then
+			local delta = input.Position - State.ToggleStartPos
+			State.IsDraggingToggle = false
+			if math.abs(delta.X) <= 8 and math.abs(delta.Y) <= 8 then
+				State.MainFrame.Visible = not State.MainFrame.Visible
+				TweenSystem.Tween(btn, {
+					BackgroundColor3 = State.MainFrame.Visible and Color3.fromRGB(15, 15, 15)
+						or Color3.fromRGB(30, 30, 30),
+				}, 0.2)
+			end
+		end
+	end))
+
+	State.MainIcon = btn
+	return btn
+end
+
+--[[
+    Creates the top bar.
+--]]
+function UIInit.CreateTopBar(mainFrame, screenGui)
+	local topBar = UI.Create("Frame", {
+		Name = "TopBar",
+		Parent = mainFrame,
+		BackgroundColor3 = Theme.Sidebar,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, 0, 0, CONSTANTS.TOPBAR_HEIGHT),
+		ZIndex = CONSTANTS.Z_BASE,
+	})
+
+	UI.Create("TextLabel", {
+		Name = "Title",
+		Parent = topBar,
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 14, 0, 0),
+		Size = UDim2.new(0, 70, 1, 0),
+		Font = Enum.Font.GothamBold,
+		Text = " LRX",
+		TextColor3 = Theme.TextPrimary,
+		TextSize = 20,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = CONSTANTS.Z_BASE + 1,
+	})
+
+	local pageTitle = UI.Create("TextLabel", {
+		Name = "PageTitle",
+		Parent = topBar,
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 180, 0, 6),
+		Size = UDim2.new(0, 140, 0, 20),
+		Font = Enum.Font.GothamBold,
+		Text = "Home",
+		TextColor3 = Theme.TextPrimary,
+		TextSize = 16,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = CONSTANTS.Z_BASE + 1,
+	})
+
+	local pageSubtitle = UI.Create("TextLabel", {
+		Name = "PageSubtitle",
+		Parent = topBar,
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 180, 0, 26),
+		Size = UDim2.new(0, 140, 0, 16),
+		Font = Enum.Font.Gotham,
+		Text = "",
+		TextColor3 = Theme.TextMuted,
+		TextSize = 11,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = CONSTANTS.Z_BASE + 1,
+	})
+
+	State.PageTitle = pageTitle
+	State.PageSubtitle = pageSubtitle
+
+	-- Search bar
+	local searchFrame = UI.Create("Frame", {
+		Name = "SearchFrame",
+		Parent = topBar,
+		BackgroundColor3 = Theme.Content,
+		BorderSizePixel = 0,
+		Position = UDim2.new(1, -230, 0.5, -14),
+		Size = UDim2.new(0, 200, 0, 28),
+		ZIndex = CONSTANTS.Z_BASE + 2,
+	})
+	UI.AddCorner(searchFrame, 12)
+	UI.AddStroke(searchFrame, Theme.Border, 1)
+
+	UI.Create("TextLabel", {
+		Name = "SearchIcon",
+		Parent = searchFrame,
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 8, 0, 0),
+		Size = UDim2.new(0, 22, 1, 0),
+		Font = Enum.Font.GothamBold,
+		Text = "🔍",
+		TextColor3 = Theme.TextMuted,
+		TextSize = 12,
+		ZIndex = CONSTANTS.Z_BASE + 3,
+	})
+
+	local searchBox = UI.Create("TextBox", {
+		Name = "SearchBox",
+		Parent = searchFrame,
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 32, 0, 0),
+		Size = UDim2.new(1, -44, 1, 0),
+		Font = Enum.Font.Gotham,
+		Text = "Search",
+		TextColor3 = Theme.TextMuted,
+		TextSize = 12,
+		ZIndex = CONSTANTS.Z_BASE + 3,
+		ClearTextOnFocus = true,
+		Active = true,
+	})
+
+	State.SearchFrame = searchFrame
+	State.SearchBox = searchBox
+
+	-- Suggestions frame
+	local suggestFrame = UI.Create("Frame", {
+		Name = "Suggestions",
+		Parent = screenGui,
+		BackgroundColor3 = Theme.DropdownBg,
+		BorderSizePixel = 0,
+		Position = UDim2.new(0, 0, 0, 0),
+		Size = UDim2.new(0, 200, 0, 0),
+		Visible = false,
+		ZIndex = 200,
+		ClipsDescendants = true,
+		Active = true,
+	})
+	UI.AddCorner(suggestFrame, 6)
+	UI.AddStroke(suggestFrame, Theme.Border, 1)
+
+	local suggestScroll = UI.Create("ScrollingFrame", {
+		Name = "SuggestScroll",
+		Parent = suggestFrame,
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 0, 0, 5),
+		Size = UDim2.new(1, 0, 1, -10),
+		ScrollBarThickness = 2,
+		ScrollBarImageColor3 = Theme.ScrollBar,
+		CanvasSize = UDim2.new(0, 0, 0, 0),
+		ZIndex = 201,
+		ScrollingEnabled = true,
+		Active = true,
+	})
+
+	UI.Create("UIListLayout", {
+		Parent = suggestScroll,
+		Padding = UDim.new(0, 2),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+	})
+
+	State.SuggestFrame = suggestFrame
+	State.SuggestScroll = suggestScroll
+
+	-- Search events
+	Memory.TrackConnection(searchBox:GetPropertyChangedSignal("Text"):Connect(SearchSystem.UpdateSuggestions))
+	Memory.TrackConnection(searchBox.FocusLost:Connect(function()
+		if searchBox.Text == "" then
+			searchBox.Text = "Search"
+		end
+		task.wait(0.2)
+		suggestFrame.Visible = false
+	end))
+	Memory.TrackConnection(searchBox.Focused:Connect(function()
+		if searchBox.Text ~= "Search" and searchBox.Text ~= "" then
+			SearchSystem.UpdateSuggestions()
+		end
+	end))
+
+	-- Close button
+	local closeBtn = UI.Create("TextButton", {
+		Name = "CloseBtn",
+		Parent = topBar,
+		BackgroundTransparency = 1,
+		Position = UDim2.new(1, -34, 0, 6),
+		Size = UDim2.new(0, 28, 0, 28),
+		Font = Enum.Font.GothamBold,
+		Text = "×",
+		TextColor3 = Theme.TextSecondary,
+		TextSize = 24,
+		ZIndex = CONSTANTS.Z_BASE + 1,
+		Active = true,
+		AutoButtonColor = false,
+	})
+
+	Memory.TrackConnection(closeBtn.MouseEnter:Connect(function()
+		TweenSystem.Tween(closeBtn, { TextColor3 = Theme.AccentRed }, 0.15)
+	end))
+	Memory.TrackConnection(closeBtn.MouseLeave:Connect(function()
+		TweenSystem.Tween(closeBtn, { TextColor3 = Theme.TextSecondary }, 0.15)
+	end))
+
+	Memory.TrackConnection(closeBtn.Activated:Connect(function()
+		Config.WindowPosition = {
+			mainFrame.Position.X.Scale,
+			mainFrame.Position.X.Offset,
+			mainFrame.Position.Y.Scale,
+			mainFrame.Position.Y.Offset,
+		}
+		Config.WindowSize = {
+			mainFrame.Size.X.Scale,
+			mainFrame.Size.X.Offset,
+			mainFrame.Size.Y.Scale,
+			mainFrame.Size.Y.Offset,
+		}
+		ConfigSystem.Save()
+		Memory.FullCleanup()
+	end))
+
+	return topBar
+end
+
+--[[
+    Creates the sidebar.
+--]]
+function UIInit.CreateSidebar(mainFrame)
+	local sidebar = UI.Create("Frame", {
+		Name = "Sidebar",
+		Parent = mainFrame,
+		BackgroundColor3 = Theme.Sidebar,
+		BorderSizePixel = 0,
+		Position = UDim2.new(0, 2, 0, CONSTANTS.TOPBAR_HEIGHT + 2),
+		Size = UDim2.new(0, Config.SidebarWidth, 1, -CONSTANTS.TOPBAR_HEIGHT - 4),
+		ZIndex = CONSTANTS.Z_BASE,
+	})
+
+	local sidebarScroll = UI.Create("ScrollingFrame", {
+		Name = "SidebarScroll",
+		Parent = sidebar,
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 0, 0, 4),
+		Size = UDim2.new(1, 0, 1, -8),
+		ScrollBarThickness = 2,
+		ScrollBarImageColor3 = Theme.ScrollBar,
+		CanvasSize = UDim2.new(0, 0, 0, 0),
+		ZIndex = CONSTANTS.Z_BASE + 1,
+		ScrollingEnabled = true,
+		Active = true,
+	})
+
+	local sidebarLayout = UI.Create("UIListLayout", {
+		Parent = sidebarScroll,
+		Padding = UDim.new(0, 3),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+	})
+
+	State.SidebarScroll = sidebarScroll
+
+	-- Auto-update canvas size
+	Memory.TrackConnection(sidebarLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+		sidebarScroll.CanvasSize = UDim2.new(0, 0, 0, sidebarLayout.AbsoluteContentSize.Y + 10)
+	end))
+
+	return sidebar, sidebarScroll, sidebarLayout
+end
+
+--[[
+    Creates the content area.
+--]]
+function UIInit.CreateContent(mainFrame)
+	local contentFrame = UI.Create("Frame", {
+		Name = "ContentFrame",
+		Parent = mainFrame,
+		BackgroundColor3 = Theme.Content,
+		BorderSizePixel = 0,
+		Position = UDim2.new(0, Config.SidebarWidth, 0, CONSTANTS.TOPBAR_HEIGHT + 2),
+		Size = UDim2.new(1, -Config.SidebarWidth, 1, -CONSTANTS.TOPBAR_HEIGHT - 4),
+		ZIndex = CONSTANTS.Z_BASE,
+		ClipsDescendants = true,
+	})
+
+	local contentScroll = UI.Create("ScrollingFrame", {
+		Name = "ContentScroll",
+		Parent = contentFrame,
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 12, 0, 12),
+		Size = UDim2.new(1, -24, 1, -24),
+		ScrollBarThickness = 3,
+		ScrollBarImageColor3 = Theme.ScrollBar,
+		CanvasSize = UDim2.new(0, 0, 0, 0),
+		ZIndex = CONSTANTS.Z_BASE + 1,
+		ScrollingEnabled = true,
+		Active = true,
+		ClipsDescendants = true,
+	})
+
+	local contentList = UI.Create("UIListLayout", {
+		Parent = contentScroll,
+		Padding = UDim.new(0, 6),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+	})
+
+	-- Auto-update canvas size
+	Memory.TrackConnection(contentList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+		contentScroll.CanvasSize = UDim2.new(0, 0, 0, contentList.AbsoluteContentSize.Y + 20)
+	end))
+	contentScroll.CanvasSize = UDim2.new(0, 0, 0, contentList.AbsoluteContentSize.Y + 20)
+
+	State.ContentScroll = contentScroll
+	return contentFrame, contentScroll
+end
+
+--[[
+    Creates the resize handle.
+--]]
+function UIInit.CreateResizeHandle(mainFrame)
+	local resizeHandle = UI.Create("Frame", {
+		Name = "ResizeHandle",
+		Parent = mainFrame,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Position = UDim2.new(1, -16, 1, -16),
+		Size = UDim2.new(0, 16, 0, 16),
+		ZIndex = 15,
+	})
+
+	UI.Create("TextLabel", {
+		Parent = resizeHandle,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 1, 0),
+		Font = Enum.Font.GothamBold,
+		Text = "//",
+		TextColor3 = Color3.fromRGB(255, 255, 255),
+		TextSize = 10,
+		TextTransparency = 0.4,
+		ZIndex = 16,
+	})
+
+	local resizeBtn = UI.Create("TextButton", {
+		Parent = resizeHandle,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 1, 0),
+		Text = "",
+		ZIndex = 16,
+		Active = true,
+		AutoButtonColor = false,
+	})
+
+	Memory.TrackConnection(resizeBtn.InputBegan:Connect(function(input)
+		if State.ModalOpen then
+			return
+		end
+		if
+			input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch
+		then
+			local startSize = mainFrame.Size
+			local startPos = input.Position
+			local resizeConnection
+
+			resizeConnection = Memory.TrackConnection(Services.RunService.RenderStepped:Connect(function()
+				if not resizeConnection then
+					return
+				end
+				local mouse = Services.UserInputService:GetMouseLocation()
+				local delta = mouse - Vector2.new(startPos.X, startPos.Y)
+				mainFrame.Size = UDim2.new(
+					0,
+					math.max(Config.MinWindowWidth, startSize.X.Offset + delta.X),
+					0,
+					math.max(Config.MinWindowHeight, startSize.Y.Offset + delta.Y)
+				)
+			end))
+
+			Memory.TrackConnection(input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					if resizeConnection then
+						resizeConnection:Disconnect()
+					end
+					resizeConnection = nil
+				end
+			end))
+		end
+	end))
+
+	State.ResizeHandle = resizeHandle
+	return resizeHandle
+end
+
+--[[
+    Sets up sidebar buttons.
+--]]
+function UIInit.SetupSidebar(sidebarScroll)
+	local sidebarItems = {
+		{ Name = "Account", Icon = "👤", Color = Theme.Accent, Page = Pages.Account },
+		{ Name = "Home", Icon = "🏠", Color = Theme.Accent, Page = Pages.Home },
+		{ Name = "Premium", Icon = "💎", Color = Theme.AccentPink, Page = Pages.Premium },
+		{ Name = "Shop", Icon = "🏪", Color = Theme.Accent, Page = Pages.Shop },
+		{ Name = "Settings", Icon = "⚙️", Color = Theme.AccentCyan, Page = Pages.Settings },
+	}
+
+	for itemIndex, item in ipairs(sidebarItems) do
+		local sidebarBtn = UI.Create("TextButton", {
+			Name = item.Name,
+			Parent = sidebarScroll,
+			BackgroundColor3 = (itemIndex == 2) and Theme.Card or Theme.Sidebar,
+			BorderSizePixel = 0,
+			Size = UDim2.new(1, -10, 0, 36),
+			Position = UDim2.new(0, 5, 0, 0),
+			Font = Enum.Font.Gotham,
+			Text = "  " .. item.Icon .. "  " .. item.Name,
+			TextColor3 = item.Color,
+			TextSize = 13,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			AutoButtonColor = false,
+			ZIndex = CONSTANTS.Z_BASE + 2,
+			Active = true,
+		})
+		UI.AddCorner(sidebarBtn, 4)
+
+		State.SidebarButtons[item.Name] = function()
+			State.CurrentPage = item.Name
+			for _, child in pairs(sidebarScroll:GetChildren()) do
+				if child:IsA("TextButton") then
+					local isSelected = (child.Name == item.Name)
+					TweenSystem.Tween(child, { BackgroundColor3 = isSelected and Theme.Card or Theme.Sidebar }, 0.2)
+				end
+			end
+			item.Page()
+		end
+
+		Memory.TrackConnection(sidebarBtn.MouseEnter:Connect(function()
+			if State.CurrentPage ~= item.Name then
+				TweenSystem.Tween(sidebarBtn, { BackgroundColor3 = Theme.CardHover }, 0.15)
+			end
+		end))
+		Memory.TrackConnection(sidebarBtn.MouseLeave:Connect(function()
+			if State.CurrentPage ~= item.Name then
+				TweenSystem.Tween(sidebarBtn, { BackgroundColor3 = Theme.Sidebar }, 0.15)
+			end
+		end))
+
+		Memory.TrackConnection(sidebarBtn.Activated:Connect(State.SidebarButtons[item.Name]))
+		SearchSystem.Register(item.Name, item.Name, item.Icon, State.SidebarButtons[item.Name])
+	end
+
+	sidebarScroll.CanvasSize = UDim2.new(0, 0, 0, #sidebarItems * 39 + 10)
+end
+
+--[[
+    Sets up window dragging.
+--]]
+function UIInit.SetupWindowDrag(mainFrame)
+	Memory.TrackConnection(mainFrame.InputBegan:Connect(function(input)
+		if State.ModalOpen then
+			return
+		end
+		if
+			input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch
+		then
+			State.IsDraggingWindow = true
+			State.DragStartPos = input.Position
+			State.FrameStartPos = mainFrame.Position
+		end
+	end))
+
+	Memory.TrackConnection(Services.UserInputService.InputChanged:Connect(function(input)
+		if
+			State.IsDraggingWindow
+			and (
+				input.UserInputType == Enum.UserInputType.MouseMovement
+				or input.UserInputType == Enum.UserInputType.Touch
+			)
+		then
+			local delta = input.Position - State.DragStartPos
+			mainFrame.Position = UDim2.new(
+				State.FrameStartPos.X.Scale,
+				State.FrameStartPos.X.Offset + delta.X,
+				State.FrameStartPos.Y.Scale,
+				State.FrameStartPos.Y.Offset + delta.Y
+			)
+		end
+	end))
+
+	Memory.TrackConnection(Services.UserInputService.InputEnded:Connect(function(input)
+		if State.IsDraggingWindow then
+			State.IsDraggingWindow = false
+		end
+	end))
+end
+
+--[[
+    Sets up global input handler for dropdown/suggestion closing.
+--]]
+function UIInit.SetupGlobalInput()
+	Memory.TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gameProcessed)
+		if gameProcessed then
+			return
+		end
+		if
+			input.UserInputType ~= Enum.UserInputType.MouseButton1
+			and input.UserInputType ~= Enum.UserInputType.Touch
+		then
 			return
 		end
 
-		local viewport = GetSafeViewportSize()
-		local w = math.min(Config.WindowWidth, viewport.X - 20)
-		local h = math.min(Config.WindowHeight, viewport.Y - 40)
+		local pos = input.Position
+		local function isInside(gui)
+			if not gui or not gui.Parent then
+				return false
+			end
+			local ap = gui.AbsolutePosition
+			local as = gui.AbsoluteSize
+			return pos.X >= ap.X and pos.X <= ap.X + as.X and pos.Y >= ap.Y and pos.Y <= ap.Y + as.Y
+		end
+
+		if State.SuggestFrame and State.SuggestFrame.Visible then
+			if not isInside(State.SearchFrame) and not isInside(State.SuggestFrame) then
+				State.SuggestFrame.Visible = false
+			end
+		end
+
+		if State.ActiveDropdownFrame and State.ActiveDropdownFrame.Parent then
+			if isInside(State.ActiveDropdownFrame) then
+				return
+			end
+			if State.ActiveDropdownCard and isInside(State.ActiveDropdownCard) then
+				return
+			end
+			DropdownSystem.Close()
+		end
+	end))
+end
+
+--[[
+    Applies mobile sizing if on a touch device.
+--]]
+function UIInit.ApplyMobileSizing()
+	local success, err = pcall(function()
+		if not Services.UserInputService.TouchEnabled then
+			return
+		end
+
+		local camera = Services.Workspace.CurrentCamera
+		local viewport = camera and camera.ViewportSize
+		if not viewport or viewport.X < 100 or viewport.Y < 100 then
+			viewport = Vector2.new(800, 600)
+		end
+
+		local w = math.min(Config.WindowWidth, viewport.X - CONSTANTS.MOBILE_PADDING_X)
+		local h = math.min(Config.WindowHeight, viewport.Y - CONSTANTS.MOBILE_PADDING_Y)
 
 		w = math.max(w, Config.MinWindowWidth)
 		h = math.max(h, Config.MinWindowHeight)
 
-		MainFrame.Size = UDim2.new(0, w, 0, h)
-		MainFrame.Position = UDim2.new(0.5, -w / 2, 0.5, -h / 2)
+		State.MainFrame.Size = UDim2.new(0, w, 0, h)
+		State.MainFrame.Position = UDim2.new(0.5, -w / 2, 0.5, -h / 2)
 
 		print(string.format("[LRX_Hub] Mobile sizing applied: %dx%d", w, h))
 	end)
@@ -3471,33 +4129,123 @@ local function ApplyMobileSizing()
 	end
 end
 
-if UserInputService.TouchEnabled then
-	task.delay(0.5, ApplyMobileSizing)
-end
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 23: BACKGROUND TASKS
+-- ═══════════════════════════════════════════════════════════════════════
 
---══════════════════════════════════════════════════════--
--- INITIALIZATION
---══════════════════════════════════════════════════════--
-local InitSuccess, InitError = pcall(function()
-	LoadConfig()
+local BackgroundTasks = {}
 
-	if Config.ShowGridDots then
-		task.delay(1.5, function()
-			local ok, err = pcall(function()
-				RefreshGridDots()
-			end)
-			if not ok then
-				warn("[Init] Grid dots restore failed:", err)
+--[[
+    Starts the seed placer background loop.
+--]]
+function BackgroundTasks.StartSeedPlacerLoop()
+	table.insert(
+		State.Tasks,
+		task.spawn(function()
+			while State.ScriptRunning do
+				task.wait(CONSTANTS.PLANT_CYCLE_INTERVAL)
+				if Config.EnableSeedPlacer then
+					local ok, err = pcall(function()
+						SeedPlacer.RunCycle()
+					end)
+					if not ok then
+						warn("[SeedPlacer Loop Error]", err)
+					end
+				end
 			end
 		end)
-	end
-
-	Pages.Home()
-end)
-
-if not InitSuccess then
-	warn("[LRX_Hub] CRITICAL INIT ERROR:", InitError)
-	pcall(function()
-		Pages.Home()
-	end)
+	)
 end
+
+--[[
+    Starts the auto-buy background loop.
+--]]
+function BackgroundTasks.StartAutoBuyLoop()
+	table.insert(
+		State.Tasks,
+		task.spawn(function()
+			while State.ScriptRunning do
+				task.wait(CONSTANTS.AUTO_BUY_INTERVAL)
+				if Config.EnableSeedShop and Networking and SeedData then
+					local ok, err = pcall(function()
+						local leaderstats = Player:FindFirstChild("leaderstats")
+						local sheckles = leaderstats and leaderstats:FindFirstChild("Sheckles")
+						if sheckles then
+							for _, seed in ipairs(SeedData) do
+								if
+									Config.SelectedSeeds[seed.SeedName]
+									and sheckles.Value >= (seed.PurchasePrice or 0)
+								then
+									Networking.SeedShop.PurchaseSeed:Fire(seed.SeedName)
+								end
+							end
+						end
+					end)
+					if not ok then
+						warn("[AutoBuy Loop Error]", err)
+					end
+				end
+			end
+		end)
+	)
+end
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 24: INITIALIZATION
+-- ═══════════════════════════════════════════════════════════════════════
+
+local function Initialize()
+	local initSuccess, initError = pcall(function()
+		-- Create UI hierarchy
+		local screenGui = UIInit.CreateScreenGui()
+		local mainFrame = UIInit.CreateMainFrame(screenGui)
+		UIInit.CreateToggleButton(screenGui)
+		UIInit.CreateTopBar(mainFrame, screenGui)
+		local sidebar, sidebarScroll = UIInit.CreateSidebar(mainFrame)
+		UIInit.CreateContent(mainFrame)
+		UIInit.CreateResizeHandle(mainFrame)
+		UIInit.SetupSidebar(sidebarScroll)
+		UIInit.SetupWindowDrag(mainFrame)
+		UIInit.SetupGlobalInput()
+
+		-- Load config
+		ConfigSystem.Load()
+
+		-- Restore grid dots if enabled
+		if Config.ShowGridDots then
+			task.delay(1.5, function()
+				local ok, err = pcall(function()
+					GridSystem.Refresh()
+				end)
+				if not ok then
+					warn("[Init] Grid dots restore failed:", err)
+				end
+			end)
+		end
+
+		-- Start background tasks
+		BackgroundTasks.StartSeedPlacerLoop()
+		BackgroundTasks.StartAutoBuyLoop()
+
+		-- Show home page
+		Pages.Home()
+
+		-- Mobile sizing
+		if Services.UserInputService.TouchEnabled then
+			task.delay(CONSTANTS.MOBILE_INIT_DELAY, UIInit.ApplyMobileSizing)
+		end
+	end)
+
+	if not initSuccess then
+		warn("[LRX_Hub] CRITICAL INIT ERROR:", initError)
+		pcall(function()
+			Pages.Home()
+		end)
+	end
+end
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- BOOT
+-- ═══════════════════════════════════════════════════════════════════════
+
+Initialize()
