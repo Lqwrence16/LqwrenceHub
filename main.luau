@@ -128,6 +128,9 @@ pcall(function()
 	SeedData = require(Services.ReplicatedStorage.SharedModules:WaitForChild("SeedData", 5))
 end)
 
+local CollectFruitRemote = Networking and Networking.Garden and Networking.Garden.CollectFruit
+local UseShovelRemote = Networking and Networking.Shovel and Networking.Shovel.UseShovel
+
 local PlantRemote = Networking and Networking.Plant and Networking.Plant.PlantSeed
 
 -- Localize global functions for performance
@@ -185,6 +188,10 @@ local ConfigSchema = {
 	PlantingPattern = { type = "string", default = "LeftToRight" },
 	PlantSpacing = { type = "number", min = 0.1, max = 10, default = CONSTANTS.DEFAULT_PLANT_SPACING },
 	PlantDelay = { type = "number", min = 0, max = 5, default = CONSTANTS.DEFAULT_PLANT_DELAY },
+	SelectedCollectFruits = { type = "table", default = {} },
+	EnableAutoCollect = { type = "boolean", default = false },
+	SelectedShovelPlants = { type = "table", default = {} },
+	EnableAutoShovel = { type = "boolean", default = false },
 	ShowGridDots = { type = "boolean", default = false },
 	ReduceEffects = { type = "boolean", default = false },
 	Keybinds = { type = "table", default = { ToggleUI = "F" } },
@@ -229,6 +236,8 @@ local State = {
 	SidebarButtons = {},
 	SearchableItems = {},
 	GridRefreshThread = nil,
+	AutoCollectThread = nil,
+	AutoShovelThread = nil,
 }
 
 -- ═══════════════════════════════════════════════════════════════════════
@@ -244,6 +253,8 @@ local Cache = {
 	LastConfigHash = nil,
 	FakePlot = nil,
 	TweenInfo = {},
+	PlantIdBySeedName = nil, -- Map: SeedName -> PlantId
+	FruitIdBySeedName = nil, -- Map: SeedName -> {FruitId, PlantId}
 }
 
 -- ═══════════════════════════════════════════════════════════════════════
@@ -1471,6 +1482,232 @@ function SeedPlacer.RunCycle()
 	if plantedCount > 0 then
 		print(string_format("[SeedPlacer] Planted %d seeds this cycle.", plantedCount))
 	end
+end
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- SECTION 14.5: AUTO FARM SYSTEM (Collect & Shovel)
+-- ═══════════════════════════════════════════════════════════════════════
+
+local AutoFarmSystem = {}
+
+-- ─── Scan Plot for Plant/Fruit Data ────────────────────────────────────
+
+function AutoFarmSystem.ScanPlotData()
+	local plot = PlotSystem.FindPlayerPlot()
+	if not plot then
+		return {}, {}
+	end
+
+	local plantsFolder = plot:FindFirstChild("Plants")
+	if not plantsFolder then
+		return {}, {}
+	end
+
+	local plantMap = {} -- SeedName -> {PlantId, PlantInstance}
+	local fruitMap = {} -- SeedName -> {FruitId, PlantId, PlantInstance}
+
+	for _, plant in ipairs(plantsFolder:GetChildren()) do
+		local seedName = plant:GetAttribute("SeedName")
+		local plantId = plant:GetAttribute("Id") or plant:GetAttribute("PlantId") or plant:GetAttribute("GUID")
+		if not seedName or not plantId then
+			continue
+		end
+
+		plantMap[seedName] = { PlantId = plantId, Instance = plant }
+
+		-- Find fruits inside this plant
+		for _, child in ipairs(plant:GetDescendants()) do
+			if child:GetAttribute("IsFruit") or child.Name:lower():match("fruit") then
+				local fruitId = child:GetAttribute("FruitId") or child:GetAttribute("Id") or child.Name
+				if not fruitMap[seedName] then
+					fruitMap[seedName] = {}
+				end
+				table_insert(fruitMap[seedName], {
+					FruitId = fruitId,
+					PlantId = plantId,
+					Instance = child,
+					Ready = plant:GetAttribute("PlantGrowthReady") == true,
+				})
+			end
+		end
+	end
+
+	Cache.PlantIdBySeedName = plantMap
+	Cache.FruitIdBySeedName = fruitMap
+	return plantMap, fruitMap
+end
+
+-- ─── Get Available Seed Names ──────────────────────────────────────────
+
+function AutoFarmSystem.GetAvailableCollectNames()
+	local _, fruitMap = AutoFarmSystem.ScanPlotData()
+	local names = {}
+	for seedName, fruits in pairs(fruitMap) do
+		-- Only show if at least one fruit is ready
+		for _, f in ipairs(fruits) do
+			if f.Ready then
+				names[#names + 1] = seedName
+				break
+			end
+		end
+	end
+	table_sort(names)
+	return names
+end
+
+function AutoFarmSystem.GetAvailableShovelNames()
+	local plantMap = Cache.PlantIdBySeedName
+	if not plantMap then
+		plantMap = AutoFarmSystem.ScanPlotData()
+	end
+	local names = {}
+	for seedName, _ in pairs(plantMap or {}) do
+		names[#names + 1] = seedName
+	end
+	table_sort(names)
+	return names
+end
+
+-- ─── Auto Collect ──────────────────────────────────────────────────────
+
+function AutoFarmSystem.StartCollect()
+	if State.AutoCollectThread then
+		return
+	end
+	if not CollectFruitRemote then
+		warn("[AutoFarm] CollectFruit remote not available")
+		return
+	end
+
+	State.AutoCollectThread = task_spawn(function()
+		while Persist.Config.EnableAutoCollect do
+			local plot = PlotSystem.FindPlayerPlot()
+			if plot then
+				local plantsFolder = plot:FindFirstChild("Plants")
+				if plantsFolder then
+					for _, plant in ipairs(plantsFolder:GetChildren()) do
+						if not Persist.Config.EnableAutoCollect then
+							break
+						end
+
+						local seedName = plant:GetAttribute("SeedName")
+						if not seedName or not Persist.Config.SelectedCollectFruits[seedName] then
+							continue
+						end
+
+						local plantId = plant:GetAttribute("Id")
+							or plant:GetAttribute("PlantId")
+							or plant:GetAttribute("GUID")
+						if not plantId then
+							continue
+						end
+
+						-- Check if ready to harvest
+						local isReady = plant:GetAttribute("PlantGrowthReady") == true
+
+						if isReady then
+							-- Find fruit ID
+							local fruitId = nil
+							for _, child in ipairs(plant:GetDescendants()) do
+								if child:GetAttribute("IsFruit") or child.Name:lower():match("fruit") then
+									fruitId = child:GetAttribute("FruitId") or child:GetAttribute("Id") or child.Name
+									break
+								end
+							end
+
+							if fruitId then
+								local ok = pcall(function()
+									CollectFruitRemote:Fire(plantId, fruitId)
+								end)
+								if ok then
+									print(
+										string_format(
+											"[AutoFarm] Collected %s (Plant: %s, Fruit: %s)",
+											seedName,
+											plantId:sub(1, 8),
+											tostring(fruitId):sub(1, 8)
+										)
+									)
+								end
+								task_wait(0.15)
+							end
+						end
+					end
+				end
+			end
+			task_wait(0.5)
+		end
+		State.AutoCollectThread = nil
+	end)
+
+	TrackThread(State.AutoCollectThread)
+	NotificationSystem.Notify("Auto Farm", "Auto Collect started!", "Success", 2)
+end
+
+function AutoFarmSystem.StopCollect()
+	Persist.Config.EnableAutoCollect = false
+	State.AutoCollectThread = nil
+	NotificationSystem.Notify("Auto Farm", "Auto Collect stopped", "Info", 2)
+end
+
+-- ─── Auto Shovel ───────────────────────────────────────────────────────
+
+function AutoFarmSystem.StartShovel()
+	if State.AutoShovelThread then
+		return
+	end
+	if not UseShovelRemote then
+		warn("[AutoFarm] UseShovel remote not available")
+		return
+	end
+
+	State.AutoShovelThread = task_spawn(function()
+		while Persist.Config.EnableAutoShovel do
+			local plot = PlotSystem.FindPlayerPlot()
+			if plot then
+				local plantsFolder = plot:FindFirstChild("Plants")
+				if plantsFolder then
+					for _, plant in ipairs(plantsFolder:GetChildren()) do
+						if not Persist.Config.EnableAutoShovel then
+							break
+						end
+
+						local seedName = plant:GetAttribute("SeedName")
+						if not seedName or not Persist.Config.SelectedShovelPlants[seedName] then
+							continue
+						end
+
+						local plantId = plant:GetAttribute("Id")
+							or plant:GetAttribute("PlantId")
+							or plant:GetAttribute("GUID")
+						if not plantId then
+							continue
+						end
+
+						local ok = pcall(function()
+							-- UseShovel(action, plantId, empty, shovelToolInstance)
+							UseShovelRemote:Fire("Dig", plantId, "", nil)
+						end)
+						if ok then
+							print(string_format("[AutoFarm] Shoveled %s (Id: %s)", seedName, plantId:sub(1, 8)))
+						end
+						task_wait(0.15)
+					end
+				end
+			end
+			task_wait(0.5)
+		end
+		State.AutoShovelThread = nil
+	end)
+
+	TrackThread(State.AutoShovelThread)
+	NotificationSystem.Notify("Auto Farm", "Auto Shovel started!", "Success", 2)
+end
+
+function AutoFarmSystem.StopShovel()
+	Persist.Config.EnableAutoShovel = false
+	State.AutoShovelThread = nil
+	NotificationSystem.Notify("Auto Farm", "Auto Shovel stopped", "Info", 2)
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
@@ -3002,7 +3239,170 @@ function Pages.Home()
 
 		local autoCollectCard = UI.CreateCard(Instances.ContentScroll, "Auto Collect Fruits", "🍎", Theme.Accent)
 		TrackConnection(autoCollectCard.Activated:Connect(function()
-			-- Placeholder for future implementation
+			DropdownSystem.Toggle(autoCollectCard, function(dropdownScroll)
+				Persist.Config.SelectedCollectFruits = Persist.Config.SelectedCollectFruits or {}
+
+				UI.CreateLabel(dropdownScroll, "Auto Collect", Theme.Accent, 12)
+				local selectedLabel = UI.CreateLabel(dropdownScroll, "Selected: None", Theme.TextMuted, 10)
+				local function UpdateSelectedLabel()
+					selectedLabel.Text = Utils.FormatSelectedSeeds(Persist.Config.SelectedCollectFruits, 10)
+				end
+				UpdateSelectedLabel()
+
+				local selectBtn = UI.CreateButton(
+					dropdownScroll,
+					"Select Fruits to Collect...",
+					Theme.Card,
+					100,
+					30,
+					function()
+						local available = AutoFarmSystem.GetAvailableCollectNames()
+						if #available == 0 then
+							NotificationSystem.Notify(
+								"Auto Collect",
+								"No ready fruits found! Plant and wait for growth.",
+								"Warning",
+								3
+							)
+							return
+						end
+						local options = {}
+						for _, name in ipairs(available) do
+							options[#options + 1] = { Label = name, Value = name }
+						end
+						SeedModalSystem.ShowSelection("Select Fruits to Collect", options, nil, function(value)
+							-- Toggle selection
+							Persist.Config.SelectedCollectFruits[value] =
+								not Persist.Config.SelectedCollectFruits[value]
+							ConfigSystem.AutoSave()
+							UpdateSelectedLabel()
+						end)
+					end
+				)
+				selectBtn.Size = UDim2.new(1, -8, 0, 30)
+
+				local actionFrame = UI.Create("Frame", {
+					Parent = dropdownScroll,
+					BackgroundTransparency = 1,
+					Size = UDim2.new(1, -8, 0, 30),
+				})
+
+				local selectAllBtn = UI.CreateButton(actionFrame, "Select All", Theme.Accent, 100, 30, function()
+					local available = AutoFarmSystem.GetAvailableCollectNames()
+					for _, name in ipairs(available) do
+						Persist.Config.SelectedCollectFruits[name] = true
+					end
+					ConfigSystem.AutoSave()
+					UpdateSelectedLabel()
+				end)
+				selectAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
+
+				local clearAllBtn = UI.CreateButton(
+					actionFrame,
+					"Clear All",
+					Color3.fromRGB(185, 65, 65),
+					100,
+					30,
+					function()
+						table_clear(Persist.Config.SelectedCollectFruits)
+						ConfigSystem.AutoSave()
+						UpdateSelectedLabel()
+					end
+				)
+				clearAllBtn.Position = UDim2.new(0.5, 3, 0, 0)
+				clearAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
+
+				UI.CreateToggle(dropdownScroll, "Enable Auto Collect", Persist.Config.EnableAutoCollect, function(state)
+					Persist.Config.EnableAutoCollect = state
+					ConfigSystem.AutoSave()
+					if state then
+						AutoFarmSystem.StartCollect()
+					else
+						AutoFarmSystem.StopCollect()
+					end
+				end)
+			end)
+		end))
+
+		local autoShovelCard =
+			UI.CreateCard(Instances.ContentScroll, "Auto Shovel Plants", "🥄", Color3.fromRGB(200, 100, 100))
+		TrackConnection(autoShovelCard.Activated:Connect(function()
+			DropdownSystem.Toggle(autoShovelCard, function(dropdownScroll)
+				Persist.Config.SelectedShovelPlants = Persist.Config.SelectedShovelPlants or {}
+
+				UI.CreateLabel(dropdownScroll, "Auto Shovel", Color3.fromRGB(200, 100, 100), 12)
+				local selectedLabel = UI.CreateLabel(dropdownScroll, "Selected: None", Theme.TextMuted, 10)
+				local function UpdateSelectedLabel()
+					selectedLabel.Text = Utils.FormatSelectedSeeds(Persist.Config.SelectedShovelPlants, 10)
+				end
+				UpdateSelectedLabel()
+
+				local selectBtn = UI.CreateButton(
+					dropdownScroll,
+					"Select Plants to Shovel...",
+					Theme.Card,
+					100,
+					30,
+					function()
+						local available = AutoFarmSystem.GetAvailableShovelNames()
+						if #available == 0 then
+							NotificationSystem.Notify("Auto Shovel", "No plants found in your plot!", "Warning", 3)
+							return
+						end
+						local options = {}
+						for _, name in ipairs(available) do
+							options[#options + 1] = { Label = name, Value = name }
+						end
+						SeedModalSystem.ShowSelection("Select Plants to Shovel", options, nil, function(value)
+							Persist.Config.SelectedShovelPlants[value] = not Persist.Config.SelectedShovelPlants[value]
+							ConfigSystem.AutoSave()
+							UpdateSelectedLabel()
+						end)
+					end
+				)
+				selectBtn.Size = UDim2.new(1, -8, 0, 30)
+
+				local actionFrame = UI.Create("Frame", {
+					Parent = dropdownScroll,
+					BackgroundTransparency = 1,
+					Size = UDim2.new(1, -8, 0, 30),
+				})
+
+				local selectAllBtn = UI.CreateButton(actionFrame, "Select All", Theme.Accent, 100, 30, function()
+					local available = AutoFarmSystem.GetAvailableShovelNames()
+					for _, name in ipairs(available) do
+						Persist.Config.SelectedShovelPlants[name] = true
+					end
+					ConfigSystem.AutoSave()
+					UpdateSelectedLabel()
+				end)
+				selectAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
+
+				local clearAllBtn = UI.CreateButton(
+					actionFrame,
+					"Clear All",
+					Color3.fromRGB(185, 65, 65),
+					100,
+					30,
+					function()
+						table_clear(Persist.Config.SelectedShovelPlants)
+						ConfigSystem.AutoSave()
+						UpdateSelectedLabel()
+					end
+				)
+				clearAllBtn.Position = UDim2.new(0.5, 3, 0, 0)
+				clearAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
+
+				UI.CreateToggle(dropdownScroll, "Enable Auto Shovel", Persist.Config.EnableAutoShovel, function(state)
+					Persist.Config.EnableAutoShovel = state
+					ConfigSystem.AutoSave()
+					if state then
+						AutoFarmSystem.StartShovel()
+					else
+						AutoFarmSystem.StopShovel()
+					end
+				end)
+			end)
 		end))
 	end)
 end
@@ -3870,6 +4270,11 @@ function FullCleanup()
 			State[key] = nil
 		end
 	end
+	-- Stop auto farm threads
+	Persist.Config.EnableAutoCollect = false
+	Persist.Config.EnableAutoShovel = false
+	State.AutoCollectThread = nil
+	State.AutoShovelThread = nil
 	State.ScriptRunning = false
 end
 
@@ -3891,7 +4296,17 @@ local function Initialize()
 		UIInit.SetupGlobalInput()
 
 		ConfigSystem.Load()
-
+		-- Restore auto farm states
+		if Persist.Config.EnableAutoCollect then
+			task_delay(2, function()
+				AutoFarmSystem.StartCollect()
+			end)
+		end
+		if Persist.Config.EnableAutoShovel then
+			task_delay(2, function()
+				AutoFarmSystem.StartShovel()
+			end)
+		end
 		if Persist.Config.ShowGridDots then
 			task_delay(1.5, function()
 				local ok, err = pcall(function()
