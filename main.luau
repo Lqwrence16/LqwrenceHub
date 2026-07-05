@@ -52,7 +52,7 @@ local CONSTANTS = {
 	GRID_DOT_SIZE = 0.08,
 	GRID_DOT_BATCH_SIZE = 400,
 	GRID_DOT_BATCH_DELAY = 0.03,
-	GRID_DOT_Y_OFFSET = 0.05,
+	GRID_DOT_Y_OFFSET = 0.0,
 
 	-- Laser
 	LASER_SCAN_DURATION = 1.5,
@@ -1148,51 +1148,77 @@ local function GeneratePlantPositions(targetParts, spacing)
 	for _, part in ipairs(targetParts) do
 		local cf = part.CFrame
 		local size = part.Size
-		local halfSize = size / 2
+		local hs = size / 2
 
-		-- Get the top surface Y in world space
-		-- For a non-rotated part: topY = Position.Y + Size.Y/2
-		-- For rotated parts: we use CFrame to transform local top to world
-		local topLocal = Vector3.new(0, halfSize.Y, 0)
-		local topWorld = cf * topLocal
+		-- The TOP surface in local space is Y = +hs.Y
+		-- Transform to world space to get exact height
+		local topSurfaceLocal = Vector3.new(0, hs.Y, 0)
+		local topSurfaceWorld = cf * topSurfaceLocal
 
-		-- Calculate grid dimensions that FIT INSIDE the part
-		-- Use math_ceil to ensure we cover edges, then clamp
-		local cellsX = math_max(1, math_ceil((size.X - 0.01) / spacing))
-		local cellsZ = math_max(1, math_ceil((size.Z - 0.01) / spacing))
+		-- For a Y-rotated part (-90°), the local axes map to world axes as:
+		-- local X → world Z (RightVector)
+		-- local Z → world X (LookVector, but inverted due to -90° rotation)
+		-- So we need to work in LOCAL space and transform each point to world
 
-		-- Center the grid: total grid width = (cellsX - 1) * spacing
-		-- Offset = (part width - grid width) / 2
-		local gridWidthX = (cellsX - 1) * spacing
-		local gridWidthZ = (cellsZ - 1) * spacing
-		local offsetX = (size.X - gridWidthX) / 2 - halfSize.X
-		local offsetZ = (size.Z - gridWidthZ) / 2 - halfSize.Z
+		-- Calculate grid dimensions in local space
+		-- Size.X = 44 (width in local X), Size.Z = 50 (depth in local Z)
+		local cellsX = math_max(1, math_floor(size.X / spacing))
+		local cellsZ = math_max(1, math_floor(size.Z / spacing))
 
-		for ix = 0, cellsX - 1 do
-			for iz = 0, cellsZ - 1 do
+		-- Center the grid within the part's local space
+		-- Start from -hs.X + spacing/2 to hs.X - spacing/2
+		local startX = -hs.X + spacing / 2
+		local startZ = -hs.Z + spacing / 2
+		local endX = hs.X - spacing / 2
+		local endZ = hs.Z - spacing / 2
+
+		-- Edge case: if part is smaller than spacing, place one dot in center
+		if startX > endX then
+			startX = 0
+			endX = 0
+		end
+		if startZ > endZ then
+			startZ = 0
+			endZ = 0
+		end
+
+		local localX = startX
+		while localX <= endX + 0.001 do
+			local localZ = startZ
+			while localZ <= endZ + 0.001 do
 				iterationCount += 1
 				if iterationCount % yieldInterval == 0 then
 					task_wait()
 				end
 
-				-- Local position relative to part center
-				local localX = offsetX + ix * spacing
-				local localZ = offsetZ + iz * spacing
+				-- Create position in LOCAL space (on top surface)
+				local localPos = Vector3.new(localX, hs.Y, localZ)
 
-				-- Transform to world space, keeping the TOP surface Y
-				local worldX = cf.Position.X + (cf.RightVector.X * localX + cf.RightVector.Z * localZ)
-				local worldZ = cf.Position.Z + (cf.LookVector.X * localX + cf.LookVector.Z * localZ)
+				-- Transform to WORLD space using the part's CFrame
+				-- This properly handles rotation (-90° Y)
+				local worldPos = cf * localPos
 
-				-- Use the exact top surface height
-				local plantPos = Vector3.new(Utils.Round(worldX), topWorld.Y, Utils.Round(worldZ))
+				-- Round to match game's grid precision (plants are at whole numbers)
+				local finalPos =
+					Vector3.new(math_floor(worldPos.X + 0.5), topSurfaceWorld.Y, math_floor(worldPos.Z + 0.5))
 
-				local key = Utils.FormatPositionKey(plantPos)
+				local key = Utils.FormatPositionKey(finalPos)
 
 				if not seenKeys[key] then
 					seenKeys[key] = true
-					positions[#positions + 1] = { Pos = plantPos, Part = part }
+					positions[#positions + 1] = { Pos = finalPos, Part = part }
 				end
+
+				if localZ >= endZ - 0.001 then
+					break
+				end
+				localZ = localZ + spacing
 			end
+
+			if localX >= endX - 0.001 then
+				break
+			end
+			localX = localX + spacing
 		end
 	end
 
