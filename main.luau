@@ -1804,6 +1804,18 @@ pcall(function()
 	Networking = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
 	SeedData = require(game:GetService("ReplicatedStorage").SharedModules.SeedData)
 end)
+<<<<<<< HEAD
+=======
+print("===== WRITES =====")
+for k, v in pairs(Networking.Plant.PlantSeed.Writes) do
+	print(k, v)
+end
+
+print("===== READS =====")
+for k, v in pairs(Networking.Plant.PlantSeed.Reads) do
+	print(k, v)
+end
+>>>>>>> 216637e9ae000c73df9c61a24a463b0e0a2edce8
 
 --══════════════════════════════════════════════════════--
 -- MODULE: SEED PLACER
