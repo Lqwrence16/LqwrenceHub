@@ -192,7 +192,10 @@ local ConfigSchema = {
 	PlantSpacing = { type = "number", min = 0.1, max = 10, default = CONSTANTS.DEFAULT_PLANT_SPACING },
 	PlantDelay = { type = "number", min = 0, max = 5, default = CONSTANTS.DEFAULT_PLANT_DELAY },
 	SelectedCollectFruits = { type = "table", default = {} },
-	EnableAutoShovel = { type = "boolean", default = false },
+	EnableAutoShovelTrees = { type = "boolean", default = false },
+	EnableAutoShovelPlants = { type = "boolean", default = false },
+	SelectedShovelTrees = { type = "table", default = {} },
+	SelectedShovelPlants = { type = "table", default = {} },
 	ShowGridDots = { type = "boolean", default = false },
 	ReduceEffects = { type = "boolean", default = false },
 	Keybinds = { type = "table", default = { ToggleUI = "F" } },
@@ -238,7 +241,8 @@ local State = {
 	SearchableItems = {},
 	GridRefreshThread = nil,
 	AutoCollectThread = nil,
-	AutoShovelThread = nil,
+	AutoShovelTreesThread = nil,
+	AutoShovelPlantsThread = nil,
 }
 
 -- ═══════════════════════════════════════════════════════════════════════
@@ -1787,6 +1791,8 @@ end
 -- ─── Auto Shovel ───────────────────────────────────────────────────────
 -- ─── Get Shovel Tool ───────────────────────────────────────────────────
 
+-- ─── Get Shovel Tool ───────────────────────────────────────────────────
+
 local function GetShovelTool()
 	local character = Player.Character
 	if character then
@@ -1807,51 +1813,184 @@ local function GetShovelTool()
 	return nil
 end
 
--- ─── Auto Shovel (Fixed) ───────────────────────────────────────────────
+-- ─── Is Tree Plant ─────────────────────────────────────────────────────
 
-function AutoFarmSystem.StartShovel()
-	if State.AutoShovelThread then
-		DebugPrint("StartShovel: Already running")
+local function IsTreePlant(plant)
+	if not plant then
+		return false
+	end
+	local fruits = plant:FindFirstChild("Fruits")
+	if not fruits then
+		return false
+	end
+	return #fruits:GetChildren() > 0
+end
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- AUTO SHOVEL TREES (plants with fruits)
+-- ═══════════════════════════════════════════════════════════════════════
+
+function AutoFarmSystem.StartShovelTrees()
+	if State.AutoShovelTreesThread then
+		DebugPrint("StartShovelTrees: Already running")
 		return
 	end
 
 	if not UseShovelRemote then
 		NotificationSystem.Notify("Auto Farm", "UseShovel remote not found", "Error", 3)
-		DebugPrint("UseShovelRemote is nil")
 		return
 	end
 
-	DebugPrint("Starting Auto Shovel...")
-	NotificationSystem.Notify("Auto Farm", "Auto Shovel started", "Success", 2)
+	local shovelTool = GetShovelTool()
+	if not shovelTool then
+		NotificationSystem.Notify("Auto Farm", "Equip a Shovel first!", "Warning", 3)
+		return
+	end
 
-	State.AutoShovelThread = task_spawn(function()
-		while Persist.Config.EnableAutoShovel and State.ScriptRunning do
+	DebugPrint("Starting Auto Shovel (Trees)...")
+	NotificationSystem.Notify("Auto Farm", "Auto Shovel Trees started", "Success", 2)
+
+	State.AutoShovelTreesThread = task_spawn(function()
+		while Persist.Config.EnableAutoShovelTrees and State.ScriptRunning do
 			local plot = PlotSystem.FindPlayerPlot()
 			if not plot then
-				DebugPrint("Shovel: Plot not found")
 				task_wait(0.5)
 				continue
 			end
 
 			local plantsFolder = FindPlantsFolder(plot)
 			if not plantsFolder then
-				DebugPrint("Shovel: Plants folder not found")
 				task_wait(0.5)
 				continue
 			end
 
-			-- Find shovel once per cycle (in case it moves)
-			local shovelTool = GetShovelTool()
+			shovelTool = GetShovelTool()
 			if not shovelTool then
-				DebugPrint("Shovel: No shovel tool in backpack/character")
-				NotificationSystem.Notify("Auto Farm", "Equip a Shovel first!", "Warning", 3)
+				NotificationSystem.Notify("Auto Farm", "Shovel unequipped!", "Warning", 3)
 				task_wait(2)
 				continue
 			end
 
 			for _, plant in ipairs(plantsFolder:GetChildren()) do
-				if not Persist.Config.EnableAutoShovel or not State.ScriptRunning then
+				if not Persist.Config.EnableAutoShovelTrees or not State.ScriptRunning then
 					break
+				end
+
+				-- ONLY trees (plants with fruits)
+				if not IsTreePlant(plant) then
+					continue
+				end
+
+				local seedName = GetPlantSeedName(plant)
+				local selected = Persist.Config.SelectedShovelTrees or {}
+				local hasSelection = false
+				for _, _ in pairs(selected) do
+					hasSelection = true
+					break
+				end
+
+				if hasSelection and not selected[seedName] then
+					DebugPrint("TREE SHOVEL SKIP (not selected):", seedName)
+					continue
+				end
+
+				local plantId = GetPlantId(plant)
+				if not plantId then
+					continue
+				end
+
+				local fruitId = GetFruitId(plant)
+				if fruitId == "" then
+					DebugPrint("TREE SHOVEL SKIP (no fruitId):", seedName)
+					continue
+				end
+
+				DebugPrint("SHOVELING TREE:", seedName, "| plantId=", plantId, "| fruitId=", fruitId)
+
+				local ok = pcall(function()
+					if typeof(UseShovelRemote) == "table" and UseShovelRemote.Fire then
+						UseShovelRemote:Fire(plantId, fruitId, "Shovel", shovelTool)
+					elseif typeof(UseShovelRemote) == "Instance" and UseShovelRemote:IsA("RemoteEvent") then
+						UseShovelRemote:FireServer(plantId, fruitId, "Shovel", shovelTool)
+					end
+				end)
+
+				if ok then
+					DebugPrint("  -> Tree shovel succeeded")
+				end
+
+				task_wait(0.2)
+			end
+
+			task_wait(0.5)
+		end
+
+		State.AutoShovelTreesThread = nil
+		DebugPrint("Auto Shovel Trees loop ended")
+	end)
+
+	TrackThread(State.AutoShovelTreesThread)
+end
+
+function AutoFarmSystem.StopShovelTrees()
+	Persist.Config.EnableAutoShovelTrees = false
+	State.AutoShovelTreesThread = nil
+	NotificationSystem.Notify("Auto Farm", "Auto Shovel Trees stopped", "Info", 2)
+end
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- AUTO SHOVEL PLANTS (single plants: carrot, bamboo, etc.)
+-- ═══════════════════════════════════════════════════════════════════════
+
+function AutoFarmSystem.StartShovelPlants()
+	if State.AutoShovelPlantsThread then
+		DebugPrint("StartShovelPlants: Already running")
+		return
+	end
+
+	if not UseShovelRemote then
+		NotificationSystem.Notify("Auto Farm", "UseShovel remote not found", "Error", 3)
+		return
+	end
+
+	local shovelTool = GetShovelTool()
+	if not shovelTool then
+		NotificationSystem.Notify("Auto Farm", "Equip a Shovel first!", "Warning", 3)
+		return
+	end
+
+	DebugPrint("Starting Auto Shovel (Single Plants)...")
+	NotificationSystem.Notify("Auto Farm", "Auto Shovel Plants started", "Success", 2)
+
+	State.AutoShovelPlantsThread = task_spawn(function()
+		while Persist.Config.EnableAutoShovelPlants and State.ScriptRunning do
+			local plot = PlotSystem.FindPlayerPlot()
+			if not plot then
+				task_wait(0.5)
+				continue
+			end
+
+			local plantsFolder = FindPlantsFolder(plot)
+			if not plantsFolder then
+				task_wait(0.5)
+				continue
+			end
+
+			shovelTool = GetShovelTool()
+			if not shovelTool then
+				NotificationSystem.Notify("Auto Farm", "Shovel unequipped!", "Warning", 3)
+				task_wait(2)
+				continue
+			end
+
+			for _, plant in ipairs(plantsFolder:GetChildren()) do
+				if not Persist.Config.EnableAutoShovelPlants or not State.ScriptRunning then
+					break
+				end
+
+				-- ONLY single plants (no fruits)
+				if IsTreePlant(plant) then
+					continue
 				end
 
 				local seedName = GetPlantSeedName(plant)
@@ -1863,42 +2002,28 @@ function AutoFarmSystem.StartShovel()
 				end
 
 				if hasSelection and not selected[seedName] then
-					DebugPrint("SHOVEL SKIP (not selected):", seedName)
+					DebugPrint("PLANT SHOVEL SKIP (not selected):", seedName)
 					continue
 				end
 
 				local plantId = GetPlantId(plant)
 				if not plantId then
-					DebugPrint("SHOVEL SKIP (no plantId):", seedName)
 					continue
 				end
 
-				-- Get fruitId (empty string for single plants like carrots/bamboo)
-				local fruitId = GetFruitId(plant)
+				DebugPrint("SHOVELING PLANT:", seedName, "| plantId=", plantId)
 
-				DebugPrint(
-					"SHOVELING:",
-					seedName,
-					"| plantId=",
-					plantId,
-					"| fruitId=",
-					fruitId == "" and "(empty)" or fruitId
-				)
-
-				-- REAL SIGNATURE from sniffer:
-				-- Fire(plantId, fruitId_or_empty, "Shovel", shovelToolInstance)
-				local ok, err = pcall(function()
+				-- Single plants use empty string for fruitId
+				local ok = pcall(function()
 					if typeof(UseShovelRemote) == "table" and UseShovelRemote.Fire then
-						UseShovelRemote:Fire(plantId, fruitId, "Shovel", shovelTool)
+						UseShovelRemote:Fire(plantId, "", "Shovel", shovelTool)
 					elseif typeof(UseShovelRemote) == "Instance" and UseShovelRemote:IsA("RemoteEvent") then
-						UseShovelRemote:FireServer(plantId, fruitId, "Shovel", shovelTool)
+						UseShovelRemote:FireServer(plantId, "", "Shovel", shovelTool)
 					end
 				end)
 
 				if ok then
-					DebugPrint("  -> Fire call succeeded")
-				else
-					DebugPrint("  -> Fire call failed:", err)
+					DebugPrint("  -> Plant shovel succeeded")
 				end
 
 				task_wait(0.2)
@@ -1907,17 +2032,17 @@ function AutoFarmSystem.StartShovel()
 			task_wait(0.5)
 		end
 
-		State.AutoShovelThread = nil
-		DebugPrint("Auto Shovel loop ended")
+		State.AutoShovelPlantsThread = nil
+		DebugPrint("Auto Shovel Plants loop ended")
 	end)
 
-	TrackThread(State.AutoShovelThread)
+	TrackThread(State.AutoShovelPlantsThread)
 end
 
-function AutoFarmSystem.StopShovel()
-	Persist.Config.EnableAutoShovel = false
-	State.AutoShovelThread = nil
-	NotificationSystem.Notify("Auto Farm", "Auto Shovel stopped", "Info", 2)
+function AutoFarmSystem.StopShovelPlants()
+	Persist.Config.EnableAutoShovelPlants = false
+	State.AutoShovelPlantsThread = nil
+	NotificationSystem.Notify("Auto Farm", "Auto Shovel Plants stopped", "Info", 2)
 end
 -- ═══════════════════════════════════════════════════════════════════════
 -- SECTION 15: CONFIGURATION SYSTEM
@@ -3737,13 +3862,73 @@ function Pages.Home()
 			end)
 		end))
 
-		local autoShovelCard =
-			UI.CreateCard(Instances.ContentScroll, "Auto Shovel Plants", "🥄", Color3.fromRGB(200, 100, 100))
-		TrackConnection(autoShovelCard.Activated:Connect(function()
-			DropdownSystem.Toggle(autoShovelCard, function(dropdownScroll)
+		local autoShovelTreesCard =
+			UI.CreateCard(Instances.ContentScroll, "Auto Shovel Trees", "🌳", Color3.fromRGB(200, 100, 100))
+		TrackConnection(autoShovelTreesCard.Activated:Connect(function()
+			DropdownSystem.Toggle(autoShovelTreesCard, function(dropdownScroll)
+				Persist.Config.SelectedShovelTrees = Persist.Config.SelectedShovelTrees or {}
+
+				UI.CreateLabel(dropdownScroll, "Auto Shovel Trees", Color3.fromRGB(200, 100, 100), 12)
+				local selectedLabel = UI.CreateLabel(dropdownScroll, "Selected: None", Theme.TextMuted, 10)
+				local function UpdateSelectedLabel()
+					selectedLabel.Text = Utils.FormatSelectedSeeds(Persist.Config.SelectedShovelTrees, 10)
+				end
+				UpdateSelectedLabel()
+
+				local selectBtn = UI.CreateButton(
+					dropdownScroll,
+					"Select Trees to Shovel...",
+					Theme.Card,
+					100,
+					30,
+					function()
+						local seedNames = {}
+						if SeedData then
+							for _, seed in ipairs(SeedData) do
+								if seed.SeedName then
+									table.insert(seedNames, seed.SeedName)
+								end
+							end
+						end
+						table.sort(seedNames)
+						if #seedNames == 0 then
+							NotificationSystem.Notify("Auto Shovel", "No seed data available!", "Error", 3)
+							return
+						end
+						SeedModalSystem.ShowItemSelection(
+							"Select Trees to Shovel",
+							seedNames,
+							Persist.Config.SelectedShovelTrees,
+							UpdateSelectedLabel
+						)
+					end
+				)
+				selectBtn.Size = UDim2.new(1, -8, 0, 30)
+
+				UI.CreateToggle(
+					dropdownScroll,
+					"Enable Auto Shovel Trees",
+					Persist.Config.EnableAutoShovelTrees,
+					function(state)
+						Persist.Config.EnableAutoShovelTrees = state
+						ConfigSystem.AutoSave()
+						if state then
+							AutoFarmSystem.StartShovelTrees()
+						else
+							AutoFarmSystem.StopShovelTrees()
+						end
+					end
+				)
+			end)
+		end))
+
+		local autoShovelPlantsCard =
+			UI.CreateCard(Instances.ContentScroll, "Auto Shovel Plants", "🥕", Color3.fromRGB(200, 120, 80))
+		TrackConnection(autoShovelPlantsCard.Activated:Connect(function()
+			DropdownSystem.Toggle(autoShovelPlantsCard, function(dropdownScroll)
 				Persist.Config.SelectedShovelPlants = Persist.Config.SelectedShovelPlants or {}
 
-				UI.CreateLabel(dropdownScroll, "Auto Shovel", Color3.fromRGB(200, 100, 100), 12)
+				UI.CreateLabel(dropdownScroll, "Auto Shovel Plants", Color3.fromRGB(200, 120, 80), 12)
 				local selectedLabel = UI.CreateLabel(dropdownScroll, "Selected: None", Theme.TextMuted, 10)
 				local function UpdateSelectedLabel()
 					selectedLabel.Text = Utils.FormatSelectedSeeds(Persist.Config.SelectedShovelPlants, 10)
@@ -3780,15 +3965,20 @@ function Pages.Home()
 				)
 				selectBtn.Size = UDim2.new(1, -8, 0, 30)
 
-				UI.CreateToggle(dropdownScroll, "Enable Auto Shovel", Persist.Config.EnableAutoShovel, function(state)
-					Persist.Config.EnableAutoShovel = state
-					ConfigSystem.AutoSave()
-					if state then
-						AutoFarmSystem.StartShovel()
-					else
-						AutoFarmSystem.StopShovel()
+				UI.CreateToggle(
+					dropdownScroll,
+					"Enable Auto Shovel Plants",
+					Persist.Config.EnableAutoShovelPlants,
+					function(state)
+						Persist.Config.EnableAutoShovelPlants = state
+						ConfigSystem.AutoSave()
+						if state then
+							AutoFarmSystem.StartShovelPlants()
+						else
+							AutoFarmSystem.StopShovelPlants()
+						end
 					end
-				end)
+				)
 			end)
 		end))
 	end)
@@ -4689,9 +4879,14 @@ local function Initialize()
 				AutoFarmSystem.StartCollect()
 			end)
 		end
-		if Persist.Config.EnableAutoShovel then
+		if Persist.Config.EnableAutoShovelTrees then
 			task_delay(2, function()
-				AutoFarmSystem.StartShovel()
+				AutoFarmSystem.StartShovelTrees()
+			end)
+		end
+		if Persist.Config.EnableAutoShovelPlants then
+			task_delay(2, function()
+				AutoFarmSystem.StartShovelPlants()
 			end)
 		end
 		if Persist.Config.ShowGridDots then
