@@ -1486,7 +1486,10 @@ function SeedPlacer.RunCycle()
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SECTION 14.5: AUTO FARM SYSTEM (Collect & Shovel) - PATCHED v4
+-- SECTION 14.5: AUTO FARM SYSTEM (Collect & Shovel) - FINAL v7
+-- Signature: CollectFruit(plantId, fruitId)
+--   - Tree fruits (Strawberry): fruitId = UUID from Fruits folder
+--   - Single-harvest (Carrot, Bamboo): fruitId = "" (empty string)
 -- ═══════════════════════════════════════════════════════════════════════
 
 local AutoFarmSystem = {}
@@ -1577,7 +1580,6 @@ local function IsPlantReady(plant)
 	if plant:GetAttribute("Mature") == true then
 		return true
 	end
-	-- Any plant with Age >= MaxAge is ready
 	local age = plant:GetAttribute("Age")
 	local maxAge = plant:GetAttribute("MaxAge")
 	if age and maxAge and age >= maxAge then
@@ -1586,50 +1588,31 @@ local function IsPlantReady(plant)
 	return false
 end
 
--- ─── CRITICAL FIX: Get Fruit ID with fallback ──────────────────────────
+-- ─── CRITICAL: Get Fruit ID ────────────────────────────────────────────
+-- Returns: fruitId (string), isTreeFruit (boolean)
 
 local function GetFruitId(plant)
 	if not plant then
-		return nil
+		return "", false
 	end
 
-	-- 1. Try Fruits folder children
+	-- Tree fruits: Fruits folder with children (Strawberry)
 	local fruits = plant:FindFirstChild("Fruits")
-	if fruits then
+	if fruits and #fruits:GetChildren() > 0 then
 		for _, fruit in ipairs(fruits:GetChildren()) do
 			local fid = fruit:GetAttribute("FruitId")
 				or fruit:GetAttribute("Id")
 				or fruit:GetAttribute("ID")
 				or fruit.Name
-			if fid then
-				return tostring(fid)
+			if fid and #tostring(fid) > 0 then
+				return tostring(fid), true
 			end
 		end
 	end
 
-	-- 2. Try FruitSpawnLocations children
-	local fruitSpawns = plant:FindFirstChild("FruitSpawnLocations")
-	if fruitSpawns then
-		for _, fruit in ipairs(fruitSpawns:GetChildren()) do
-			local fid = fruit:GetAttribute("FruitId")
-				or fruit:GetAttribute("Id")
-				or fruit:GetAttribute("ID")
-				or fruit.Name
-			if fid then
-				return tostring(fid)
-			end
-		end
-	end
-
-	-- 3. CRITICAL: Fallback to PlantId for plants with empty fruit folders
-	-- Carrot and Bamboo have PlantGrowthReady=true but empty Fruits folders
-	local plantId = GetPlantId(plant)
-	if plantId then
-		DebugPrint("Using PlantId as FruitId fallback:", plantId)
-		return plantId
-	end
-
-	return nil
+	-- Single-harvest plants (Carrot, Bamboo): return empty string
+	-- The game expects: CollectFruit(plantId, "")
+	return "", false
 end
 
 local function SafeFireRemote(remote, ...)
@@ -1679,19 +1662,19 @@ function AutoFarmSystem.ScanPlotData()
 
 		plantMap[seedName] = { PlantId = plantId, Instance = plant }
 
-		local fruitId = GetFruitId(plant)
-		if fruitId then
-			local ready = IsPlantReady(plant)
-			if not fruitMap[seedName] then
-				fruitMap[seedName] = {}
-			end
-			table_insert(fruitMap[seedName], {
-				FruitId = fruitId,
-				PlantId = plantId,
-				Instance = plant,
-				Ready = ready,
-			})
+		local fruitId, isTree = GetFruitId(plant)
+		local ready = IsPlantReady(plant)
+
+		if not fruitMap[seedName] then
+			fruitMap[seedName] = {}
 		end
+		table_insert(fruitMap[seedName], {
+			FruitId = fruitId,
+			PlantId = plantId,
+			Instance = plant,
+			Ready = ready,
+			IsTreeFruit = isTree,
+		})
 	end
 
 	Cache.PlantIdBySeedName = plantMap
@@ -1769,27 +1752,29 @@ function AutoFarmSystem.StartCollect()
 						end
 
 						local plantId = GetPlantId(plant)
-						local fruitId = GetFruitId(plant)
+						local fruitId, isTree = GetFruitId(plant)
 
-						-- CRITICAL: If no fruitId, use plantId as fallback
-						if not fruitId then
-							fruitId = plantId
-							DebugPrint("Fallback: Using PlantId as FruitId for", seedName)
-						end
+						-- CORRECT SIGNATURE for ALL plants:
+						-- Tree fruits: CollectFruit(plantId, fruitUUID)
+						-- Single-harvest: CollectFruit(plantId, "")
+						DebugPrint(
+							"COLLECTING:",
+							seedName,
+							"| tree=",
+							isTree,
+							"| plantId=",
+							plantId,
+							"| fruitId=",
+							fruitId == "" and "(empty)" or fruitId
+						)
 
-						DebugPrint("COLLECTING:", seedName, "| plantId=", plantId, "| fruitId=", fruitId)
-
-						-- Try signatures
 						local ok = SafeFireRemote(CollectFruitRemote, plantId, fruitId)
-						if not ok then
-							ok = SafeFireRemote(CollectFruitRemote, plantId)
-						end
 						if ok then
 							DebugPrint("  -> SUCCESS")
 						else
 							DebugPrint("  -> FAILED")
 						end
-						task_wait(0.12)
+						task_wait(0.15)
 					end
 				end
 			end
@@ -1859,7 +1844,7 @@ function AutoFarmSystem.StartShovel()
 						else
 							DebugPrint("  -> FAILED")
 						end
-						task_wait(0.12)
+						task_wait(0.15)
 					end
 				end
 			end
