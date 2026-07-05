@@ -1486,11 +1486,11 @@ function SeedPlacer.RunCycle()
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SECTION 14.5: AUTO FARM SYSTEM (Collect & Shovel) - FIXED v2
+-- SECTION 14.5: AUTO FARM SYSTEM (Collect & Shovel) - PATCHED v4
 -- ═══════════════════════════════════════════════════════════════════════
 
 local AutoFarmSystem = {}
-AutoFarmSystem.DEBUG = true -- Set to false after confirming it works
+AutoFarmSystem.DEBUG = true
 
 local function DebugPrint(...)
 	if AutoFarmSystem.DEBUG then
@@ -1498,7 +1498,7 @@ local function DebugPrint(...)
 	end
 end
 
--- ─── Robust Helpers ───────────────────────────────────────────────────
+-- ─── Helpers ───────────────────────────────────────────────────────────
 
 local function FindPlantsFolder(plot)
 	if not plot then
@@ -1522,7 +1522,6 @@ local function GetPlantSeedName(plant)
 	if not plant then
 		return nil
 	end
-	-- 1. Attributes (correctly using pairs)
 	local attrNames = { "SeedName", "Seed", "seedName", "CropName", "Crop", "PlantType", "Type" }
 	for _, name in ipairs(attrNames) do
 		local val = plant:GetAttribute(name)
@@ -1530,23 +1529,12 @@ local function GetPlantSeedName(plant)
 			return val
 		end
 	end
-	-- 2. StringValue children
 	for _, name in ipairs(attrNames) do
 		local obj = plant:FindFirstChild(name)
 		if obj and obj:IsA("StringValue") and obj.Value and #obj.Value > 0 then
 			return obj.Value
 		end
 	end
-	-- 3. Infer from Fruits folder (e.g., Fruits/Carrot -> "Carrot")
-	local fruitsFolder = plant:FindFirstChild("Fruits")
-	if fruitsFolder then
-		for _, fruit in ipairs(fruitsFolder:GetChildren()) do
-			if fruit.Name and #fruit.Name > 0 then
-				return fruit.Name
-			end
-		end
-	end
-	-- 4. Fallback
 	return plant.Name
 end
 
@@ -1554,7 +1542,7 @@ local function GetPlantId(plant)
 	if not plant then
 		return nil
 	end
-	local attrNames = { "Id", "PlantId", "GUID", "ID", "PlantID", "UniqueId", "uniqueId" }
+	local attrNames = { "PlantId", "Id", "GUID", "ID", "PlantID", "UniqueId", "uniqueId" }
 	for _, name in ipairs(attrNames) do
 		local val = plant:GetAttribute(name)
 		if val then
@@ -1567,7 +1555,6 @@ local function GetPlantId(plant)
 			return tostring(obj.Value)
 		end
 	end
-	-- GUID name is likely the actual server ID
 	return plant.Name
 end
 
@@ -1575,7 +1562,6 @@ local function IsPlantReady(plant)
 	if not plant then
 		return false
 	end
-	-- Attribute methods
 	if plant:GetAttribute("PlantGrowthReady") == true then
 		return true
 	end
@@ -1591,55 +1577,59 @@ local function IsPlantReady(plant)
 	if plant:GetAttribute("Mature") == true then
 		return true
 	end
-	if plant:GetAttribute("GrowthStage") then
-		local stage = plant:GetAttribute("GrowthStage")
-		if stage == "Ready" or stage == "Mature" or stage == "Grown" or stage == 3 then
-			return true
-		end
-	end
-	-- Physical fruit methods (your game likely uses these)
-	local fruitsFolder = plant:FindFirstChild("Fruits")
-	if fruitsFolder and #fruitsFolder:GetChildren() > 0 then
+	-- Any plant with Age >= MaxAge is ready
+	local age = plant:GetAttribute("Age")
+	local maxAge = plant:GetAttribute("MaxAge")
+	if age and maxAge and age >= maxAge then
 		return true
-	end
-	local fruitSpawns = plant:FindFirstChild("FruitSpawnLocations")
-	if fruitSpawns and #fruitSpawns:GetChildren() > 0 then
-		return true
-	end
-	-- Any visible fruit part
-	for _, desc in ipairs(plant:GetDescendants()) do
-		if desc:IsA("BasePart") and desc.Transparency < 1 then
-			local parent = desc.Parent
-			if parent and (parent.Name == "Fruits" or desc.Name:lower():find("fruit")) then
-				return true
-			end
-		end
 	end
 	return false
 end
 
-local function FindFruitInPlant(plant)
+-- ─── CRITICAL FIX: Get Fruit ID with fallback ──────────────────────────
+
+local function GetFruitId(plant)
 	if not plant then
-		return nil, nil
+		return nil
 	end
-	local fruitsFolder = plant:FindFirstChild("Fruits")
-	if fruitsFolder then
-		for _, fruit in ipairs(fruitsFolder:GetChildren()) do
+
+	-- 1. Try Fruits folder children
+	local fruits = plant:FindFirstChild("Fruits")
+	if fruits then
+		for _, fruit in ipairs(fruits:GetChildren()) do
 			local fid = fruit:GetAttribute("FruitId")
 				or fruit:GetAttribute("Id")
 				or fruit:GetAttribute("ID")
 				or fruit.Name
-			return tostring(fid), fruit
+			if fid then
+				return tostring(fid)
+			end
 		end
 	end
-	-- Fallback
-	for _, desc in ipairs(plant:GetDescendants()) do
-		if desc.Name:lower():find("fruit") and desc ~= fruitsFolder then
-			local fid = desc:GetAttribute("FruitId") or desc:GetAttribute("Id") or desc.Name
-			return tostring(fid), desc
+
+	-- 2. Try FruitSpawnLocations children
+	local fruitSpawns = plant:FindFirstChild("FruitSpawnLocations")
+	if fruitSpawns then
+		for _, fruit in ipairs(fruitSpawns:GetChildren()) do
+			local fid = fruit:GetAttribute("FruitId")
+				or fruit:GetAttribute("Id")
+				or fruit:GetAttribute("ID")
+				or fruit.Name
+			if fid then
+				return tostring(fid)
+			end
 		end
 	end
-	return nil, nil
+
+	-- 3. CRITICAL: Fallback to PlantId for plants with empty fruit folders
+	-- Carrot and Bamboo have PlantGrowthReady=true but empty Fruits folders
+	local plantId = GetPlantId(plant)
+	if plantId then
+		DebugPrint("Using PlantId as FruitId fallback:", plantId)
+		return plantId
+	end
+
+	return nil
 end
 
 local function SafeFireRemote(remote, ...)
@@ -1670,12 +1660,10 @@ end
 function AutoFarmSystem.ScanPlotData()
 	local plot = PlotSystem.FindPlayerPlot()
 	if not plot then
-		DebugPrint("No plot found")
 		return {}, {}
 	end
 	local plantsFolder = FindPlantsFolder(plot)
 	if not plantsFolder then
-		DebugPrint("No Plants folder")
 		return {}, {}
 	end
 
@@ -1686,13 +1674,12 @@ function AutoFarmSystem.ScanPlotData()
 		local seedName = GetPlantSeedName(plant)
 		local plantId = GetPlantId(plant)
 		if not plantId then
-			DebugPrint("Skipping plant", plant.Name, "- no ID")
 			continue
 		end
 
 		plantMap[seedName] = { PlantId = plantId, Instance = plant }
 
-		local fruitId, fruitObj = FindFruitInPlant(plant)
+		local fruitId = GetFruitId(plant)
 		if fruitId then
 			local ready = IsPlantReady(plant)
 			if not fruitMap[seedName] then
@@ -1701,7 +1688,7 @@ function AutoFarmSystem.ScanPlotData()
 			table_insert(fruitMap[seedName], {
 				FruitId = fruitId,
 				PlantId = plantId,
-				Instance = fruitObj,
+				Instance = plant,
 				Ready = ready,
 			})
 		end
@@ -1709,7 +1696,6 @@ function AutoFarmSystem.ScanPlotData()
 
 	Cache.PlantIdBySeedName = plantMap
 	Cache.FruitIdBySeedName = fruitMap
-	DebugPrint("Scan complete. Plants:", #plantsFolder:GetChildren(), "Fruit types:", #fruitMap)
 	return plantMap, fruitMap
 end
 
@@ -1745,7 +1731,6 @@ end
 
 function AutoFarmSystem.StartCollect()
 	if State.AutoCollectThread then
-		DebugPrint("Already running")
 		return
 	end
 	if not CollectFruitRemote then
@@ -1768,8 +1753,7 @@ function AutoFarmSystem.StartCollect()
 						end
 
 						local seedName = GetPlantSeedName(plant)
-						-- If selection is empty or seed is selected
-						local selected = Persist.Config.SelectedPlaceSeeds
+						local selected = Persist.Config.SelectedCollectFruits
 						local hasSelection = false
 						for _, _ in pairs(selected) do
 							hasSelection = true
@@ -1785,20 +1769,25 @@ function AutoFarmSystem.StartCollect()
 						end
 
 						local plantId = GetPlantId(plant)
-						local fruitId, _ = FindFruitInPlant(plant)
+						local fruitId = GetFruitId(plant)
+
+						-- CRITICAL: If no fruitId, use plantId as fallback
 						if not fruitId then
-							fruitId = plantId -- fallback
+							fruitId = plantId
+							DebugPrint("Fallback: Using PlantId as FruitId for", seedName)
 						end
 
-						DebugPrint("Collecting:", seedName, "plantId=", plantId, "fruitId=", fruitId)
+						DebugPrint("COLLECTING:", seedName, "| plantId=", plantId, "| fruitId=", fruitId)
 
-						-- Try signatures: (plantId, fruitId) then (plantId)
+						-- Try signatures
 						local ok = SafeFireRemote(CollectFruitRemote, plantId, fruitId)
 						if not ok then
 							ok = SafeFireRemote(CollectFruitRemote, plantId)
 						end
 						if ok then
-							DebugPrint("  -> Success")
+							DebugPrint("  -> SUCCESS")
+						else
+							DebugPrint("  -> FAILED")
 						end
 						task_wait(0.12)
 					end
@@ -1807,7 +1796,6 @@ function AutoFarmSystem.StartCollect()
 			task_wait(0.4)
 		end
 		State.AutoCollectThread = nil
-		DebugPrint("Auto Collect loop ended")
 	end)
 
 	TrackThread(State.AutoCollectThread)
@@ -1823,7 +1811,6 @@ end
 
 function AutoFarmSystem.StartShovel()
 	if State.AutoShovelThread then
-		DebugPrint("Already running")
 		return
 	end
 	if not UseShovelRemote then
@@ -1846,7 +1833,7 @@ function AutoFarmSystem.StartShovel()
 						end
 
 						local seedName = GetPlantSeedName(plant)
-						local selected = Persist.Config.SelectedPlaceSeeds
+						local selected = Persist.Config.SelectedShovelPlants
 						local hasSelection = false
 						for _, _ in pairs(selected) do
 							hasSelection = true
@@ -1858,9 +1845,8 @@ function AutoFarmSystem.StartShovel()
 						end
 
 						local plantId = GetPlantId(plant)
-						DebugPrint("Shoveling:", seedName, "plantId=", plantId)
+						DebugPrint("SHOVELING:", seedName, "| plantId=", plantId)
 
-						-- Try multiple signatures
 						local ok = SafeFireRemote(UseShovelRemote, "Dig", plantId, "", nil)
 						if not ok then
 							ok = SafeFireRemote(UseShovelRemote, "Dig", plantId)
@@ -1869,7 +1855,9 @@ function AutoFarmSystem.StartShovel()
 							ok = SafeFireRemote(UseShovelRemote, plantId)
 						end
 						if ok then
-							DebugPrint("  -> Success")
+							DebugPrint("  -> SUCCESS")
+						else
+							DebugPrint("  -> FAILED")
 						end
 						task_wait(0.12)
 					end
@@ -1878,7 +1866,6 @@ function AutoFarmSystem.StartShovel()
 			task_wait(0.4)
 		end
 		State.AutoShovelThread = nil
-		DebugPrint("Auto Shovel loop ended")
 	end)
 
 	TrackThread(State.AutoShovelThread)
@@ -2182,7 +2169,7 @@ function UI.CreateCard(parent, title, icon, iconColor)
 	return card
 end
 
--- ─── Interactive Components ────────────────────────────────────────────
+-- ─── Interactive Components ────────────────────────���───────────────────
 
 function UI.CreateToggle(parent, text, defaultState, callback)
 	local container = UI.Create("Frame", {
@@ -3656,59 +3643,44 @@ function Pages.Home()
 		local autoCollectCard = UI.CreateCard(Instances.ContentScroll, "Auto Collect Fruits", "🍎", Theme.Accent)
 		TrackConnection(autoCollectCard.Activated:Connect(function()
 			DropdownSystem.Toggle(autoCollectCard, function(dropdownScroll)
-				UI.CreateLabel(dropdownScroll, "Auto Collect", Theme.Accent, 12)
+				Persist.Config.SelectedCollectFruits = Persist.Config.SelectedCollectFruits or {}
 
+				UI.CreateLabel(dropdownScroll, "Auto Collect", Theme.Accent, 12)
 				local selectedLabel = UI.CreateLabel(dropdownScroll, "Selected: None", Theme.TextMuted, 10)
 				local function UpdateSelectedLabel()
-					selectedLabel.Text = Utils.FormatSelectedSeeds(Persist.Config.SelectedPlaceSeeds, 10)
+					selectedLabel.Text = Utils.FormatSelectedSeeds(Persist.Config.SelectedCollectFruits, 10)
 				end
 				UpdateSelectedLabel()
 
-				local selectSeedsBtn = UI.CreateButton(
+				local selectBtn = UI.CreateButton(
 					dropdownScroll,
-					"Select Seeds...",
+					"Select Fruits to Collect...",
 					Theme.Card,
 					100,
 					30,
 					function()
-						SeedModalSystem.Show("Select Seeds", Persist.Config.SelectedPlaceSeeds, UpdateSelectedLabel)
-					end
-				)
-				selectSeedsBtn.Size = UDim2.new(1, -8, 0, 30)
-
-				local actionFrame = UI.Create("Frame", {
-					Parent = dropdownScroll,
-					BackgroundTransparency = 1,
-					Size = UDim2.new(1, -8, 0, 30),
-				})
-
-				local selectAllBtn = UI.CreateButton(actionFrame, "Select All", Theme.Accent, 100, 30, function()
-					if SeedData then
-						for _, seed in ipairs(SeedData) do
-							if seed.SeedName then
-								Persist.Config.SelectedPlaceSeeds[seed.SeedName] = true
+						local seedNames = {}
+						if SeedData then
+							for _, seed in ipairs(SeedData) do
+								if seed.SeedName then
+									table.insert(seedNames, seed.SeedName)
+								end
 							end
 						end
-					end
-					ConfigSystem.AutoSave()
-					UpdateSelectedLabel()
-				end)
-				selectAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
-
-				local clearAllBtn = UI.CreateButton(
-					actionFrame,
-					"Clear All",
-					Color3.fromRGB(185, 65, 65),
-					100,
-					30,
-					function()
-						table_clear(Persist.Config.SelectedPlaceSeeds)
-						ConfigSystem.AutoSave()
-						UpdateSelectedLabel()
+						table.sort(seedNames)
+						if #seedNames == 0 then
+							NotificationSystem.Notify("Auto Collect", "No seed data available!", "Error", 3)
+							return
+						end
+						SeedModalSystem.ShowItemSelection(
+							"Select Fruits to Collect",
+							seedNames,
+							Persist.Config.SelectedCollectFruits,
+							UpdateSelectedLabel
+						)
 					end
 				)
-				clearAllBtn.Position = UDim2.new(0.5, 3, 0, 0)
-				clearAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
+				selectBtn.Size = UDim2.new(1, -8, 0, 30)
 
 				UI.CreateToggle(dropdownScroll, "Enable Auto Collect", Persist.Config.EnableAutoCollect, function(state)
 					Persist.Config.EnableAutoCollect = state
@@ -3726,59 +3698,44 @@ function Pages.Home()
 			UI.CreateCard(Instances.ContentScroll, "Auto Shovel Plants", "🥄", Color3.fromRGB(200, 100, 100))
 		TrackConnection(autoShovelCard.Activated:Connect(function()
 			DropdownSystem.Toggle(autoShovelCard, function(dropdownScroll)
-				UI.CreateLabel(dropdownScroll, "Auto Shovel", Color3.fromRGB(200, 100, 100), 12)
+				Persist.Config.SelectedShovelPlants = Persist.Config.SelectedShovelPlants or {}
 
+				UI.CreateLabel(dropdownScroll, "Auto Shovel", Color3.fromRGB(200, 100, 100), 12)
 				local selectedLabel = UI.CreateLabel(dropdownScroll, "Selected: None", Theme.TextMuted, 10)
 				local function UpdateSelectedLabel()
-					selectedLabel.Text = Utils.FormatSelectedSeeds(Persist.Config.SelectedPlaceSeeds, 10)
+					selectedLabel.Text = Utils.FormatSelectedSeeds(Persist.Config.SelectedShovelPlants, 10)
 				end
 				UpdateSelectedLabel()
 
-				local selectSeedsBtn = UI.CreateButton(
+				local selectBtn = UI.CreateButton(
 					dropdownScroll,
-					"Select Seeds...",
+					"Select Plants to Shovel...",
 					Theme.Card,
 					100,
 					30,
 					function()
-						SeedModalSystem.Show("Select Seeds", Persist.Config.SelectedPlaceSeeds, UpdateSelectedLabel)
-					end
-				)
-				selectSeedsBtn.Size = UDim2.new(1, -8, 0, 30)
-
-				local actionFrame = UI.Create("Frame", {
-					Parent = dropdownScroll,
-					BackgroundTransparency = 1,
-					Size = UDim2.new(1, -8, 0, 30),
-				})
-
-				local selectAllBtn = UI.CreateButton(actionFrame, "Select All", Theme.Accent, 100, 30, function()
-					if SeedData then
-						for _, seed in ipairs(SeedData) do
-							if seed.SeedName then
-								Persist.Config.SelectedPlaceSeeds[seed.SeedName] = true
+						local seedNames = {}
+						if SeedData then
+							for _, seed in ipairs(SeedData) do
+								if seed.SeedName then
+									table.insert(seedNames, seed.SeedName)
+								end
 							end
 						end
-					end
-					ConfigSystem.AutoSave()
-					UpdateSelectedLabel()
-				end)
-				selectAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
-
-				local clearAllBtn = UI.CreateButton(
-					actionFrame,
-					"Clear All",
-					Color3.fromRGB(185, 65, 65),
-					100,
-					30,
-					function()
-						table_clear(Persist.Config.SelectedPlaceSeeds)
-						ConfigSystem.AutoSave()
-						UpdateSelectedLabel()
+						table.sort(seedNames)
+						if #seedNames == 0 then
+							NotificationSystem.Notify("Auto Shovel", "No seed data available!", "Error", 3)
+							return
+						end
+						SeedModalSystem.ShowItemSelection(
+							"Select Plants to Shovel",
+							seedNames,
+							Persist.Config.SelectedShovelPlants,
+							UpdateSelectedLabel
+						)
 					end
 				)
-				clearAllBtn.Position = UDim2.new(0.5, 3, 0, 0)
-				clearAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
+				selectBtn.Size = UDim2.new(1, -8, 0, 30)
 
 				UI.CreateToggle(dropdownScroll, "Enable Auto Shovel", Persist.Config.EnableAutoShovel, function(state)
 					Persist.Config.EnableAutoShovel = state
