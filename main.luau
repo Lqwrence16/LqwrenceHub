@@ -341,6 +341,7 @@ local function RefreshGridDots()
 		dot.Parent = folder
 		dot.Transparency = 0.2
 
+		
 		table.insert(GridDots, dot)
 	end
 
