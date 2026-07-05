@@ -192,8 +192,6 @@ local ConfigSchema = {
 	PlantSpacing = { type = "number", min = 0.1, max = 10, default = CONSTANTS.DEFAULT_PLANT_SPACING },
 	PlantDelay = { type = "number", min = 0, max = 5, default = CONSTANTS.DEFAULT_PLANT_DELAY },
 	SelectedCollectFruits = { type = "table", default = {} },
-	EnableAutoCollect = { type = "boolean", default = false },
-	SelectedShovelPlants = { type = "table", default = {} },
 	EnableAutoShovel = { type = "boolean", default = false },
 	ShowGridDots = { type = "boolean", default = false },
 	ReduceEffects = { type = "boolean", default = false },
@@ -1771,7 +1769,7 @@ function AutoFarmSystem.StartCollect()
 
 						local seedName = GetPlantSeedName(plant)
 						-- If selection is empty or seed is selected
-						local selected = Persist.Config.SelectedCollectFruits
+						local selected = Persist.Config.SelectedPlaceSeeds
 						local hasSelection = false
 						for _, _ in pairs(selected) do
 							hasSelection = true
@@ -1848,7 +1846,7 @@ function AutoFarmSystem.StartShovel()
 						end
 
 						local seedName = GetPlantSeedName(plant)
-						local selected = Persist.Config.SelectedShovelPlants
+						local selected = Persist.Config.SelectedPlaceSeeds
 						local hasSelection = false
 						for _, _ in pairs(selected) do
 							hasSelection = true
@@ -3658,41 +3656,59 @@ function Pages.Home()
 		local autoCollectCard = UI.CreateCard(Instances.ContentScroll, "Auto Collect Fruits", "🍎", Theme.Accent)
 		TrackConnection(autoCollectCard.Activated:Connect(function()
 			DropdownSystem.Toggle(autoCollectCard, function(dropdownScroll)
-				Persist.Config.SelectedCollectFruits = Persist.Config.SelectedCollectFruits or {}
-
 				UI.CreateLabel(dropdownScroll, "Auto Collect", Theme.Accent, 12)
+
 				local selectedLabel = UI.CreateLabel(dropdownScroll, "Selected: None", Theme.TextMuted, 10)
 				local function UpdateSelectedLabel()
-					selectedLabel.Text = Utils.FormatSelectedSeeds(Persist.Config.SelectedCollectFruits, 10)
+					selectedLabel.Text = Utils.FormatSelectedSeeds(Persist.Config.SelectedPlaceSeeds, 10)
 				end
 				UpdateSelectedLabel()
 
-				local selectBtn = UI.CreateButton(
+				local selectSeedsBtn = UI.CreateButton(
 					dropdownScroll,
-					"Select Fruits to Collect...",
+					"Select Seeds...",
 					Theme.Card,
 					100,
 					30,
 					function()
-						local available = AutoFarmSystem.GetAvailableCollectNames()
-						if #available == 0 then
-							NotificationSystem.Notify(
-								"Auto Collect",
-								"No ready fruits found! Plant and wait for growth.",
-								"Warning",
-								3
-							)
-							return
-						end
-						SeedModalSystem.ShowItemSelection(
-							"Select Fruits to Collect",
-							available,
-							Persist.Config.SelectedCollectFruits,
-							UpdateSelectedLabel
-						)
+						SeedModalSystem.Show("Select Seeds", Persist.Config.SelectedPlaceSeeds, UpdateSelectedLabel)
 					end
 				)
-				selectBtn.Size = UDim2.new(1, -8, 0, 30)
+				selectSeedsBtn.Size = UDim2.new(1, -8, 0, 30)
+
+				local actionFrame = UI.Create("Frame", {
+					Parent = dropdownScroll,
+					BackgroundTransparency = 1,
+					Size = UDim2.new(1, -8, 0, 30),
+				})
+
+				local selectAllBtn = UI.CreateButton(actionFrame, "Select All", Theme.Accent, 100, 30, function()
+					if SeedData then
+						for _, seed in ipairs(SeedData) do
+							if seed.SeedName then
+								Persist.Config.SelectedPlaceSeeds[seed.SeedName] = true
+							end
+						end
+					end
+					ConfigSystem.AutoSave()
+					UpdateSelectedLabel()
+				end)
+				selectAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
+
+				local clearAllBtn = UI.CreateButton(
+					actionFrame,
+					"Clear All",
+					Color3.fromRGB(185, 65, 65),
+					100,
+					30,
+					function()
+						table_clear(Persist.Config.SelectedPlaceSeeds)
+						ConfigSystem.AutoSave()
+						UpdateSelectedLabel()
+					end
+				)
+				clearAllBtn.Position = UDim2.new(0.5, 3, 0, 0)
+				clearAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
 
 				UI.CreateToggle(dropdownScroll, "Enable Auto Collect", Persist.Config.EnableAutoCollect, function(state)
 					Persist.Config.EnableAutoCollect = state
@@ -3710,36 +3726,59 @@ function Pages.Home()
 			UI.CreateCard(Instances.ContentScroll, "Auto Shovel Plants", "🥄", Color3.fromRGB(200, 100, 100))
 		TrackConnection(autoShovelCard.Activated:Connect(function()
 			DropdownSystem.Toggle(autoShovelCard, function(dropdownScroll)
-				Persist.Config.SelectedShovelPlants = Persist.Config.SelectedShovelPlants or {}
-
 				UI.CreateLabel(dropdownScroll, "Auto Shovel", Color3.fromRGB(200, 100, 100), 12)
+
 				local selectedLabel = UI.CreateLabel(dropdownScroll, "Selected: None", Theme.TextMuted, 10)
 				local function UpdateSelectedLabel()
-					selectedLabel.Text = Utils.FormatSelectedSeeds(Persist.Config.SelectedShovelPlants, 10)
+					selectedLabel.Text = Utils.FormatSelectedSeeds(Persist.Config.SelectedPlaceSeeds, 10)
 				end
 				UpdateSelectedLabel()
 
-				local selectBtn = UI.CreateButton(
+				local selectSeedsBtn = UI.CreateButton(
 					dropdownScroll,
-					"Select Plants to Shovel...",
+					"Select Seeds...",
 					Theme.Card,
 					100,
 					30,
 					function()
-						local available = AutoFarmSystem.GetAvailableShovelNames()
-						if #available == 0 then
-							NotificationSystem.Notify("Auto Shovel", "No plants found in your plot!", "Warning", 3)
-							return
-						end
-						SeedModalSystem.ShowItemSelection(
-							"Select Plants to Shovel",
-							available,
-							Persist.Config.SelectedShovelPlants,
-							UpdateSelectedLabel
-						)
+						SeedModalSystem.Show("Select Seeds", Persist.Config.SelectedPlaceSeeds, UpdateSelectedLabel)
 					end
 				)
-				selectBtn.Size = UDim2.new(1, -8, 0, 30)
+				selectSeedsBtn.Size = UDim2.new(1, -8, 0, 30)
+
+				local actionFrame = UI.Create("Frame", {
+					Parent = dropdownScroll,
+					BackgroundTransparency = 1,
+					Size = UDim2.new(1, -8, 0, 30),
+				})
+
+				local selectAllBtn = UI.CreateButton(actionFrame, "Select All", Theme.Accent, 100, 30, function()
+					if SeedData then
+						for _, seed in ipairs(SeedData) do
+							if seed.SeedName then
+								Persist.Config.SelectedPlaceSeeds[seed.SeedName] = true
+							end
+						end
+					end
+					ConfigSystem.AutoSave()
+					UpdateSelectedLabel()
+				end)
+				selectAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
+
+				local clearAllBtn = UI.CreateButton(
+					actionFrame,
+					"Clear All",
+					Color3.fromRGB(185, 65, 65),
+					100,
+					30,
+					function()
+						table_clear(Persist.Config.SelectedPlaceSeeds)
+						ConfigSystem.AutoSave()
+						UpdateSelectedLabel()
+					end
+				)
+				clearAllBtn.Position = UDim2.new(0.5, 3, 0, 0)
+				clearAllBtn.Size = UDim2.new(0.5, -3, 1, 0)
 
 				UI.CreateToggle(dropdownScroll, "Enable Auto Shovel", Persist.Config.EnableAutoShovel, function(state)
 					Persist.Config.EnableAutoShovel = state
