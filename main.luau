@@ -1,6 +1,6 @@
 -- ═══════════════════════════════════════════════════════════════════════
---  LRX_Hub v2.2.2
---  Fixed: Scroll, Modal height, Loop errors, Grid Dots toggle
+--  LRX_Hub v2.2.3
+--  Fixed: Grid Dots scope error, persistent toggle, scroll, modal height
 -- ═══════════════════════════════════════════════════════════════════════
 
 --══════════════════════════════════════════════════════--
@@ -175,7 +175,6 @@ local function LaserScanPlot(plot, scanDuration)
 
 	scanDuration = scanDuration or 1.5
 
-	-- Find bounds
 	local minY = math.huge
 	local allCorners = {}
 	for _, part in ipairs(parts) do
@@ -195,7 +194,6 @@ local function LaserScanPlot(plot, scanDuration)
 	end
 	center = center / #allCorners
 
-	-- Create sweeping horizontal lasers
 	local sweepCount = 6
 	local sweepHeight = minY + 2
 	local minX, maxX = math.huge, -math.huge
@@ -218,7 +216,6 @@ local function LaserScanPlot(plot, scanDuration)
 			local endPos = Vector3.new(maxX, sweepHeight, z)
 			CreateLaserBeam(startPos, endPos, Color3.fromRGB(0, 255, 255), 0.4)
 
-			-- Cross sweep
 			local x = minX + (maxX - minX) * t
 			local startPos2 = Vector3.new(x, sweepHeight + 0.5, minZ)
 			local endPos2 = Vector3.new(x, sweepHeight + 0.5, maxZ)
@@ -226,7 +223,6 @@ local function LaserScanPlot(plot, scanDuration)
 		end)
 	end
 
-	-- Corner-to-corner diagonal sweeps
 	task.delay(0.1, function()
 		CreateLaserBeam(
 			Vector3.new(minX, sweepHeight, minZ),
@@ -242,7 +238,6 @@ local function LaserScanPlot(plot, scanDuration)
 		)
 	end)
 
-	-- Perimeter outline
 	task.delay(scanDuration * 0.5, function()
 		local h = sweepHeight
 		local corners = {
@@ -259,93 +254,6 @@ local function LaserScanPlot(plot, scanDuration)
 	end)
 
 	task.delay(scanDuration + 0.5, ClearLasers)
-end
-
---══════════════════════════════════════════════════════--
--- GRID DOTS VISUAL
---══════════════════════════════════════════════════════--
-local GridDots = {}
-local DotsFolder = nil
-
-local function EnsureDotsFolder()
-	if not DotsFolder or not DotsFolder.Parent then
-		DotsFolder = Instance.new("Folder")
-		DotsFolder.Name = "LRX_GridDots"
-		DotsFolder.Parent = workspace
-	end
-	return DotsFolder
-end
-
-local function ClearGridDots()
-	for _, dot in ipairs(GridDots) do
-		if dot then
-			pcall(function()
-				dot:Destroy()
-			end)
-		end
-	end
-	table.clear(GridDots)
-end
-
-local function ClearAllVisuals()
-	ClearLasers()
-	ClearGridDots()
-end
-
--- Grid dot colors to match the image (green/yellow alternating)
-local GridDotColors = {
-	Color3.fromRGB(50, 205, 50), -- Green
-	Color3.fromRGB(255, 215, 0), -- Yellow
-	Color3.fromRGB(0, 255, 127), -- Spring Green
-	Color3.fromRGB(255, 165, 0), -- Orange
-}
-
-local function RefreshGridDots()
-	ClearGridDots()
-	if not Config.ShowGridDots then
-		return
-	end
-
-	local plot = SeedPlacer:FindPlayerPlot()
-	if not plot then
-		return
-	end
-
-	-- Ensure positions are generated
-	SeedPlacer:ClearCache()
-	local positions = SeedPlacer:GetPlantPositions()
-	if not positions or #positions == 0 then
-		return
-	end
-
-	local folder = EnsureDotsFolder()
-	local maxDots = math.min(#positions, 800)
-	local step = math.max(1, math.floor(#positions / maxDots))
-
-	for i = 1, #positions, step do
-		local posData = positions[i]
-		local dot = Instance.new("Part")
-		dot.Name = "GridDot"
-		dot.Anchored = true
-		dot.CanCollide = false
-		dot.CanQuery = false
-		dot.CanTouch = false
-		dot.CastShadow = false
-		dot.Material = Enum.Material.Neon
-		-- Alternate colors for visual variety like the image
-		dot.Color = GridDotColors[((i - 1) % #GridDotColors) + 1]
-		dot.Shape = Enum.PartType.Ball
-		dot.Size = Vector3.new(0.15, 0.15, 0.15)
-		-- Slightly above ground so it doesn't z-fight
-		dot.Position = posData.Pos + Vector3.new(0, 0.15, 0)
-		dot.Parent = folder
-		dot.Transparency = 0.2
-
-		
-		table.insert(GridDots, dot)
-	end
-
-	Notify("Plot Visualizer", string.format("Showing %d grid dots", #GridDots), "Success", 2)
 end
 
 --══════════════════════════════════════════════════════--
@@ -370,6 +278,11 @@ local ModalOpen = false
 
 local CardOrder = 0
 local AutoSaveDebounce = nil
+
+-- Grid dots state (functions defined after SeedPlacer)
+local GridDots = {}
+local DotsFolder = nil
+local RefreshGridDots -- forward declare
 
 --══════════════════════════════════════════════════════--
 -- UTILITIES
@@ -456,6 +369,11 @@ local function FormatSelectedSeeds(selectedTable, maxDisplay)
 	end
 
 	return string.format("Selected (%d): %s", #names, text)
+end
+
+local function ClearAllVisuals()
+	ClearLasers()
+	ClearGridDots()
 end
 
 --══════════════════════════════════════════════════════--
@@ -656,7 +574,9 @@ function ResetConfig()
 	}
 
 	Theme = Themes.Dark
-	ClearGridDots()
+	if RefreshGridDots then
+		RefreshGridDots()
+	end
 	Notify("Config", "Reset to defaults", "Warning", 3)
 end
 
@@ -1039,7 +959,7 @@ AddConnection(CloseBtn.Activated:Connect(function()
 	SaveConfig()
 	ScriptRunning = false
 	DisconnectAll()
-	ClearGridDots()
+	ClearAllVisuals() -- FIX: Clear lasers AND grid dots on close
 	ScreenGui:Destroy()
 end))
 
@@ -1776,14 +1696,12 @@ end))
 local function ClearContent()
 	ContentScroll.CanvasPosition = Vector2.new(0, 0)
 	CloseDropdown()
-	-- FIX: Don't destroy UIListLayout - only destroy actual content
 	for _, child in pairs(ContentScroll:GetChildren()) do
 		if child:IsA("Frame") or child:IsA("TextButton") or child:IsA("TextLabel") or child:IsA("UIPadding") then
 			child:Destroy()
 		end
 	end
 	CardOrder = 0
-	-- UIListLayout stays alive so CanvasSize connection keeps working
 end
 
 local function SwitchPage(targetPage, pageTitle, pageSubtitle, pageBuilder)
@@ -1805,18 +1723,6 @@ pcall(function()
 	Networking = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
 	SeedData = require(game:GetService("ReplicatedStorage").SharedModules.SeedData)
 end)
-<<<<<<< HEAD
-=======
-print("===== WRITES =====")
-for k, v in pairs(Networking.Plant.PlantSeed.Writes) do
-	print(k, v)
-end
-
-print("===== READS =====")
-for k, v in pairs(Networking.Plant.PlantSeed.Reads) do
-	print(k, v)
-end
->>>>>>> 216637e9ae000c73df9c61a24a463b0e0a2edce8
 
 --══════════════════════════════════════════════════════--
 -- MODULE: SEED PLACER
@@ -1824,13 +1730,11 @@ end
 local SeedPlacer = (function()
 	local module = {}
 
-	-- Private Variables
 	local PlantPositions = nil
 	local OwnedPlot = nil
 	local CurrentPlantIndex = 1
 	local LastConfigHash = nil
 
-	-- Private Helper Functions
 	local function GetWorldBounds(part)
 		local partCFrame = part.CFrame
 		local partHalfSize = part.Size / 2
@@ -2031,10 +1935,12 @@ local SeedPlacer = (function()
 		local YieldInterval = 100
 		local iterationCount = 0
 
-		local startX = math.floor(totalMinX)
-		local endX = math.ceil(totalMaxX)
-		local startZ = math.floor(totalMinZ)
-		local endZ = math.ceil(totalMaxZ)
+		-- FIX: Align to stud grid centers, not arbitrary floor
+		-- Start at the first half-step from the min boundary so dots land on cell centers
+		local startX = math.floor(totalMinX / step) * step + step / 2
+		local startZ = math.floor(totalMinZ / step) * step + step / 2
+		local endX = math.ceil(totalMaxX / step) * step
+		local endZ = math.ceil(totalMaxZ / step) * step
 
 		local x = startX
 		while x <= endX + 0.001 do
@@ -2051,10 +1957,10 @@ local SeedPlacer = (function()
 
 				for _, columnInfo in ipairs(ColumnData) do
 					if
-						gridX >= columnInfo.MinX
-						and gridX <= columnInfo.MaxX
-						and gridZ >= columnInfo.MinZ
-						and gridZ <= columnInfo.MaxZ
+						gridX >= columnInfo.MinX - 0.01
+						and gridX <= columnInfo.MaxX + 0.01
+						and gridZ >= columnInfo.MinZ - 0.01
+						and gridZ <= columnInfo.MaxZ + 0.01
 					then
 						if IsPointInPart(gridPosition, columnInfo.Part) then
 							table.insert(positions, { Pos = gridPosition, Part = columnInfo.Part })
@@ -2439,6 +2345,103 @@ local SeedPlacer = (function()
 end)()
 
 --══════════════════════════════════════════════════════--
+-- GRID DOTS VISUAL (DEFINED AFTER SeedPlacer SO IT'S NOT NIL)
+--══════════════════════════════════════════════════════--
+local function EnsureDotsFolder()
+	if not DotsFolder or not DotsFolder.Parent then
+		DotsFolder = Instance.new("Folder")
+		DotsFolder.Name = "LRX_GridDots"
+		DotsFolder.Parent = workspace
+	end
+	return DotsFolder
+end
+
+local function ClearGridDots()
+	for _, dot in ipairs(GridDots) do
+		if dot then
+			pcall(function()
+				dot:Destroy()
+			end)
+		end
+	end
+	table.clear(GridDots)
+end
+
+local function ClearAllVisuals()
+	ClearLasers()
+	ClearGridDots()
+end
+
+-- Grid dot colors to match the image (green/yellow alternating)
+local GridDotColors = {
+	Color3.fromRGB(50, 205, 50),
+	Color3.fromRGB(255, 215, 0),
+	Color3.fromRGB(0, 255, 127),
+	Color3.fromRGB(255, 165, 0),
+}
+
+function RefreshGridDots()
+	ClearGridDots()
+	if not Config.ShowGridDots then
+		return
+	end
+
+	local plot = SeedPlacer:FindPlayerPlot()
+	if not plot then
+		warn("[GridDots] Could not find player plot.")
+		return
+	end
+
+	SeedPlacer:ClearCache()
+	local positions = SeedPlacer:GetPlantPositions()
+	if not positions or #positions == 0 then
+		warn("[GridDots] No plant positions generated.")
+		return
+	end
+
+	local folder = EnsureDotsFolder()
+
+	-- FIX: Show ALL positions, not a sampled subset
+	-- Create dots in batches to avoid lag, but cover every spot
+	local total = #positions
+	local batchSize = 500
+	local batchDelay = 0.05
+
+	for batchStart = 1, total, batchSize do
+		local batchEnd = math.min(batchStart + batchSize - 1, total)
+
+		for i = batchStart, batchEnd do
+			local posData = positions[i]
+			local dot = Instance.new("Part")
+			dot.Name = "GridDot"
+			dot.Anchored = true
+			dot.CanCollide = false
+			dot.CanQuery = false
+			dot.CanTouch = false
+			dot.CastShadow = false
+			dot.Material = Enum.Material.Neon
+			dot.Color = GridDotColors[((i - 1) % #GridDotColors) + 1]
+			dot.Shape = Enum.PartType.Ball
+			-- Slightly smaller so they don't overlap visually
+			dot.Size = Vector3.new(0.08, 0.08, 0.08)
+			-- Position exactly at the planting spot, slightly above ground
+			dot.Position = posData.Pos + Vector3.new(0, 0.05, 0)
+			dot.Parent = folder
+			dot.Transparency = 0.15
+
+			table.insert(GridDots, dot)
+		end
+
+		-- Small delay between batches to prevent frame drops
+		if batchEnd < total then
+			task.wait(batchDelay)
+		end
+	end
+
+	Notify("Plot Visualizer", string.format("Showing %d grid dots (all spots)", #GridDots), "Success", 2)
+end
+
+--══════════════════════════════════════════════════════--
 -- SEED SELECTION MODAL
 --══════════════════════════════════════════════════════--
 local function ShowSeedSelectionModal(title, selectedTable, updateCallback)
@@ -2737,7 +2740,6 @@ local function ShowSeedPlacerConfigModal()
 		{ Label = "Random", Value = "Random" },
 	}
 
-	-- FIX: Increased height from 200 to 280 so Done button isn't clipped
 	ShowModal("Planting Configuration", function(ModalFrame, ModalContent)
 		local yOffset = 0
 		local rowHeight = 34
@@ -2770,7 +2772,6 @@ local function ShowSeedPlacerConfigModal()
 			ShowSelectionModal("Select Planting Area", partOptions, Config.PlantingArea or "All", function(value)
 				Config.PlantingArea = value
 				SeedPlacer:ClearCache()
-				-- Refresh grid dots if they're showing
 				if Config.ShowGridDots then
 					RefreshGridDots()
 				end
@@ -3276,7 +3277,6 @@ end
 --══════════════════════════════════════════════════════--
 -- BACKGROUND TASKS
 --══════════════════════════════════════════════════════--
--- FIX: Seed Placer Loop with pcall so one error doesn't kill the loop forever
 table.insert(
 	Tasks,
 	task.spawn(function()
@@ -3294,7 +3294,6 @@ table.insert(
 	end)
 )
 
--- FIX: Auto Buy Loop with pcall
 table.insert(
 	Tasks,
 	task.spawn(function()
@@ -3458,26 +3457,80 @@ AddConnection(UserInputService.InputEnded:Connect(function(input)
 end))
 
 --══════════════════════════════════════════════════════--
--- MOBILE SUPPORT
+-- MOBILE SUPPORT & SAFEGUARDS
 --══════════════════════════════════════════════════════--
+
+-- FIX: Safe viewport detection for mobile
+local function GetSafeViewportSize()
+	local camera = workspace.CurrentCamera
+	if not camera then
+		return Vector2.new(800, 600)
+	end
+	local viewport = camera.ViewportSize
+	-- Sometimes ViewportSize is (0,0) briefly on load
+	if viewport.X < 100 or viewport.Y < 100 then
+		return Vector2.new(800, 600)
+	end
+	return viewport
+end
+
+-- FIX: Apply mobile sizing with proper checks
+local function ApplyMobileSizing()
+	local success, err = pcall(function()
+		if not UserInputService.TouchEnabled then
+			return
+		end
+
+		local viewport = GetSafeViewportSize()
+		local w = math.min(Config.WindowWidth, viewport.X - 20)
+		local h = math.min(Config.WindowHeight, viewport.Y - 40)
+
+		-- Ensure minimum reasonable size
+		w = math.max(w, Config.MinWindowWidth)
+		h = math.max(h, Config.MinWindowHeight)
+
+		MainFrame.Size = UDim2.new(0, w, 0, h)
+		MainFrame.Position = UDim2.new(0.5, -w / 2, 0.5, -h / 2)
+
+		print(string.format("[LRX_Hub] Mobile sizing applied: %dx%d", w, h))
+	end)
+
+	if not success then
+		warn("[LRX_Hub] Mobile sizing failed:", err)
+	end
+end
+
+-- Delay mobile sizing to ensure camera is ready
 if UserInputService.TouchEnabled then
-	local viewport = workspace.CurrentCamera.ViewportSize
-	local w = math.min(Config.WindowWidth, viewport.X - 20)
-	local h = math.min(Config.WindowHeight, viewport.Y - 40)
-	MainFrame.Size = UDim2.new(0, w, 0, h)
-	MainFrame.Position = UDim2.new(0.5, -w / 2, 0.5, -h / 2)
+	task.delay(0.5, ApplyMobileSizing)
 end
 
 --══════════════════════════════════════════════════════--
 -- INITIALIZATION
 --══════════════════════════════════════════════════════--
-LoadConfig()
 
--- If grid dots were saved as enabled, show them on load
-if Config.ShowGridDots then
-	task.delay(1, function()
-		RefreshGridDots()
+local InitSuccess, InitError = pcall(function()
+	LoadConfig()
+
+	-- If grid dots were saved as enabled, show them on load
+	if Config.ShowGridDots then
+		task.delay(1.5, function()
+			local ok, err = pcall(function()
+				RefreshGridDots()
+			end)
+			if not ok then
+				warn("[Init] Grid dots restore failed:", err)
+			end
+		end)
+	end
+
+	Pages.Home()
+end)
+
+if not InitSuccess then
+	warn("[LRX_Hub] CRITICAL INIT ERROR:", InitError)
+	-- Try to show basic UI anyway
+	pcall(function()
+		Pages.Home()
 	end)
 end
-
-Pages.Home()
