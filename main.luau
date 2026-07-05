@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════════════
---  LRX_Hub v4.0.1 - Production Refactor
+--  LRX_Hub v4.0.2 - Fixed Dropdown + Auto Farm
 --  Architecture: Modular, memory-safe, performance-oriented
 --  Purpose: Development automation tool for personal Roblox game
 -- ═══════════════════════════════════════════════════════════════════════
@@ -51,6 +51,9 @@ local CONSTANTS = {
 	AUTO_BUY_INTERVAL = 0.2,
 	AUTO_SAVE_DEBOUNCE = 1,
 	YIELD_INTERVAL = 300,
+
+	-- Dropdowns
+	MAX_DROPDOWN_HEIGHT = 300,
 
 	-- Grid Dots
 	GRID_DOT_SIZE = 0.08,
@@ -253,8 +256,8 @@ local Cache = {
 	LastConfigHash = nil,
 	FakePlot = nil,
 	TweenInfo = {},
-	PlantIdBySeedName = nil, -- Map: SeedName -> PlantId
-	FruitIdBySeedName = nil, -- Map: SeedName -> {FruitId, PlantId}
+	PlantIdBySeedName = nil,
+	FruitIdBySeedName = nil,
 }
 
 -- ═══════════════════════════════════════════════════════════════════════
