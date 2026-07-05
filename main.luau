@@ -814,6 +814,15 @@ end
 local GridSystem = {}
 
 function GridSystem.Clear()
+	-- Cancel any in-progress refresh so old dots don't leak after clear
+	if LRX.State.GridRefreshThread and type(LRX.State.GridRefreshThread) == "thread" then
+		local t = LRX.State.GridRefreshThread
+		LRX.State.GridRefreshThread = nil
+		pcall(function()
+			task_cancel(t)
+		end)
+	end
+
 	Memory.DestroyTableInstances(LRX.Objects.GridDots or {})
 	LRX.Objects.GridDots = {}
 end
@@ -846,13 +855,20 @@ function GridSystem.Refresh()
 	local batchDelay = CONSTANTS.GRID_DOT_BATCH_DELAY
 	local total = #positions
 
-	for batchStart = 1, total, batchSize do
-		task_delay(math_floor((batchStart - 1) / batchSize) * batchDelay, function()
+	-- Spawn ONE tracked thread so it can be cancelled on cleanup / toggle-off
+	LRX.State.GridRefreshThread = task_spawn(function()
+		for batchStart = 1, total, batchSize do
+			-- Abort if script stopped or user toggled off
 			if not LRX.State.ScriptRunning or not LRX.Config.ShowGridDots then
-				return
+				break
 			end
+
 			local batchEnd = math_min(batchStart + batchSize - 1, total)
 			for i = batchStart, batchEnd do
+				if not LRX.State.ScriptRunning or not LRX.Config.ShowGridDots then
+					break
+				end
+
 				local posData = positions[i]
 				local dot = Instance.new("Part")
 				dot.Name = "GridDot"
@@ -868,12 +884,28 @@ function GridSystem.Refresh()
 				dot.Position = posData.Pos + yOffset
 				dot.Parent = folder
 				dot.Transparency = 0.15
+
 				table_insert(LRX.Objects.GridDots, dot)
 			end
-		end)
-	end
 
-	NotificationSystem.Notify("Plot Visualizer", string_format("Showing %d grid dots", total), "Success", 2)
+			-- Yield between batches to keep frame rate stable
+			if batchEnd < total then
+				task_wait(batchDelay)
+			end
+		end
+
+		-- Only notify if we actually finished while still enabled
+		if LRX.Config.ShowGridDots and LRX.State.ScriptRunning then
+			NotificationSystem.Notify(
+				"Plot Visualizer",
+				string_format("Showing %d grid dots (all spots)", #LRX.Objects.GridDots),
+				"Success",
+				2
+			)
+		end
+	end)
+
+	Memory.TrackThread(LRX.State.GridRefreshThread)
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
@@ -3757,6 +3789,13 @@ local function FullCleanup()
 	LRX.State.ScriptRunning = false
 	Memory.DisconnectAll()
 	Memory.CancelAllThreads()
+	-- Explicitly nuke any dangling grid refresh (safety net)
+	if LRX.State.GridRefreshThread and type(LRX.State.GridRefreshThread) == "thread" then
+		pcall(function()
+			task_cancel(LRX.State.GridRefreshThread)
+		end)
+		LRX.State.GridRefreshThread = nil
+	end
 
 	for name, obj in pairs(LRX.Objects) do
 		if typeof(obj) == "Instance" and obj.Parent then
