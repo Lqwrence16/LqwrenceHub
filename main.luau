@@ -1121,42 +1121,73 @@ local function GeneratePlantPositions(targetParts, spacing)
 	local iterationCount = 0
 	local yieldInterval = CONSTANTS.YIELD_INTERVAL
 
+	-- Build combined world-space bounds of ALL target parts
+	local minX, maxX = math_huge, -math_huge
+	local minZ, maxZ = math_huge, -math_huge
+	local plantY = 0
+
 	for _, part in ipairs(targetParts) do
-		local halfSize = part.Size / 2
 		local cf = part.CFrame
-		local plantY = part.Position.Y + halfSize.Y -- Place on TOP surface of part
+		local hs = part.Size / 2
+		plantY = math_max(plantY, part.Position.Y + hs.Y)
 
-		-- Calculate how many whole grid cells fit inside this part
-		local cellsX = math_max(1, math_floor((halfSize.X * 2) / spacing))
-		local cellsZ = math_max(1, math_floor((halfSize.Z * 2) / spacing))
-
-		-- Center the grid so dots sit at cell centers, not on edges
-		local totalSpanX = cellsX * spacing
-		local totalSpanZ = cellsZ * spacing
-		local startX = -totalSpanX / 2 + spacing / 2
-		local startZ = -totalSpanZ / 2 + spacing / 2
-
-		for ix = 0, cellsX - 1 do
-			for iz = 0, cellsZ - 1 do
-				iterationCount += 1
-				if iterationCount % yieldInterval == 0 then
-					task_wait()
-				end
-
-				local localX = startX + ix * spacing
-				local localZ = startZ + iz * spacing
-				local worldPos = cf * Vector3.new(localX, 0, localZ)
-
-				-- Use exact world coordinates — NO rounding that snaps off-grid
-				local finalPos = Vector3.new(worldPos.X, plantY, worldPos.Z)
-				local key = Utils.FormatPositionKey(finalPos)
-
-				if not seenKeys[key] then
-					seenKeys[key] = true
-					positions[#positions + 1] = { Pos = finalPos, Part = part }
-				end
+		for dx = -1, 1, 2 do
+			for dz = -1, 1, 2 do
+				local corner = cf * Vector3.new(dx * hs.X, 0, dz * hs.Z)
+				minX = math_min(minX, corner.X)
+				maxX = math_max(maxX, corner.X)
+				minZ = math_min(minZ, corner.Z)
+				maxZ = math_max(maxZ, corner.Z)
 			end
 		end
+	end
+
+	-- Snap bounds to global grid aligned at origin
+	local startX = math_floor(minX / spacing) * spacing + spacing / 2
+	local startZ = math_floor(minZ / spacing) * spacing + spacing / 2
+	local endX = math_ceil(maxX / spacing) * spacing - spacing / 2
+	local endZ = math_ceil(maxZ / spacing) * spacing - spacing / 2
+
+	local x = startX
+	while x <= endX + 0.001 do
+		local z = startZ
+		while z <= endZ + 0.001 do
+			iterationCount += 1
+			if iterationCount % yieldInterval == 0 then
+				task_wait()
+			end
+
+			local finalPos = Vector3.new(x, plantY, z)
+			local key = Utils.FormatPositionKey(finalPos)
+
+			if not seenKeys[key] then
+				-- Only keep dots that fall inside at least one target part
+				local insideAny = false
+				for _, part in ipairs(targetParts) do
+					local localPos = part.CFrame:PointToObjectSpace(finalPos)
+					local hs = part.Size / 2
+					if math_abs(localPos.X) <= hs.X + 0.01 and math_abs(localPos.Z) <= hs.Z + 0.01 then
+						insideAny = true
+						break
+					end
+				end
+
+				if insideAny then
+					seenKeys[key] = true
+					positions[#positions + 1] = { Pos = finalPos, Part = targetParts[1] }
+				end
+			end
+
+			if z >= endZ - 0.001 then
+				break
+			end
+			z += spacing
+		end
+
+		if x >= endX - 0.001 then
+			break
+		end
+		x += spacing
 	end
 
 	return positions
