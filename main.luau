@@ -1785,7 +1785,29 @@ function AutoFarmSystem.StopCollect()
 end
 
 -- ─── Auto Shovel ───────────────────────────────────────────────────────
--- FIXED: More signatures, better debug, checks if remote exists properly
+-- ─── Get Shovel Tool ───────────────────────────────────────────────────
+
+local function GetShovelTool()
+	local character = Player.Character
+	if character then
+		for _, child in ipairs(character:GetChildren()) do
+			if child:IsA("Tool") and child.Name:lower():find("shovel") then
+				return child
+			end
+		end
+	end
+	local backpack = Player:FindFirstChild("Backpack")
+	if backpack then
+		for _, child in ipairs(backpack:GetChildren()) do
+			if child:IsA("Tool") and child.Name:lower():find("shovel") then
+				return child
+			end
+		end
+	end
+	return nil
+end
+
+-- ─── Auto Shovel (Fixed) ───────────────────────────────────────────────
 
 function AutoFarmSystem.StartShovel()
 	if State.AutoShovelThread then
@@ -1793,16 +1815,10 @@ function AutoFarmSystem.StartShovel()
 		return
 	end
 
-	-- CRITICAL FIX: Check if remote exists with proper type
 	if not UseShovelRemote then
 		NotificationSystem.Notify("Auto Farm", "UseShovel remote not found", "Error", 3)
 		DebugPrint("UseShovelRemote is nil")
 		return
-	end
-
-	DebugPrint("UseShovelRemote type:", typeof(UseShovelRemote))
-	if typeof(UseShovelRemote) == "table" then
-		DebugPrint("UseShovelRemote.Fire exists:", tostring(UseShovelRemote.Fire ~= nil))
 	end
 
 	DebugPrint("Starting Auto Shovel...")
@@ -1811,70 +1827,86 @@ function AutoFarmSystem.StartShovel()
 	State.AutoShovelThread = task_spawn(function()
 		while Persist.Config.EnableAutoShovel and State.ScriptRunning do
 			local plot = PlotSystem.FindPlayerPlot()
-			if plot then
-				local plantsFolder = FindPlantsFolder(plot)
-				if plantsFolder then
-					for _, plant in ipairs(plantsFolder:GetChildren()) do
-						if not Persist.Config.EnableAutoShovel or not State.ScriptRunning then
-							break
-						end
-
-						local seedName = GetPlantSeedName(plant)
-						local selected = Persist.Config.SelectedShovelPlants
-						local hasSelection = false
-						for _, _ in pairs(selected) do
-							hasSelection = true
-							break
-						end
-
-						if hasSelection and not selected[seedName] then
-							DebugPrint("SHOVEL SKIP (not selected):", seedName)
-							continue
-						end
-
-						local plantId = GetPlantId(plant)
-						if not plantId then
-							DebugPrint("SHOVEL SKIP (no plantId):", seedName)
-							continue
-						end
-
-						DebugPrint("SHOVELING:", seedName, "| plantId=", plantId)
-
-						-- Try ALL possible signatures
-						local signatures = {
-							{ "Dig", plantId, "", nil },
-							{ "Dig", plantId },
-							{ plantId },
-							{ "Dig", plantId, "" },
-							{ "Dig", plantId, nil },
-							{ "Remove", plantId },
-							{ "Destroy", plantId },
-						}
-
-						local ok = false
-						for i, sig in ipairs(signatures) do
-							DebugPrint("  Trying signature #" .. i .. ":", table.concat(sig, ", "))
-							ok = SafeFireRemote(UseShovelRemote, table.unpack(sig))
-							if ok then
-								DebugPrint("  -> SUCCESS with signature #" .. i)
-								break
-							end
-						end
-
-						if not ok then
-							DebugPrint("  -> ALL SIGNATURES FAILED")
-						end
-
-						task_wait(0.2)
-					end
-				else
-					DebugPrint("Shovel: Plants folder not found")
-				end
-			else
+			if not plot then
 				DebugPrint("Shovel: Plot not found")
+				task_wait(0.5)
+				continue
 			end
+
+			local plantsFolder = FindPlantsFolder(plot)
+			if not plantsFolder then
+				DebugPrint("Shovel: Plants folder not found")
+				task_wait(0.5)
+				continue
+			end
+
+			-- Find shovel once per cycle (in case it moves)
+			local shovelTool = GetShovelTool()
+			if not shovelTool then
+				DebugPrint("Shovel: No shovel tool in backpack/character")
+				NotificationSystem.Notify("Auto Farm", "Equip a Shovel first!", "Warning", 3)
+				task_wait(2)
+				continue
+			end
+
+			for _, plant in ipairs(plantsFolder:GetChildren()) do
+				if not Persist.Config.EnableAutoShovel or not State.ScriptRunning then
+					break
+				end
+
+				local seedName = GetPlantSeedName(plant)
+				local selected = Persist.Config.SelectedShovelPlants or {}
+				local hasSelection = false
+				for _, _ in pairs(selected) do
+					hasSelection = true
+					break
+				end
+
+				if hasSelection and not selected[seedName] then
+					DebugPrint("SHOVEL SKIP (not selected):", seedName)
+					continue
+				end
+
+				local plantId = GetPlantId(plant)
+				if not plantId then
+					DebugPrint("SHOVEL SKIP (no plantId):", seedName)
+					continue
+				end
+
+				-- Get fruitId (empty string for single plants like carrots/bamboo)
+				local fruitId = GetFruitId(plant)
+
+				DebugPrint(
+					"SHOVELING:",
+					seedName,
+					"| plantId=",
+					plantId,
+					"| fruitId=",
+					fruitId == "" and "(empty)" or fruitId
+				)
+
+				-- REAL SIGNATURE from sniffer:
+				-- Fire(plantId, fruitId_or_empty, "Shovel", shovelToolInstance)
+				local ok, err = pcall(function()
+					if typeof(UseShovelRemote) == "table" and UseShovelRemote.Fire then
+						UseShovelRemote:Fire(plantId, fruitId, "Shovel", shovelTool)
+					elseif typeof(UseShovelRemote) == "Instance" and UseShovelRemote:IsA("RemoteEvent") then
+						UseShovelRemote:FireServer(plantId, fruitId, "Shovel", shovelTool)
+					end
+				end)
+
+				if ok then
+					DebugPrint("  -> Fire call succeeded")
+				else
+					DebugPrint("  -> Fire call failed:", err)
+				end
+
+				task_wait(0.2)
+			end
+
 			task_wait(0.5)
 		end
+
 		State.AutoShovelThread = nil
 		DebugPrint("Auto Shovel loop ended")
 	end)
