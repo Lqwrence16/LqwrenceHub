@@ -702,6 +702,7 @@ function WindowSystem.new(config)
 		Name = "LRX_UI_Core",
 		ResetOnSpawn = false,
 		DisplayOrder = 10,
+		ZindexBehavior = 999,
 		Parent = PlayerGui,
 	})
 
