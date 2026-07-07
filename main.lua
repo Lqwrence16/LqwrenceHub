@@ -284,8 +284,7 @@ local function SetDPIScale(percent)
 	end
 end
 
-local function Connect(signal, callback)
-	local conn = signal:Connect(callback)
+local function Connect(conn)
 	table.insert(Registry.Connections, conn)
 	return conn
 end
