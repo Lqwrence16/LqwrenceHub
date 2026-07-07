@@ -9066,7 +9066,7 @@ function Library:CreateWindow(WindowInfo)
 			Size = UDim2.new(1, 0, 0.85, 0), -- full width of wrapper
 			AnchorPoint = Vector2.new(1, 0.5),
 			Position = UDim2.new(1, 0, 0.5, 0), -- flush right, no gap
-			Parent = RightWrapper,
+			-- ...
 		})
 
 		New("UICorner", {
