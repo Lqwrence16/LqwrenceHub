@@ -9059,9 +9059,9 @@ function Library:CreateWindow(WindowInfo)
 		-- Search container (right side of RightWrapper) - COMPLETELY SEPARATE
 		local SearchContainer = New("Frame", {
 			BackgroundTransparency = 1,
-			Size = UDim2.new(0, 260, 0.8, 0), -- fixed width, 80% height
-			Position = UDim2.new(1, -270, 0.1, 0), -- anchored to right
-			AnchorPoint = Vector2.new(1, 0),
+			Size = UDim2.new(0, 260, 0.8, 0),
+			Position = UDim2.new(1, -20, 0.1, 0), -- ← Right edge with 10px margin
+			AnchorPoint = Vector2.new(1, 0), -- ← Anchor to RIGHT
 			Parent = RightWrapper,
 		})
 
