@@ -9060,20 +9060,20 @@ function Library:CreateWindow(WindowInfo)
 			})
 		end
 
-		local MoveIcon = Library:GetIcon("move")
-		if MoveIcon then
-			New("ImageLabel", {
-				AnchorPoint = Vector2.new(1, 0.5),
-				Image = MoveIcon.Url,
-				ImageColor3 = "OutlineColor",
-				ImageRectOffset = MoveIcon.ImageRectOffset,
-				ImageRectSize = MoveIcon.ImageRectSize,
-				Position = UDim2.new(1, -10, 0.5, 0),
-				Size = UDim2.fromOffset(28, 28),
-				SizeConstraint = Enum.SizeConstraint.RelativeYY,
-				Parent = TopBar,
-			})
-		end
+		--local MoveIcon = Library:GetIcon("move")
+		--if MoveIcon then
+		--New("ImageLabel", {
+		--		AnchorPoint = Vector2.new(1, 0.5),
+		--		Image = MoveIcon.Url,
+		--		ImageColor3 = "OutlineColor",
+		--		ImageRectOffset = MoveIcon.ImageRectOffset,
+		--		ImageRectSize = MoveIcon.ImageRectSize,
+		--		Position = UDim2.new(1, -10, 0.5, 0),
+		--		Size = UDim2.fromOffset(28, 28),
+		--		SizeConstraint = Enum.SizeConstraint.RelativeYY,
+		--		Parent = TopBar,
+		--	})
+		--end
 
 		--// Bottom Bar \\--
 		local BottomBar = New("Frame", {
