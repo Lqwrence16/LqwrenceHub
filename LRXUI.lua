@@ -78,14 +78,14 @@ local Library = {
 
 	IsLightTheme = false,
 	Scheme = {
-		BackgroundColor = Color3.fromRGB(15, 17, 22), -- DarkSlate Background
-		MainColor = Color3.fromRGB(21, 23, 29), -- DarkSlate Sidebar
-		AccentColor = Color3.fromRGB(88, 166, 255), -- DarkSlate Accent (blue)
-		OutlineColor = Color3.fromRGB(53, 57, 67), -- DarkSlate Border
-		FontColor = Color3.fromRGB(255, 255, 255), -- DarkSlate Text
-		Font = Font.fromEnum(Enum.Font.BuilderSans),
+		BackgroundColor = Color3.fromRGB(15, 15, 15),
+		MainColor = Color3.fromRGB(25, 25, 25),
+		AccentColor = Color3.fromRGB(125, 85, 255),
+		OutlineColor = Color3.fromRGB(40, 40, 40),
+		FontColor = Color3.new(1, 1, 1),
+		Font = Font.fromEnum(Enum.Font.Code),
 
-		Red = Color3.fromRGB(255, 90, 90), -- DarkSlate Danger
+		Red = Color3.fromRGB(255, 50, 50),
 		Dark = Color3.new(0, 0, 0),
 		White = Color3.new(1, 1, 1),
 	},
@@ -244,27 +244,6 @@ local Templates = {
 	},
 
 	--// Library \\--
-	-- Add near other Library properties
-	CurrentTheme = "DarkSlate",
-
-	Themes = {
-		DarkSlate = {
-			Background = Color3.fromRGB(15, 17, 22),
-			Sidebar = Color3.fromRGB(21, 23, 29),
-			Content = Color3.fromRGB(18, 20, 25),
-			Surface = Color3.fromRGB(29, 32, 39),
-			SurfaceHover = Color3.fromRGB(37, 40, 48),
-			Border = Color3.fromRGB(53, 57, 67),
-			Text = Color3.fromRGB(255, 255, 255),
-			SubText = Color3.fromRGB(170, 170, 175),
-			Muted = Color3.fromRGB(120, 120, 125),
-			Accent = Color3.fromRGB(88, 166, 255),
-			Success = Color3.fromRGB(60, 210, 120),
-			Warning = Color3.fromRGB(255, 195, 90),
-			Danger = Color3.fromRGB(255, 90, 90),
-		},
-	},
-
 	Window = {
 		Title = "No Title",
 		Footer = "No Footer",
@@ -275,10 +254,10 @@ local Templates = {
 		Center = true,
 		Resizable = true,
 		SearchbarSize = UDim2.fromScale(1, 1),
-		CornerRadius = 8,
+		CornerRadius = 4,
 		NotifySide = "Right",
 		ShowCustomCursor = false,
-		Font = Enum.Font.BuilderSans,
+		Font = Enum.Font.Code,
 		ToggleKeybind = Enum.KeyCode.RightControl,
 		MobileButtonsSide = "Left",
 	},
@@ -3473,32 +3452,28 @@ do
 		local function CreateButton(Btn)
 			local Base = New("TextButton", {
 				Active = not Btn.Disabled,
-				AutomaticSize = Enum.AutomaticSize.Y,
-				BackgroundColor3 = Btn.Disabled and "BackgroundColor" or "MainColor",
-				BackgroundTransparency = Btn.Disabled and 0.8 or 0.38,
-				Size = UDim2.new(1, 0, 0, 0),
+				AutoButtonColor = false,
+				BackgroundColor3 = "MainColor",
+				BackgroundTransparency = Btn.Disabled and 0.80 or 0.38,
+				Size = UDim2.new(1, 0, 0, 20),
 				Text = "",
 				Visible = Btn.Visible,
 				Parent = Holder,
 			})
 
 			New("UICorner", {
-				CornerRadius = UDim.new(0, 6),
+				CornerRadius = UDim.new(0, 4),
 				Parent = Base,
 			})
 
-			New("UIPadding", {
-				PaddingTop = UDim.new(0, 7),
-				PaddingBottom = UDim.new(0, 7),
-				PaddingLeft = UDim.new(0, 9),
-				PaddingRight = UDim.new(0, 9),
+			New("UISizeConstraint", {
+				MinSize = Vector2.new(0, 20),
 				Parent = Base,
 			})
 
 			local Stroke = New("UIStroke", {
 				Color = "OutlineColor",
-				Transparency = Btn.Disabled and 0.6 or 0.2,
-				Thickness = 1,
+				Transparency = Btn.Disabled and 0.70 or 0.25,
 				Parent = Base,
 			})
 
@@ -3532,9 +3507,24 @@ do
 				Parent = Base,
 			})
 
-			Base:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+			local function UpdateHeight()
+				local h = math.max(Label.AbsoluteSize.Y + 6, 20)
+				Base.Size = UDim2.new(1, 0, 0, h)
 				Groupbox:Resize()
-			end)
+			end
+
+			Label:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateHeight)
+			task.defer(UpdateHeight)
+
+			Btn.BaseReg = EnsureRegistry(Base)
+			Btn.StrokeReg = EnsureRegistry(Stroke)
+			Btn.AccentReg = EnsureRegistry(Accent)
+			Btn.LabelReg = EnsureRegistry(Label)
+
+			SetRegistry(Btn.BaseReg, "BackgroundColor3", Btn.Disabled and "BackgroundColor" or "MainColor")
+			SetRegistry(Btn.StrokeReg, "Color", "OutlineColor")
+			SetRegistry(Btn.AccentReg, "BackgroundColor3", "AccentColor")
+			SetRegistry(Btn.LabelReg, "TextColor3", Btn.Risky and "Red" or "FontColor")
 
 			return Base, Stroke, Accent, Label
 		end
@@ -3601,47 +3591,16 @@ do
 
 		local function InitEvents(Btn)
 			Btn.Base.MouseEnter:Connect(function()
-				if Btn.Disabled then
-					return
-				end
-				Btn.Tween = TweenService:Create(Btn.Base, Library.TweenInfo, {
-					BackgroundTransparency = 0.22,
-				})
-				Btn.LabelTween = TweenService:Create(Btn.Label, Library.TweenInfo, {
-					TextTransparency = 0,
-				})
-				Btn.StrokeTween = TweenService:Create(Btn.Stroke, Library.TweenInfo, {
-					Transparency = 0.1,
-				})
-				Btn.AccentTween = TweenService:Create(Btn.Accent, Library.TweenInfo, {
-					BackgroundTransparency = 0.1,
-				})
-				Btn.Tween:Play()
-				Btn.LabelTween:Play()
-				Btn.StrokeTween:Play()
-				Btn.AccentTween:Play()
+				Btn.Hovering = true
+				ApplyVisual(Btn, false)
 			end)
 
 			Btn.Base.MouseLeave:Connect(function()
-				if Btn.Disabled then
+				Btn.Hovering = false
+				if Btn.Locked then
 					return
 				end
-				Btn.Tween = TweenService:Create(Btn.Base, Library.TweenInfo, {
-					BackgroundTransparency = 0.38,
-				})
-				Btn.LabelTween = TweenService:Create(Btn.Label, Library.TweenInfo, {
-					TextTransparency = 0.4,
-				})
-				Btn.StrokeTween = TweenService:Create(Btn.Stroke, Library.TweenInfo, {
-					Transparency = 0.2,
-				})
-				Btn.AccentTween = TweenService:Create(Btn.Accent, Library.TweenInfo, {
-					BackgroundTransparency = 0.45,
-				})
-				Btn.Tween:Play()
-				Btn.LabelTween:Play()
-				Btn.StrokeTween:Play()
-				Btn.AccentTween:Play()
+				ApplyVisual(Btn, false)
 			end)
 
 			Btn.Base.MouseButton1Click:Connect(function()
@@ -3982,7 +3941,7 @@ do
 			end)
 		end
 
-		Button.Base, Button.Stroke, Button.Accent, Button.Label = CreateButton(Button)
+		Button.Base, Button.Stroke = CreateButton(Button)
 		InitEvents(Button)
 
 		function Button:AddButton(...)
@@ -4279,7 +4238,7 @@ do
 			end)
 		end
 
-		Button.Base, Button.Stroke, Button.Accent, Button.Label = CreateButton(Button)
+		Button.Base, Button.Stroke = CreateButton(Button)
 		InitEvents(Button)
 
 		function Button:AddButton(...)
@@ -4702,9 +4661,9 @@ do
 		local Switch = New("Frame", {
 			AnchorPoint = Vector2.new(1, 0.5),
 			BackgroundColor3 = "MainColor",
-			Position = UDim2.new(1, 0, 0.5, -10),
+			Position = UDim2.new(1, 0, 0.5, 0),
 			Size = UDim2.fromOffset(36, 20),
-			Parent = Button,
+			Parent = Row,
 		})
 		New("UICorner", {
 			CornerRadius = UDim.new(1, 0),
@@ -4724,8 +4683,8 @@ do
 
 		local Ball = New("Frame", {
 			BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-			Size = UDim2.fromOffset(14, 14),
-			Position = UDim2.fromOffset(2, 3),
+			Size = UDim2.fromScale(1, 1),
+			SizeConstraint = Enum.SizeConstraint.RelativeYY,
 			Parent = Switch,
 		})
 		New("UICorner", {
@@ -4807,7 +4766,8 @@ do
 				TextTransparency = Toggle.Value and 0 or 0.4,
 			}):Play()
 			TweenService:Create(Ball, Library.TweenInfo, {
-				Position = self.Value and UDim2.fromOffset(20, 3) or UDim2.fromOffset(2, 3),
+				AnchorPoint = Vector2.new(Offset, 0),
+				Position = UDim2.fromScale(Offset, 0),
 			}):Play()
 			TweenService:Create(Switch, Library.TweenInfo, {
 				BackgroundColor3 = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.MainColor,
@@ -5338,7 +5298,7 @@ do
 			ClearTextOnFocus = not Input.Disabled and Input.ClearTextOnFocus,
 			PlaceholderText = Input.Placeholder,
 			Position = UDim2.fromScale(0, 1),
-			Size = UDim2.new(1, 0, 0, 30),
+			Size = UDim2.new(1, 0, 0, 30), -- Adjusted to 30 to fill the space
 			Text = Input.Value,
 			TextEditable = not Input.Disabled,
 			TextScaled = false,
@@ -9604,7 +9564,7 @@ function Library:CreateWindow(WindowInfo)
 			})
 
 			local BoxIcon
-			if Info.IconName ~= nil then
+			if Info.IconName ~= nil and Library and Library.GetIcon then
 				local ok, result = pcall(function()
 					return Library:GetIcon(Info.IconName)
 				end)
@@ -9616,10 +9576,11 @@ function Library:CreateWindow(WindowInfo)
 			local leftTextOffset = 12
 			if BoxIcon then
 				local IconCard = New("Frame", {
-					BackgroundColor3 = Color3.fromRGB(29, 32, 39), -- Surface color
+
+					BackgroundColor3 = Color3.fromRGB(30, 30, 30), -- black, not too dark
 					BackgroundTransparency = 0.5,
 					Position = UDim2.fromOffset(8, 8),
-					Size = UDim2.fromOffset(26, 26),
+					Size = UDim2.fromOffset(26, 26), -- smaller icon box
 					Parent = HeaderFrame,
 				})
 				New("UICorner", {
@@ -9631,7 +9592,7 @@ function Library:CreateWindow(WindowInfo)
 					BackgroundTransparency = 1,
 					AnchorPoint = Vector2.new(0.5, 0.5),
 					Position = UDim2.fromScale(0.5, 0.5),
-					Size = UDim2.fromOffset(12, 12),
+					Size = UDim2.fromOffset(12, 12), -- smaller icon image
 					Image = BoxIcon.Url,
 					ImageColor3 = "AccentColor",
 					ImageRectOffset = BoxIcon.ImageRectOffset,
@@ -9640,30 +9601,6 @@ function Library:CreateWindow(WindowInfo)
 				})
 
 				leftTextOffset = 40
-			end
-
-			New("TextLabel", {
-				BackgroundTransparency = 1,
-				Position = UDim2.fromOffset(leftTextOffset, description and 2 or 0),
-				Size = UDim2.new(1, -(leftTextOffset + 38), 0, description and 20 or headerHeight),
-				Text = boxName,
-				TextSize = 14,
-				TextXAlignment = Enum.TextXAlignment.Left,
-				TextYAlignment = description and Enum.TextYAlignment.Bottom or Enum.TextYAlignment.Center,
-				Parent = HeaderFrame,
-			})
-
-			if description then
-				New("TextLabel", {
-					BackgroundTransparency = 1,
-					Position = UDim2.fromOffset(leftTextOffset, 19),
-					Size = UDim2.new(1, -(leftTextOffset + 38), 0, 16),
-					Text = description,
-					TextSize = 12,
-					TextColor3 = Color3.fromRGB(170, 170, 175), -- SubText color
-					TextXAlignment = Enum.TextXAlignment.Left,
-					Parent = HeaderFrame,
-				})
 			end
 
 			New("TextLabel", {
@@ -9696,14 +9633,14 @@ function Library:CreateWindow(WindowInfo)
 				Position = UDim2.new(1, -28, 0, 10),
 				TextColor3 = Color3.fromRGB(205, 205, 205),
 				TextSize = 13,
-				Font = Enum.Font.BuilderSans,
+				Font = Enum.Font.Code,
 				Parent = HeaderFrame,
 			})
 
 			-- Single content container (no second inner frame)
 			local GroupboxContainer = New("Frame", {
 
-				BackgroundColor3 = Color3.fromRGB(29, 32, 39), -- black, not too dark
+				BackgroundColor3 = Color3.fromRGB(30, 30, 30), -- black, not too dark
 				BackgroundTransparency = 0.67,
 				Position = UDim2.fromOffset(outerInset, headerHeight + outerInset),
 				Size = UDim2.new(1, -(outerInset * 2), 1, -(headerHeight + outerInset * 2)),
@@ -9711,7 +9648,7 @@ function Library:CreateWindow(WindowInfo)
 				ClipsDescendants = true,
 			})
 			New("UICorner", {
-				CornerRadius = UDim.new(0, 8),
+				CornerRadius = UDim.new(0, 10),
 				Parent = GroupboxContainer,
 			})
 
@@ -9960,7 +9897,7 @@ function Library:CreateWindow(WindowInfo)
 					Position = UDim2.new(1, -24, 0, 7),
 					TextColor3 = Color3.fromRGB(200, 200, 200),
 					TextSize = 14,
-					Font = Enum.Font.BuilderSans,
+					Font = Enum.Font.Code,
 					Parent = HeaderFrame,
 				})
 
