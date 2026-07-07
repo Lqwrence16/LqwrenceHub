@@ -4220,49 +4220,46 @@ local function CreateDependencyBox(parentContainer)
 		depbox:Update()
 	end
 
-	setmetatable(
-		depbox,
-		{
-			__index = {
-				AddLabel = function(_, i)
-					return Components.Label(depContainer, i)
-				end,
-				AddButton = function(_, i)
-					return Components.Button(depContainer, i)
-				end,
-				AddToggle = function(_, i)
-					return Components.Toggle(depContainer, i)
-				end,
-				AddSlider = function(_, i)
-					return Components.Slider(depContainer, i)
-				end,
-				AddInput = function(_, i)
-					return Components.Input(depContainer, i)
-				end,
-				AddDropdown = function(_, i)
-					return Components.Dropdown(depContainer, i)
-				end,
-				AddSeparator = function()
-					return Components.Separator(depContainer)
-				end,
-				AddKeybind = function(_, i)
-					return Components.Keybind(depContainer, i)
-				end,
-				AddColorPicker = function(_, i)
-					return Components.ColorPicker(depContainer, i)
-				end,
-				AddViewport = function(_, i)
-					return Components.Viewport(depContainer, i)
-				end,
-				AddImage = function(_, i)
-					return Components.Image(depContainer, i)
-				end,
-				AddDependencyBox = function()
-					return CreateDependencyBox(depContainer)
-				end,
-			},
-		}
-	)
+	setmetatable(depbox, {
+		__index = {
+			AddLabel = function(_, i)
+				return Components.Label(depContainer, i)
+			end,
+			AddButton = function(_, i)
+				return Components.Button(depContainer, i)
+			end,
+			AddToggle = function(_, i)
+				return Components.Toggle(depContainer, i)
+			end,
+			AddSlider = function(_, i)
+				return Components.Slider(depContainer, i)
+			end,
+			AddInput = function(_, i)
+				return Components.Input(depContainer, i)
+			end,
+			AddDropdown = function(_, i)
+				return Components.Dropdown(depContainer, i)
+			end,
+			AddSeparator = function()
+				return Components.Separator(depContainer)
+			end,
+			AddKeybind = function(_, i)
+				return Components.Keybind(depContainer, i)
+			end,
+			AddColorPicker = function(_, i)
+				return Components.ColorPicker(depContainer, i)
+			end,
+			AddViewport = function(_, i)
+				return Components.Viewport(depContainer, i)
+			end,
+			AddImage = function(_, i)
+				return Components.Image(depContainer, i)
+			end,
+			AddDependencyBox = function()
+				return CreateDependencyBox(depContainer)
+			end,
+		},
+	})
 
 	table.insert(Registry.DependencyBoxes, depbox)
 	return depbox
@@ -4344,49 +4341,46 @@ local function CreateDependencyGroupbox(page)
 		depGroup:Update()
 	end
 
-	setmetatable(
-		depGroup,
-		{
-			__index = {
-				AddLabel = function(_, i)
-					return Components.Label(inner, i)
-				end,
-				AddButton = function(_, i)
-					return Components.Button(inner, i)
-				end,
-				AddToggle = function(_, i)
-					return Components.Toggle(inner, i)
-				end,
-				AddSlider = function(_, i)
-					return Components.Slider(inner, i)
-				end,
-				AddInput = function(_, i)
-					return Components.Input(inner, i)
-				end,
-				AddDropdown = function(_, i)
-					return Components.Dropdown(inner, i)
-				end,
-				AddSeparator = function()
-					return Components.Separator(inner)
-				end,
-				AddKeybind = function(_, i)
-					return Components.Keybind(inner, i)
-				end,
-				AddColorPicker = function(_, i)
-					return Components.ColorPicker(inner, i)
-				end,
-				AddViewport = function(_, i)
-					return Components.Viewport(inner, i)
-				end,
-				AddImage = function(_, i)
-					return Components.Image(inner, i)
-				end,
-				AddDependencyBox = function()
-					return CreateDependencyBox(inner)
-				end,
-			},
-		}
-	)
+	setmetatable(depGroup, {
+		__index = {
+			AddLabel = function(_, i)
+				return Components.Label(inner, i)
+			end,
+			AddButton = function(_, i)
+				return Components.Button(inner, i)
+			end,
+			AddToggle = function(_, i)
+				return Components.Toggle(inner, i)
+			end,
+			AddSlider = function(_, i)
+				return Components.Slider(inner, i)
+			end,
+			AddInput = function(_, i)
+				return Components.Input(inner, i)
+			end,
+			AddDropdown = function(_, i)
+				return Components.Dropdown(inner, i)
+			end,
+			AddSeparator = function()
+				return Components.Separator(inner)
+			end,
+			AddKeybind = function(_, i)
+				return Components.Keybind(inner, i)
+			end,
+			AddColorPicker = function(_, i)
+				return Components.ColorPicker(inner, i)
+			end,
+			AddViewport = function(_, i)
+				return Components.Viewport(inner, i)
+			end,
+			AddImage = function(_, i)
+				return Components.Image(inner, i)
+			end,
+			AddDependencyBox = function()
+				return CreateDependencyBox(inner)
+			end,
+		},
+	})
 
 	table.insert(Registry.DependencyBoxes, depGroup)
 	return depGroup

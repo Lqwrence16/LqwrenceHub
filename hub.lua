@@ -1,17 +1,3 @@
---[[
-================================================================================
-    __    ____  _  ___  _   _ _   _ ___  
-   / /   / __ \ | |/ / | | | | | | |_ _| 
-  / /   / /_/ / |   /  | |_| | | | || |  
- / /___/ _, _/ /   |   |  _  | |_| || |  
-/_____/_/ |_| /_/|_|   | |_| \___/|___| 
-                                         
-    LRX_hub.lua - The Ultimate Interactive Roblox Hub UI
-    Powered by the LRXUI Core Library (LRXUI.lua)
-================================================================================
-]]
-
--- 1. Load the LRXUI Core Library
 local LRXUI =
 	loadstring(game:HttpGet("https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/main.lua"))()
 
