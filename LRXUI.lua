@@ -8863,7 +8863,7 @@ function Library:CreateWindow(WindowInfo)
 	Library.Scheme.Font = WindowInfo.Font
 	Library.ToggleKeybind = WindowInfo.ToggleKeybind
 
-	local IsDefaultSearchbarSize = WindowInfo.SearchbarSize == UDim2.fromScale(1, 1)
+	local IsDefaultSearchbarSize = false -- we're using fixed size now
 	local MainFrame
 	local SearchBox
 	local CurrentTabInfo
@@ -9008,20 +9008,9 @@ function Library:CreateWindow(WindowInfo)
 			Parent = TopBar,
 		})
 
-		-- Use Horizontal layout, items fill from LEFT
-		New("UIListLayout", {
-			FillDirection = Enum.FillDirection.Horizontal,
-			HorizontalAlignment = Enum.HorizontalAlignment.Left,
-			VerticalAlignment = Enum.VerticalAlignment.Center,
-			Padding = UDim.new(0, 12),
-			Parent = RightWrapper,
-		})
-
-		-- Right side of top bar: Tab info on LEFT, Search on RIGHT
-		-- We use absolute positioning - NO UIListLayout in RightWrapper
-
+		-- Tab info container (left side of RightWrapper)
 		CurrentTabInfo = New("Frame", {
-			Size = UDim2.new(0.55, 0, 1, 0), -- 55% of RightWrapper width
+			Size = UDim2.new(0.5, 0, 1, 0), -- 50% width, fixed
 			Position = UDim2.fromOffset(0, 0),
 			Visible = true,
 			BackgroundTransparency = 1,
@@ -9067,15 +9056,23 @@ function Library:CreateWindow(WindowInfo)
 			Parent = CurrentTabInfo,
 		})
 
+		-- Search container (right side of RightWrapper) - COMPLETELY SEPARATE
+		local SearchContainer = New("Frame", {
+			BackgroundTransparency = 1,
+			Size = UDim2.new(0, 260, 0.8, 0), -- fixed width, 80% height
+			Position = UDim2.new(1, -270, 0.1, 0), -- anchored to right
+			AnchorPoint = Vector2.new(1, 0),
+			Parent = RightWrapper,
+		})
+
 		SearchBox = New("TextBox", {
 			BackgroundColor3 = "MainColor",
 			PlaceholderText = "Search",
-			Size = UDim2.new(0, 240, 0.75, 0), -- fixed width, slightly shorter height
-			Position = UDim2.new(1, -250, 0.125, 0), -- right side with margin
-			AnchorPoint = Vector2.new(1, 0),
+			Size = UDim2.fromScale(1, 1), -- fills SearchContainer
+			Position = UDim2.fromOffset(0, 0),
 			TextScaled = true,
 			Visible = not (WindowInfo.DisableSearch or false),
-			Parent = RightWrapper,
+			Parent = SearchContainer,
 		})
 		New("UICorner", {
 			CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
@@ -9083,7 +9080,7 @@ function Library:CreateWindow(WindowInfo)
 		})
 		New("UIPadding", {
 			PaddingBottom = UDim.new(0, 8),
-			PaddingLeft = UDim.new(0, 8),
+			PaddingLeft = UDim.new(0, 32), -- extra left for icon
 			PaddingRight = UDim.new(0, 8),
 			PaddingTop = UDim.new(0, 8),
 			Parent = SearchBox,
@@ -9101,6 +9098,7 @@ function Library:CreateWindow(WindowInfo)
 				ImageRectOffset = SearchIcon.ImageRectOffset,
 				ImageRectSize = SearchIcon.ImageRectSize,
 				ImageTransparency = 0.5,
+				Position = UDim2.fromOffset(8, 0),
 				Size = UDim2.fromScale(1, 1),
 				SizeConstraint = Enum.SizeConstraint.RelativeYY,
 				Parent = SearchBox,
@@ -10269,13 +10267,15 @@ function Library:CreateWindow(WindowInfo)
 				}):Play()
 			end
 
-			-- ALWAYS show tab info, not just when Description exists
+			-- ALWAYS show tab info (not just when Description exists)
 			CurrentTabInfo.Visible = true
 			CurrentTabLabel.Text = Name
-			CurrentTabDescription.Text = Description or "" -- empty if no description
+			CurrentTabDescription.Text = Description or ""
 
-			-- Search stays small and right-aligned (no size change needed)
-			-- SearchBox.Size stays as UDim2.new(0, 280, 1, 0)
+			-- REMOVED: Don't resize search box when switching tabs
+			-- if IsDefaultSearchbarSize then
+			--     SearchBox.Size = UDim2.fromScale(0.5, 1)
+			-- end
 
 			TabContainer.Visible = true
 			Library.ActiveTab = Tab
@@ -10506,8 +10506,10 @@ function Library:CreateWindow(WindowInfo)
 			end
 			TabContainer.Visible = false
 
-			-- Keep CurrentTabInfo visible (shows last tab info, or hide if you prefer)
-			-- CurrentTabInfo.Visible = false  -- uncomment to hide when no tab active
+			-- REMOVED: Don't resize search back to full
+			-- if IsDefaultSearchbarSize then
+			--     SearchBox.Size = WindowInfo.SearchbarSize
+			-- end
 
 			Library.ActiveTab = nil
 		end
