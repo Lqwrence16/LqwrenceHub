@@ -9017,7 +9017,7 @@ function Library:CreateWindow(WindowInfo)
 		})
 
 		CurrentTabInfo = New("Frame", {
-			Size = UDim2.fromScale(WindowInfo.DisableSearch and 1 or 0.5, 1),
+			Size = UDim2.fromScale(WindowInfo.DisableSearch and 1 or 0.40, 1), -- 0.5→0.4
 			Visible = false,
 			BackgroundTransparency = 1,
 			Parent = RightWrapper,
