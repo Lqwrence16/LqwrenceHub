@@ -10266,9 +10266,9 @@ function Library:CreateWindow(WindowInfo)
 			if Description then
 				CurrentTabInfo.Visible = true
 
-				if IsDefaultSearchbarSize then
-					SearchBox.Size = UDim2.fromScale(0.5, 1)
-				end
+				--if IsDefaultSearchbarSize then
+				--	SearchBox.Size = UDim2.fromScale(0.5, 1)
+				--end
 
 				CurrentTabLabel.Text = Name
 				CurrentTabDescription.Text = Description
@@ -10293,9 +10293,9 @@ function Library:CreateWindow(WindowInfo)
 			end
 			TabContainer.Visible = false
 
-			if IsDefaultSearchbarSize then
-				SearchBox.Size = UDim2.fromScale(1, 1)
-			end
+			--if IsDefaultSearchbarSize then
+			--	SearchBox.Size = UDim2.fromScale(1, 1)
+			--end
 
 			CurrentTabInfo.Visible = false
 
