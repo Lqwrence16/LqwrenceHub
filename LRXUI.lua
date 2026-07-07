@@ -8904,17 +8904,18 @@ function Library:CreateWindow(WindowInfo)
 		})
 		do
 			local Lines = {
+				-- REMOVED: Horizontal line between title and search area
+				-- {
+				--     Position = UDim2.fromOffset(0, 48),
+				--     Size = UDim2.new(1, 0, 0, 1),
+				-- },
 				{
-					Position = UDim2.fromOffset(0, 48),
-					Size = UDim2.new(1, 0, 0, 1),
+					Position = UDim2.fromScale(0.3, 0), -- Vertical sidebar separator (keep)
+					Size = UDim2.new(0, 1, 1, -21),
 				},
-				--{
-				--	Position = UDim2.fromScale(0.3, 0),
-				--	Size = UDim2.new(0, 1, 1, -21),
-				--},
 				{
 					AnchorPoint = Vector2.new(0, 1),
-					Position = UDim2.new(0, 0, 1, -20),
+					Position = UDim2.new(0, 0, 1, -20), -- Horizontal line above footer (keep)
 					Size = UDim2.new(1, 0, 0, 1),
 				},
 			}
@@ -8952,7 +8953,7 @@ function Library:CreateWindow(WindowInfo)
 		--// Title
 		local TitleHolder = New("Frame", {
 			BackgroundTransparency = 1,
-			Size = UDim2.fromScale(0.22, 1),
+			Size = UDim2.fromScale(0.3, 1),
 			Parent = TopBar,
 		})
 		New("UIListLayout", {
@@ -8989,8 +8990,8 @@ function Library:CreateWindow(WindowInfo)
 		local RightWrapper = New("Frame", {
 			BackgroundTransparency = 1,
 			AnchorPoint = Vector2.new(0, 0.5),
-			Position = UDim2.new(0.22, 8, 0.5, 0), -- <-- Starts at 22% (no line gap)
-			Size = UDim2.new(0.78, -57, 1, -16), -- <-- Takes remaining width
+			Position = UDim2.new(0.3, 8, 0.5, 0),
+			Size = UDim2.new(0.7, -57, 1, -16),
 			Parent = TopBar,
 		})
 
@@ -9003,7 +9004,7 @@ function Library:CreateWindow(WindowInfo)
 		})
 
 		CurrentTabInfo = New("Frame", {
-			Size = UDim2.fromScale(WindowInfo.DisableSearch and 1 or 0.35, 1),
+			Size = UDim2.fromScale(WindowInfo.DisableSearch and 1 or 0.5, 1),
 			Visible = false,
 			BackgroundTransparency = 1,
 			Parent = RightWrapper,
@@ -9050,8 +9051,6 @@ function Library:CreateWindow(WindowInfo)
 			BackgroundColor3 = "MainColor",
 			PlaceholderText = "Search",
 			Size = WindowInfo.SearchbarSize,
-			Position = UDim2.new(1, -200, 0, 0), -- <-- Align to right side
-			AnchorPoint = Vector2.new(1, 0.5), -- <-- Anchor right
 			TextScaled = true,
 			Visible = not (WindowInfo.DisableSearch or false),
 			Parent = RightWrapper,
@@ -9171,7 +9170,7 @@ function Library:CreateWindow(WindowInfo)
 			CanvasSize = UDim2.fromScale(0, 0),
 			Position = UDim2.fromOffset(0, 49),
 			ScrollBarThickness = 0,
-			Size = UDim2.new(0.22, 0, 1, -70),
+			Size = UDim2.new(0.3, 0, 1, -70),
 			Parent = MainFrame,
 		})
 
@@ -9187,7 +9186,7 @@ function Library:CreateWindow(WindowInfo)
 			end,
 			Name = "Container",
 			Position = UDim2.new(1, 0, 0, 49),
-			Size = UDim2.new(0.78, -1, 1, -70),
+			Size = UDim2.new(0.7, -1, 1, -70),
 			Parent = MainFrame,
 		})
 
