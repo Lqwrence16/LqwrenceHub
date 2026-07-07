@@ -8881,10 +8881,6 @@ function Library:CreateWindow(WindowInfo)
 		do
 			local Lines = {
 				{
-					Position = UDim2.fromOffset(0, 48),
-					Size = UDim2.new(1, 0, 0, 1),
-				},
-				{
 					Position = UDim2.fromScale(0.3, 0),
 					Size = UDim2.new(0, 1, 1, -21),
 				},
@@ -9023,28 +9019,33 @@ function Library:CreateWindow(WindowInfo)
 		})
 
 		SearchBox = New("TextBox", {
-			BackgroundColor3 = "MainColor",
+			BackgroundColor3 = "BackgroundColor",
 			PlaceholderText = "Search",
-			Size = WindowInfo.SearchbarSize,
-			TextScaled = true,
+			PlaceholderColor3 = function()
+				local H, S, V = Library.Scheme.FontColor:ToHSV()
+				return Color3.fromHSV(H, S, V / 3)
+			end,
+			Size = UDim2.new(0.45, 0, 0, 32),
+			Text = "",
+			TextSize = 13,
+			TextColor3 = "FontColor",
+			TextXAlignment = Enum.TextXAlignment.Left,
 			Visible = not (WindowInfo.DisableSearch or false),
 			Parent = RightWrapper,
 		})
 		New("UICorner", {
-			CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+			CornerRadius = UDim.new(0, 6),
 			Parent = SearchBox,
 		})
 		New("UIPadding", {
-			PaddingBottom = UDim.new(0, 8),
-			PaddingLeft = UDim.new(0, 8),
-			PaddingRight = UDim.new(0, 8),
-			PaddingTop = UDim.new(0, 8),
+			PaddingBottom = UDim.new(0, 0),
+			PaddingLeft = UDim.new(0, 32), -- space for icon
+			PaddingRight = UDim.new(0, 10),
+			PaddingTop = UDim.new(0, 0),
 			Parent = SearchBox,
 		})
-		New("UIStroke", {
-			Color = "OutlineColor",
-			Parent = SearchBox,
-		})
+
+		-- No border stroke for Exotic Hub look (clean, flat)
 
 		local SearchIcon = Library:GetIcon("search")
 		if SearchIcon then
@@ -9053,9 +9054,12 @@ function Library:CreateWindow(WindowInfo)
 				ImageColor3 = "FontColor",
 				ImageRectOffset = SearchIcon.ImageRectOffset,
 				ImageRectSize = SearchIcon.ImageRectSize,
-				ImageTransparency = 0.5,
-				Size = UDim2.fromScale(1, 1),
-				SizeConstraint = Enum.SizeConstraint.RelativeYY,
+				ImageTransparency = 0.35,
+				Position = UDim2.fromOffset(10, 0),
+				AnchorPoint = Vector2.new(0, 0.5),
+				Position = UDim2.fromOffset(10, 16),
+				Size = UDim2.fromOffset(14, 14),
+				BackgroundTransparency = 1,
 				Parent = SearchBox,
 			})
 		end
