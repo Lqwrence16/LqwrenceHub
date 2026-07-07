@@ -8905,23 +8905,36 @@ function Library:CreateWindow(WindowInfo)
 		do
 			local Lines = {
 				{
-					Position = UDim2.fromOffset(0, 48), -- horizontal line under top bar (keep)
+					Position = UDim2.fromOffset(0, 48), -- horizontal line under top bar (KEEP)
 					Size = UDim2.new(1, 0, 0, 1),
 				},
-				-- REMOVED: Vertical line between "LRX Premium Hub" and search bar
-				{
-					Position = UDim2.fromScale(0.3, 0),
-					Size = UDim2.new(0, 1, 1, -21),
-				},
+				-- REMOVED: Full-height vertical line that cuts through top bar
+				-- {
+				--     Position = UDim2.fromScale(0.3, 0),
+				--     Size = UDim2.new(0, 1, 1, -21),
+				-- },
 				{
 					AnchorPoint = Vector2.new(0, 1),
-					Position = UDim2.new(0, 0, 1, -20), -- horizontal line above footer (keep)
+					Position = UDim2.new(0, 0, 1, -20), -- horizontal line above footer (KEEP)
 					Size = UDim2.new(1, 0, 0, 1),
 				},
 			}
 			for _, Info in pairs(Lines) do
 				Library:MakeLine(MainFrame, Info)
 			end
+
+			-- NEW: Vertical line that starts BELOW the top bar (at Y=49)
+			-- This keeps the sidebar/content separator without dividing title and search
+			local VerticalLine = New("Frame", {
+				BackgroundColor3 = "OutlineColor",
+				Position = UDim2.new(0.3, 0, 0, 49), -- X=30%, Y=49 (below 48px top bar)
+				Size = UDim2.new(0, 1, 1, -69), -- 1px wide, height minus 49+20
+				Parent = MainFrame,
+			})
+			Library:AddToRegistry(VerticalLine, {
+				BackgroundColor3 = "OutlineColor",
+			})
+
 			Library:MakeOutline(MainFrame, WindowInfo.CornerRadius, 0)
 		end
 
