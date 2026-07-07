@@ -8908,10 +8908,10 @@ function Library:CreateWindow(WindowInfo)
 					Position = UDim2.fromOffset(0, 48),
 					Size = UDim2.new(1, 0, 0, 1),
 				},
-				{
-					Position = UDim2.fromScale(0.3, 0),
-					Size = UDim2.new(0, 1, 1, -21),
-				},
+				--{
+				--	Position = UDim2.fromScale(0.3, 0),
+				--	Size = UDim2.new(0, 1, 1, -21),
+				--},
 				{
 					AnchorPoint = Vector2.new(0, 1),
 					Position = UDim2.new(0, 0, 1, -20),
