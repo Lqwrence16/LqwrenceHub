@@ -12,7 +12,8 @@
 ]]
 
 -- 1. Load the LRXUI Core Library
-local LRXUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.lua"))()
+local LRXUI =
+	loadstring(game:HttpGet("https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/main.lua"))()
 
 -- 2. Create main window container
 local HubWindow = LRXUI.CreateWindow({
