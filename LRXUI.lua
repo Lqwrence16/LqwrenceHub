@@ -10204,7 +10204,8 @@ function Library:CreateWindow(WindowInfo)
 			end
 
 			TweenService:Create(TabButton, Library.TweenInfo, {
-				BackgroundTransparency = 0,
+				BackgroundColor3 = Library.Scheme.MainColor,
+				BackgroundTransparency = 0.5,
 			}):Play()
 			TweenService:Create(TabLabel, Library.TweenInfo, {
 				TextTransparency = 0,
@@ -10529,7 +10530,7 @@ function Library:CreateWindow(WindowInfo)
 
 	-- if Library.IsMobile then #button
 	if true then
-		local ToggleButton = Library:AddDraggableButton("<b><font color='#FFEA00'>Exotic</font></b>", function()
+		local ToggleButton = Library:AddDraggableButton("<b><font color='#FFEA00'>LRX</font></b>", function()
 			Library:Toggle()
 		end)
 
@@ -10545,7 +10546,7 @@ function Library:CreateWindow(WindowInfo)
 
 		-- task.spawn(function()
 		--     while true do
-		--         ToggleButton.Button.Text = string.format("<b><font color='%s'>Exotic</font></b>", colors[i])
+		--         ToggleButton.Button.Text = string.format("<b><font color='%s'>LRX</font></b>", colors[i])
 		--         i = (i % #colors) + 1
 		--         task.wait(0.3)
 		--     end
