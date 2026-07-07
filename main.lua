@@ -68,11 +68,6 @@ local Window = Library:CreateWindow({
 -- ==============================================================================
 local HomeTab = Window:AddTab("Home", "house")
 local AutoFarmTab = Window:AddTab("Auto-Farm", "sword")
-local AutoPlantTab = Window:AddTab("Auto-Plant", "flower-2")
-local AutoCollectTab = Window:AddTab("Auto-Collect", "shopping-basket")
-local AutoShovelTab = Window:AddTab("Auto-Shovel", "shovel")
-local PlotScanTab = Window:AddTab("Plot Scan", "scan")
-local TeleportTab = Window:AddTab("Teleports", "map-pin")
 local SettingsTab = Window:AddTab("Settings", "settings")
 
 -- ==============================================================================
@@ -223,231 +218,6 @@ FarmRight:AddButton("Reset Farm Stats", function()
 end)
 
 -- ==============================================================================
--- AUTO-PLANT TAB
--- ==============================================================================
-local PlantLeft = AutoPlantTab:AddLeftGroupbox("Seed Controls", "flower-2")
-local PlantRight = AutoPlantTab:AddRightGroupbox("Plant Settings", "sliders-horizontal")
-
-local AutoPlantToggle = PlantLeft:AddToggle("AutoPlant", {
-	Text = "Enable Auto-Plant",
-	Default = GetSaved("AutoPlant", false),
-	Tooltip = "Automatically plants seeds in your plot",
-	Callback = function(Value)
-		SetSaved("AutoPlant", Value)
-		_G.AutoPlantEnabled = Value
-	end,
-})
-
-local AutoSeedToggle = PlantLeft:AddToggle("AutoSeed", {
-	Text = "Auto-Buy Seeds",
-	Default = GetSaved("AutoSeed", false),
-	Tooltip = "Automatically buys seeds when low",
-	Callback = function(Value)
-		SetSaved("AutoSeed", Value)
-		_G.AutoSeedEnabled = Value
-	end,
-})
-
-PlantLeft:AddDropdown("SeedType", {
-	Text = "Seed Type",
-	Values = { "Wheat", "Corn", "Carrot", "Tomato", "Pumpkin", "Watermelon" },
-	Default = GetSaved("SeedType", "Wheat"),
-	Callback = function(Value)
-		SetSaved("SeedType", Value)
-	end,
-})
-
-PlantRight:AddSlider("PlantDelay", {
-	Text = "Plant Delay",
-	Default = GetSaved("PlantDelay", 0.2),
-	Min = 0.05,
-	Max = 2.0,
-	Rounding = 2,
-	Suffix = "s",
-	Callback = function(Value)
-		SetSaved("PlantDelay", Value)
-	end,
-})
-
-PlantRight:AddToggle("SmartPlant", {
-	Text = "Smart Planting",
-	Default = GetSaved("SmartPlant", true),
-	Tooltip = "Prioritizes empty plots first",
-	Callback = function(Value)
-		SetSaved("SmartPlant", Value)
-	end,
-})
-
--- ==============================================================================
--- AUTO-COLLECT TAB
--- ==============================================================================
-local CollectLeft = AutoCollectTab:AddLeftGroupbox("Collection Controls", "shopping-basket")
-local CollectRight = AutoCollectTab:AddRightGroupbox("Collection Settings", "sliders-horizontal")
-
-local AutoCollectToggle = CollectLeft:AddToggle("AutoCollect", {
-	Text = "Enable Auto-Collect",
-	Default = GetSaved("AutoCollect", false),
-	Tooltip = "Automatically collects grown crops",
-	Callback = function(Value)
-		SetSaved("AutoCollect", Value)
-		_G.AutoCollectEnabled = Value
-	end,
-})
-
-CollectLeft:AddToggle("CollectFruits", {
-	Text = "Collect Fruits",
-	Default = GetSaved("CollectFruits", true),
-	Tooltip = "Collects fruit drops",
-	Callback = function(Value)
-		SetSaved("CollectFruits", Value)
-	end,
-})
-
-CollectLeft:AddToggle("CollectSeeds", {
-	Text = "Collect Seeds",
-	Default = GetSaved("CollectSeeds", true),
-	Tooltip = "Collects seed drops",
-	Callback = function(Value)
-		SetSaved("CollectSeeds", Value)
-	end,
-})
-
-CollectRight:AddSlider("CollectRadius", {
-	Text = "Collection Radius",
-	Default = GetSaved("CollectRadius", 20),
-	Min = 5,
-	Max = 100,
-	Rounding = 0,
-	Suffix = " studs",
-	Callback = function(Value)
-		SetSaved("CollectRadius", Value)
-	end,
-})
-
--- ==============================================================================
--- AUTO-SHOVEL TAB
--- ==============================================================================
-local ShovelLeft = AutoShovelTab:AddLeftGroupbox("Shovel Controls", "shovel")
-local ShovelRight = AutoShovelTab:AddRightGroupbox("Shovel Settings", "sliders-horizontal")
-
-local AutoShovelToggle = ShovelLeft:AddToggle("AutoShovel", {
-	Text = "Enable Auto-Shovel",
-	Default = GetSaved("AutoShovel", false),
-	Tooltip = "Automatically shovels dead crops",
-	Callback = function(Value)
-		SetSaved("AutoShovel", Value)
-		_G.AutoShovelEnabled = Value
-	end,
-})
-
-ShovelLeft:AddToggle("ShovelDeadOnly", {
-	Text = "Dead Crops Only",
-	Default = GetSaved("ShovelDeadOnly", true),
-	Tooltip = "Only shovels dead/withered crops",
-	Callback = function(Value)
-		SetSaved("ShovelDeadOnly", Value)
-	end,
-})
-
-ShovelRight:AddSlider("ShovelDelay", {
-	Text = "Shovel Delay",
-	Default = GetSaved("ShovelDelay", 0.3),
-	Min = 0.1,
-	Max = 2.0,
-	Rounding = 2,
-	Suffix = "s",
-	Callback = function(Value)
-		SetSaved("ShovelDelay", Value)
-	end,
-})
-
--- ==============================================================================
--- PLOT SCAN TAB
--- ==============================================================================
-local ScanLeft = PlotScanTab:AddLeftGroupbox("Scan Controls", "scan")
-local ScanRight = PlotScanTab:AddRightGroupbox("Scan Settings", "sliders-horizontal")
-
-local PlotScanToggle = ScanLeft:AddToggle("PlotScan", {
-	Text = "Enable Plot Scan",
-	Default = GetSaved("PlotScan", false),
-	Tooltip = "Scans and visualizes your plot grid",
-	Callback = function(Value)
-		SetSaved("PlotScan", Value)
-		_G.PlotScanEnabled = Value
-	end,
-})
-
-ScanLeft:AddToggle("ShowGrid", {
-	Text = "Show Grid Dots",
-	Default = GetSaved("ShowGrid", true),
-	Tooltip = "Visual grid overlay on plot",
-	Callback = function(Value)
-		SetSaved("ShowGrid", Value)
-	end,
-})
-
-ScanLeft:AddToggle("ShowLaser", {
-	Text = "Laser Scan Effect",
-	Default = GetSaved("ShowLaser", false),
-	Tooltip = "Animated laser scan effect",
-	Callback = function(Value)
-		SetSaved("ShowLaser", Value)
-	end,
-})
-
-ScanRight:AddSlider("ScanInterval", {
-	Text = "Scan Interval",
-	Default = GetSaved("ScanInterval", 5),
-	Min = 1,
-	Max = 30,
-	Rounding = 0,
-	Suffix = "s",
-	Callback = function(Value)
-		SetSaved("ScanInterval", Value)
-	end,
-})
-
--- ==============================================================================
--- TELEPORT TAB
--- ==============================================================================
-local TeleportLeft = TeleportTab:AddLeftGroupbox("Locations", "map-pin")
-local TeleportRight = TeleportTab:AddRightGroupbox("Teleport Settings", "sliders-horizontal")
-
-TeleportLeft:AddButton("Teleport to Spawn", function()
-	-- Your teleport logic
-	Library:Notify({ Title = "Teleported", Description = "Moved to spawn", Time = 2 })
-end)
-
-TeleportLeft:AddButton("Teleport to Plot", function()
-	-- Your teleport logic
-	Library:Notify({ Title = "Teleported", Description = "Moved to your plot", Time = 2 })
-end)
-
-TeleportLeft:AddButton("Teleport to Shop", function()
-	-- Your teleport logic
-	Library:Notify({ Title = "Teleported", Description = "Moved to shop", Time = 2 })
-end)
-
-TeleportRight:AddToggle("AutoTeleport", {
-	Text = "Auto-Teleport",
-	Default = GetSaved("AutoTeleport", false),
-	Tooltip = "Auto-teleports to targets",
-	Callback = function(Value)
-		SetSaved("AutoTeleport", Value)
-		_G.AutoTeleportEnabled = Value
-	end,
-})
-
-TeleportRight:AddToggle("SafeTeleport", {
-	Text = "Safe Teleport",
-	Default = GetSaved("SafeTeleport", true),
-	Tooltip = "Checks safety before teleporting",
-	Callback = function(Value)
-		SetSaved("SafeTeleport", Value)
-	end,
-})
-
--- ==============================================================================
 -- SETTINGS TAB
 -- ==============================================================================
 local SettingsLeft = SettingsTab:AddLeftGroupbox("General Settings", "settings")
@@ -495,16 +265,6 @@ SettingsRight:AddDivider()
 SettingsRight:AddButton("Close All / Stop Everything", function()
 	-- 1. STOP ALL AUTOMATION FLAGS
 	_G.AutoFarmEnabled = false
-	_G.FastAttackEnabled = false
-	_G.AutoEquipEnabled = false
-	_G.AutoPlantEnabled = false
-	_G.AutoSeedEnabled = false
-	_G.AutoCollectEnabled = false
-	_G.AutoShovelEnabled = false
-	_G.PlotScanEnabled = false
-	_G.AutoTeleportEnabled = false
-	_G.AntiAFKEnabled = false
-	_G.AutoRejoinEnabled = false
 	_G.LRX_KillSwitch = true
 
 	-- 2. DISCONNECT ALL CONNECTIONS
@@ -530,7 +290,7 @@ SettingsRight:AddButton("Close All / Stop Everything", function()
 	})
 
 	-- 5. DESTROY UI
-	task.wait(0.5)
+	task.wait(0.1)
 
 	if Library and Library.Unload then
 		Library:Unload()
@@ -579,5 +339,8 @@ SettingsRight:AddButton("Reset All Settings", function()
 		end,
 	})
 end)
+-- ==============================================================================
+-- SETTINGS TAB-end
+-- ==============================================================================
 
 print("[LRX Hub] Main script loaded successfully!")
