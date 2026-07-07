@@ -9002,9 +9002,9 @@ function Library:CreateWindow(WindowInfo)
 		--// Top Right Bar
 		local RightWrapper = New("Frame", {
 			BackgroundTransparency = 1,
-			AnchorPoint = Vector2.new(1, 0.5), -- anchor to right edge
-			Position = UDim2.new(1, -10, 0.5, 0), -- 10px from right edge of window
-			Size = UDim2.new(0.50, -57, 1, -16), -- width from right side
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(1, -4, 0.5, 0), -- -4 = 4px gap from right edge
+			Size = UDim2.new(0.45, 0, 1, -16), -- narrower so it doesn't reach title
 			Parent = TopBar,
 		})
 
@@ -9066,7 +9066,8 @@ function Library:CreateWindow(WindowInfo)
 			Size = UDim2.new(1, 0, 0.85, 0), -- full width of wrapper
 			AnchorPoint = Vector2.new(1, 0.5),
 			Position = UDim2.new(1, 0, 0.5, 0), -- flush right, no gap
-			-- ...
+			Visible = not (WindowInfo.DisableSearch or false),
+			Parent = RightWrapper,
 		})
 
 		New("UICorner", {
