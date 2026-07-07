@@ -9002,9 +9002,9 @@ function Library:CreateWindow(WindowInfo)
 		--// Top Right Bar
 		local RightWrapper = New("Frame", {
 			BackgroundTransparency = 1,
-			AnchorPoint = Vector2.new(1, 0.5),
-			Position = UDim2.new(1, -4, 0.5, 0), -- -4 = 4px gap from right edge
-			Size = UDim2.new(0.45, 0, 1, -16), -- narrower so it doesn't reach title
+			AnchorPoint = Vector2.new(0, 0.5),
+			Position = UDim2.new(0.32, 15, 0.5, 0), -- X: 0.3→0.32, offset 8→15 (more right)
+			Size = UDim2.new(0.60, -57, 1, -16), -- width: 0.7→0.6 (narrower)
 			Parent = TopBar,
 		})
 
@@ -9063,10 +9063,12 @@ function Library:CreateWindow(WindowInfo)
 		SearchBox = New("TextBox", {
 			BackgroundColor3 = "MainColor",
 			PlaceholderText = "Search",
-			Size = UDim2.new(1, 0, 0.85, 0), -- full width of wrapper
-			AnchorPoint = Vector2.new(1, 0.5),
-			Position = UDim2.new(1, 0, 0.5, 0), -- flush right, no gap
-			-- ...
+			Size = UDim2.new(0.69, 0, 0.85, 0), -- 75% width, slightly shorter height
+			AnchorPoint = Vector2.new(1, 0.5), -- anchor to right edge
+			Position = UDim2.new(1, -10, 0.5, 0), -- 10px from right edge of wrapper
+			TextScaled = true,
+			Visible = not (WindowInfo.DisableSearch or false),
+			Parent = RightWrapper,
 		})
 
 		New("UICorner", {
