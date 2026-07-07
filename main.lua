@@ -181,8 +181,17 @@ local Schemes = {
 	},
 }
 
-local CurrentScheme = Schemes.Dark
-local Palette = CurrentScheme
+local Palette = {}
+local CurrentScheme = Palette
+
+local function LoadScheme(name)
+	local scheme = Schemes[name] or Schemes.Dark
+	for k, v in pairs(scheme) do
+		Palette[k] = v
+	end
+end
+
+LoadScheme("Dark")
 
 local Registry = {
 	ThemeLinks = {},
@@ -4744,10 +4753,7 @@ local function CreateWindow(info)
 		WatermarkText = "",
 	})
 
-	CurrentScheme = Schemes[info.Theme] or Schemes.Dark
-	Palette = CurrentScheme
-	LRXUI.Palette = Palette
-	LRXUI.CurrentScheme = CurrentScheme
+	LoadScheme(info.Theme)
 
 	local screenGui = F.Create("ScreenGui", {
 		Name = "LRXUI",
@@ -5100,8 +5106,7 @@ local function CreateWindow(info)
 	end
 
 	function windowObject:SetTheme(themeName)
-		CurrentScheme = Schemes[themeName] or Schemes.Dark
-		Palette = CurrentScheme
+		LoadScheme(themeName)
 		ApplyTheme()
 
 		window.BackgroundColor3 = Palette.Background
@@ -5259,10 +5264,7 @@ local LRXUI = {
 		return CurrentScheme
 	end,
 	SetTheme = function(name)
-		CurrentScheme = Schemes[name] or Schemes.Dark
-		Palette = CurrentScheme
-		LRXUI.Palette = Palette
-		LRXUI.CurrentScheme = CurrentScheme
+		LoadScheme(name)
 		ApplyTheme()
 	end,
 	OnUnload = function(callback)
