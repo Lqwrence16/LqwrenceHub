@@ -8863,7 +8863,7 @@ function Library:CreateWindow(WindowInfo)
 	Library.Scheme.Font = WindowInfo.Font
 	Library.ToggleKeybind = WindowInfo.ToggleKeybind
 
-	local IsDefaultSearchbarSize = false -- we're using fixed size now
+	local IsDefaultSearchbarSize = WindowInfo.SearchbarSize == UDim2.fromScale(1, 1)
 	local MainFrame
 	local SearchBox
 	local CurrentTabInfo
@@ -8966,7 +8966,7 @@ function Library:CreateWindow(WindowInfo)
 		--// Title
 		local TitleHolder = New("Frame", {
 			BackgroundTransparency = 1,
-			Size = UDim2.fromScale(0.22, 1),
+			Size = UDim2.fromScale(0.3, 1),
 			Parent = TopBar,
 		})
 		New("UIListLayout", {
@@ -9003,16 +9003,22 @@ function Library:CreateWindow(WindowInfo)
 		local RightWrapper = New("Frame", {
 			BackgroundTransparency = 1,
 			AnchorPoint = Vector2.new(0, 0.5),
-			Position = UDim2.new(0.22, 12, 0.5, 0),
-			Size = UDim2.new(0.78, -57, 1, -16),
+			Position = UDim2.new(0.3, 8, 0.5, 0),
+			Size = UDim2.new(0.7, -57, 1, -16),
 			Parent = TopBar,
 		})
 
-		-- Tab info container (left side of RightWrapper)
+		New("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			HorizontalAlignment = Enum.HorizontalAlignment.Right,
+			VerticalAlignment = Enum.VerticalAlignment.Center,
+			Padding = UDim.new(0, 8),
+			Parent = RightWrapper,
+		})
+
 		CurrentTabInfo = New("Frame", {
-			Size = UDim2.new(0.5, 0, 1, 0), -- 50% width, fixed
-			Position = UDim2.fromOffset(0, 0),
-			Visible = true,
+			Size = UDim2.fromScale(WindowInfo.DisableSearch and 1 or 0.5, 1),
+			Visible = false,
 			BackgroundTransparency = 1,
 			Parent = RightWrapper,
 		})
@@ -9021,15 +9027,14 @@ function Library:CreateWindow(WindowInfo)
 			FillDirection = Enum.FillDirection.Vertical,
 			HorizontalAlignment = Enum.HorizontalAlignment.Left,
 			VerticalAlignment = Enum.VerticalAlignment.Center,
-			Padding = UDim.new(0, 2),
 			Parent = CurrentTabInfo,
 		})
 
 		New("UIPadding", {
-			PaddingBottom = UDim.new(0, 4),
+			PaddingBottom = UDim.new(0, 8),
 			PaddingLeft = UDim.new(0, 8),
 			PaddingRight = UDim.new(0, 8),
-			PaddingTop = UDim.new(0, 4),
+			PaddingTop = UDim.new(0, 8),
 			Parent = CurrentTabInfo,
 		})
 
@@ -9038,9 +9043,8 @@ function Library:CreateWindow(WindowInfo)
 			Size = UDim2.fromScale(1, 0),
 			AutomaticSize = Enum.AutomaticSize.Y,
 			Text = "",
-			TextSize = 15,
+			TextSize = 14,
 			TextXAlignment = Enum.TextXAlignment.Left,
-			TextTransparency = 0,
 			Parent = CurrentTabInfo,
 		})
 
@@ -9050,29 +9054,19 @@ function Library:CreateWindow(WindowInfo)
 			AutomaticSize = Enum.AutomaticSize.Y,
 			Text = "",
 			TextWrapped = true,
-			TextSize = 12,
+			TextSize = 14,
 			TextXAlignment = Enum.TextXAlignment.Left,
 			TextTransparency = 0.5,
 			Parent = CurrentTabInfo,
 		})
 
-		-- Search container (right side of RightWrapper) - COMPLETELY SEPARATE
-		local SearchContainer = New("Frame", {
-			BackgroundTransparency = 1,
-			Size = UDim2.new(0, 260, 0.8, 0),
-			Position = UDim2.new(1, -20, 0.1, 0), -- ← Right edge with 10px margin
-			AnchorPoint = Vector2.new(1, 0), -- ← Anchor to RIGHT
-			Parent = RightWrapper,
-		})
-
 		SearchBox = New("TextBox", {
 			BackgroundColor3 = "MainColor",
 			PlaceholderText = "Search",
-			Size = UDim2.fromScale(1, 1), -- fills SearchContainer
-			Position = UDim2.fromOffset(0, 0),
+			Size = WindowInfo.SearchbarSize,
 			TextScaled = true,
 			Visible = not (WindowInfo.DisableSearch or false),
-			Parent = SearchContainer,
+			Parent = RightWrapper,
 		})
 		New("UICorner", {
 			CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
@@ -9080,7 +9074,7 @@ function Library:CreateWindow(WindowInfo)
 		})
 		New("UIPadding", {
 			PaddingBottom = UDim.new(0, 8),
-			PaddingLeft = UDim.new(0, 32), -- extra left for icon
+			PaddingLeft = UDim.new(0, 8),
 			PaddingRight = UDim.new(0, 8),
 			PaddingTop = UDim.new(0, 8),
 			Parent = SearchBox,
@@ -9098,7 +9092,6 @@ function Library:CreateWindow(WindowInfo)
 				ImageRectOffset = SearchIcon.ImageRectOffset,
 				ImageRectSize = SearchIcon.ImageRectSize,
 				ImageTransparency = 0.5,
-				Position = UDim2.fromOffset(8, 0),
 				Size = UDim2.fromScale(1, 1),
 				SizeConstraint = Enum.SizeConstraint.RelativeYY,
 				Parent = SearchBox,
@@ -10267,17 +10260,19 @@ function Library:CreateWindow(WindowInfo)
 				}):Play()
 			end
 
-			-- ALWAYS show tab info (not just when Description exists)
-			CurrentTabInfo.Visible = true
-			CurrentTabLabel.Text = Name
-			CurrentTabDescription.Text = Description or ""
+			if Description then
+				CurrentTabInfo.Visible = true
 
-			-- REMOVED: Don't resize search box when switching tabs
-			-- if IsDefaultSearchbarSize then
-			--     SearchBox.Size = UDim2.fromScale(0.5, 1)
-			-- end
+				if IsDefaultSearchbarSize then
+					SearchBox.Size = UDim2.fromScale(0.5, 1)
+				end
+
+				CurrentTabLabel.Text = Name
+				CurrentTabDescription.Text = Description
+			end
 
 			TabContainer.Visible = true
+
 			Library.ActiveTab = Tab
 		end
 
@@ -10505,11 +10500,6 @@ function Library:CreateWindow(WindowInfo)
 				}):Play()
 			end
 			TabContainer.Visible = false
-
-			-- REMOVED: Don't resize search back to full
-			-- if IsDefaultSearchbarSize then
-			--     SearchBox.Size = WindowInfo.SearchbarSize
-			-- end
 
 			Library.ActiveTab = nil
 		end
