@@ -8853,67 +8853,25 @@ function Library:CreateWindow(WindowInfo)
 			Size = false,
 		})
 
-		-- LAYER 1: Outer shell (darkest border)
-		local OuterShell = New("Frame", {
-			BackgroundColor3 = Library.Scheme.OutlineColor,
-			Size = UDim2.new(1, 0, 1, 0),
-			BorderSizePixel = 0,
-			Parent = nil, -- set after
-		})
-
-		-- LAYER 2: Mid shell (creates border depth)
-		local MidShell = New("Frame", {
-			BackgroundColor3 = Library.Scheme.BackgroundColor,
-			Size = UDim2.new(1, -2, 1, -2),
-			Position = UDim2.new(0, 1, 0, 1),
-			BorderSizePixel = 0,
-			Parent = OuterShell,
-		})
-		New("UICorner", {
-			CornerRadius = UDim.new(0, 2),
-			Parent = OuterShell,
-		})
-		New("UICorner", {
-			CornerRadius = UDim.new(0, 2),
-			Parent = MidShell,
-		})
-
-		-- LAYER 3: Inner surface (main background with larger radius)
 		MainFrame = New("Frame", {
 			BackgroundColor3 = function()
 				return Library:GetBetterColor(Library.Scheme.BackgroundColor, -1)
 			end,
 			Name = "Main",
-			Size = UDim2.new(1, -4, 1, -4),
-			Position = UDim2.new(0, 2, 0, 2),
-			BorderSizePixel = 0,
-			Active = true,
-			Parent = MidShell,
+			Position = WindowInfo.Position,
+			Size = WindowInfo.Size,
+			Visible = false,
+			Active = true, -- added
+			Parent = ScreenGui,
+
+			DPIExclude = {
+				Position = true,
+			},
 		})
 		New("UICorner", {
-			CornerRadius = UDim.new(0, WindowInfo.CornerRadius + 2),
+			CornerRadius = UDim.new(0, WindowInfo.CornerRadius - 1),
 			Parent = MainFrame,
 		})
-
-		-- Parent the shell to ScreenGui instead
-		OuterShell.Position = WindowInfo.Position
-		OuterShell.Size = WindowInfo.Size
-		OuterShell.Visible = false
-		OuterShell.Parent = ScreenGui
-
-		-- Update draggable to use OuterShell
-		Library:MakeDraggable(OuterShell, TopBar, false, true)
-
-		-- Update resize to use OuterShell
-		if WindowInfo.Resizable then
-			Library:MakeResizable(OuterShell, ResizeButton, function()
-				-- sync MainFrame size
-				MainFrame.Size = UDim2.new(1, -4, 1, -4)
-				for _, Tab in pairs(Library.Tabs) do
-					Tab:Resize(true)
-				end
-			end)
-		end
 		do
 			local Lines = {
 				{
@@ -10530,7 +10488,7 @@ function Library:CreateWindow(WindowInfo)
 			Library.Toggled = not Library.Toggled
 		end
 
-		OuterShell.Visible = Library.Toggled
+		MainFrame.Visible = Library.Toggled
 
 		-- Do not enable Modal for the normal window.
 		-- It traps the mouse when the GUI is parented to PlayerGui.
