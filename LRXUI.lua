@@ -8966,7 +8966,7 @@ function Library:CreateWindow(WindowInfo)
 		--// Title
 		local TitleHolder = New("Frame", {
 			BackgroundTransparency = 1,
-			Size = UDim2.fromScale(0.3, 1),
+			Size = UDim2.fromScale(0.22, 1),
 			Parent = TopBar,
 		})
 		New("UIListLayout", {
@@ -9003,8 +9003,8 @@ function Library:CreateWindow(WindowInfo)
 		local RightWrapper = New("Frame", {
 			BackgroundTransparency = 1,
 			AnchorPoint = Vector2.new(0, 0.5),
-			Position = UDim2.new(0.3, 8, 0.5, 0),
-			Size = UDim2.new(0.7, -57, 1, -16),
+			Position = UDim2.new(0.22, 12, 0.5, 0), -- ← starts at 22%, more gap
+			Size = UDim2.new(0.78, -57, 1, -16), -- ← takes 78%
 			Parent = TopBar,
 		})
 
@@ -9017,8 +9017,9 @@ function Library:CreateWindow(WindowInfo)
 		})
 
 		CurrentTabInfo = New("Frame", {
-			Size = UDim2.fromScale(WindowInfo.DisableSearch and 1 or 0.5, 1),
-			Visible = false,
+			Size = UDim2.new(1, -300, 1, 0), -- ← full width minus search space
+			Position = UDim2.fromOffset(0, 0),
+			Visible = true, -- ← ALWAYS VISIBLE
 			BackgroundTransparency = 1,
 			Parent = RightWrapper,
 		})
@@ -9027,14 +9028,15 @@ function Library:CreateWindow(WindowInfo)
 			FillDirection = Enum.FillDirection.Vertical,
 			HorizontalAlignment = Enum.HorizontalAlignment.Left,
 			VerticalAlignment = Enum.VerticalAlignment.Center,
+			Padding = UDim.new(0, 2),
 			Parent = CurrentTabInfo,
 		})
 
 		New("UIPadding", {
-			PaddingBottom = UDim.new(0, 8),
+			PaddingBottom = UDim.new(0, 4),
 			PaddingLeft = UDim.new(0, 8),
 			PaddingRight = UDim.new(0, 8),
-			PaddingTop = UDim.new(0, 8),
+			PaddingTop = UDim.new(0, 4),
 			Parent = CurrentTabInfo,
 		})
 
@@ -9043,8 +9045,9 @@ function Library:CreateWindow(WindowInfo)
 			Size = UDim2.fromScale(1, 0),
 			AutomaticSize = Enum.AutomaticSize.Y,
 			Text = "",
-			TextSize = 14,
+			TextSize = 15, -- ← slightly larger
 			TextXAlignment = Enum.TextXAlignment.Left,
+			TextTransparency = 0, -- ← fully visible
 			Parent = CurrentTabInfo,
 		})
 
@@ -9054,16 +9057,18 @@ function Library:CreateWindow(WindowInfo)
 			AutomaticSize = Enum.AutomaticSize.Y,
 			Text = "",
 			TextWrapped = true,
-			TextSize = 14,
+			TextSize = 12, -- ← smaller description
 			TextXAlignment = Enum.TextXAlignment.Left,
-			TextTransparency = 0.5,
+			TextTransparency = 0.5, -- ← slightly faded
 			Parent = CurrentTabInfo,
 		})
 
 		SearchBox = New("TextBox", {
 			BackgroundColor3 = "MainColor",
 			PlaceholderText = "Search",
-			Size = WindowInfo.SearchbarSize,
+			Size = UDim2.new(0, 280, 1, 0), -- ← fixed width: 280px, full height
+			Position = UDim2.new(1, -290, 0, 0), -- ← anchored to right edge
+			AnchorPoint = Vector2.new(1, 0), -- ← anchor right
 			TextScaled = true,
 			Visible = not (WindowInfo.DisableSearch or false),
 			Parent = RightWrapper,
@@ -10260,19 +10265,15 @@ function Library:CreateWindow(WindowInfo)
 				}):Play()
 			end
 
-			if Description then
-				CurrentTabInfo.Visible = true
+			-- ALWAYS show tab info, not just when Description exists
+			CurrentTabInfo.Visible = true
+			CurrentTabLabel.Text = Name
+			CurrentTabDescription.Text = Description or "" -- empty if no description
 
-				if IsDefaultSearchbarSize then
-					SearchBox.Size = UDim2.fromScale(0.5, 1)
-				end
-
-				CurrentTabLabel.Text = Name
-				CurrentTabDescription.Text = Description
-			end
+			-- Search stays small and right-aligned (no size change needed)
+			-- SearchBox.Size stays as UDim2.new(0, 280, 1, 0)
 
 			TabContainer.Visible = true
-
 			Library.ActiveTab = Tab
 		end
 
@@ -10500,6 +10501,9 @@ function Library:CreateWindow(WindowInfo)
 				}):Play()
 			end
 			TabContainer.Visible = false
+
+			-- Keep CurrentTabInfo visible (shows last tab info, or hide if you prefer)
+			-- CurrentTabInfo.Visible = false  -- uncomment to hide when no tab active
 
 			Library.ActiveTab = nil
 		end
