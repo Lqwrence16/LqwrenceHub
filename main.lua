@@ -701,7 +701,7 @@ function WindowSystem.new(config)
 		Name = "LRX_UI_Core",
 		ResetOnSpawn = false,
 		DisplayOrder = 10,
-		Parent = (RunService:IsStudio() and LocalPlayer:WaitForChild("PlayerGui") or CoreGui),
+		Parent = (LocalPlayer:WaitForChild("PlayerGui")),
 	})
 
 	-- Modal Blur effect
