@@ -13,7 +13,8 @@
 
 -- 1. Load the LRXUI Core Library
 -- Developers can host LRXUI.lua on their own GitHub or load it locally:
-local LRXUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/main.lua"))()
+local LRXUI =
+	loadstring(game:HttpGet("https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/main.lua"))()
 
 -- 2. Configure Themes and Aesthetics
 LRXUI:SetTheme("DarkSlate") -- Choose from: "DarkSlate", "NordicFrost", "AmberGold"
@@ -24,9 +25,9 @@ colors.Accent = Color3.fromRGB(88, 166, 255) -- Exquisite royal accent blue
 
 -- 3. Create main window container
 local HubWindow = LRXUI:CreateWindow({
-    Title = "LRX Premium Hub v2.5",
-    Version = "2.5.0",
-    Size = UDim2.fromOffset(720, 480)
+	Title = "LRX Premium Hub v2.5",
+	Version = "2.5.0",
+	Size = UDim2.fromOffset(720, 480),
 })
 
 -- 4. Establish Hub Navigation Pages
@@ -46,12 +47,7 @@ local ClientStatusLabel = SystemStatusCard:AddLabel("Client Status: Active", Enu
 local ProgressTracker = SystemStatusCard:AddProgressBar("Script Sync Progress", 100)
 
 WelcomeCard:AddButton("Test Notification", function()
-    LRXUI:Notify(
-        "LRX Notification",
-        "Connection verified and handshakes are fully active!",
-        5,
-        "Success"
-    )
+	LRXUI:Notify("LRX Notification", "Connection verified and handshakes are fully active!", 5, "Success")
 end)
 
 -- ==============================================================================
@@ -60,23 +56,23 @@ end)
 local FarmingCard = FarmPage:AddCard("Automated Farmers")
 
 FarmingCard:AddToggle("Enable Auto-Farm", false, function(state)
-    if state then
-        LRXUI:Notify("Auto-Farm", "Automated farming routines started.", 3, "Success")
-    else
-        LRXUI:Notify("Auto-Farm", "Automated farming routines paused.", 3, "Warning")
-    end
+	if state then
+		LRXUI:Notify("Auto-Farm", "Automated farming routines started.", 3, "Success")
+	else
+		LRXUI:Notify("Auto-Farm", "Automated farming routines paused.", 3, "Warning")
+	end
 end)
 
 FarmingCard:AddToggle("Fast Attack Mode", true, function(state)
-    print("Fast Attack:", state)
+	print("Fast Attack:", state)
 end)
 
 FarmingCard:AddSlider("Attack Radius", { Min = 5, Max = 50, Default = 15, Suffix = " studs" }, function(value)
-    print("Attack radius set to: " .. tostring(value))
+	print("Attack radius set to: " .. tostring(value))
 end)
 
 FarmingCard:AddDropdown("Farm Priority", { "Highest Level", "Closest Mob", "Lowest Health" }, function(selected)
-    LRXUI:Notify("Farm Priority", "Target priority changed to: " .. selected, 3, "Success")
+	LRXUI:Notify("Farm Priority", "Target priority changed to: " .. selected, 3, "Success")
 end)
 
 -- ==============================================================================
@@ -85,17 +81,17 @@ end)
 local TpCard = TeleportPage:AddCard("Quick Teleports")
 
 TpCard:AddButton("Teleport to Main City", function()
-    LRXUI:Prompt(
-        "Confirm Teleport",
-        "Are you sure you want to teleport to Main City? (Will cancel active quest)",
-        function()
-            LRXUI:Notify("Teleport", "Teleporting to Main City...", 3, "Success")
-        end
-    )
+	LRXUI:Prompt(
+		"Confirm Teleport",
+		"Are you sure you want to teleport to Main City? (Will cancel active quest)",
+		function()
+			LRXUI:Notify("Teleport", "Teleporting to Main City...", 3, "Success")
+		end
+	)
 end)
 
 TpCard:AddButton("Teleport to Dungeon", function()
-    LRXUI:Notify("Teleport", "Teleporting to Dungeon...", 3, "Success")
+	LRXUI:Notify("Teleport", "Teleporting to Dungeon...", 3, "Success")
 end)
 
 -- ==============================================================================
@@ -104,24 +100,24 @@ end)
 local ConfigCard = SettingsPage:AddCard("UI & Performance")
 
 ConfigCard:AddKeybind("Toggle UI Key", Enum.KeyCode.RightControl, function()
-    HubWindow:ToggleVisibility()
+	HubWindow:ToggleVisibility()
 end)
 
 ConfigCard:AddColorPicker("Custom Accent", Color3.fromRGB(88, 166, 255), function(newColor)
-    colors.Accent = newColor
-    LRXUI:Notify("Theme Manager", "Accent color successfully updated!", 2, "Success")
+	colors.Accent = newColor
+	LRXUI:Notify("Theme Manager", "Accent color successfully updated!", 2, "Success")
 end)
 
 ConfigCard:AddSeparator()
 
 ConfigCard:AddButton("Unload Library & UI", function()
-    LRXUI:Prompt(
-        "Confirm Unload",
-        "This will completely destroy all active frames, UI connections, and clean up the heap.",
-        function()
-            LRXUI:Unload()
-        end
-    )
+	LRXUI:Prompt(
+		"Confirm Unload",
+		"This will completely destroy all active frames, UI connections, and clean up the heap.",
+		function()
+			LRXUI:Unload()
+		end
+	)
 end)
 
 -- Initialize status bar at footer
