@@ -9003,8 +9003,8 @@ function Library:CreateWindow(WindowInfo)
 		local RightWrapper = New("Frame", {
 			BackgroundTransparency = 1,
 			AnchorPoint = Vector2.new(0, 0.5),
-			Position = UDim2.new(0.32, 15, 0.5, 0), -- X: 0.3→0.32, offset 8→15 (more right)
-			Size = UDim2.new(0.60, -57, 1, -16), -- width: 0.7→0.6 (narrower)
+			Position = UDim2.new(0.35, 20, 0.5, 0), -- X scale 0.32→0.35, offset 15→20
+			Size = UDim2.new(0.55, -57, 1, -16), -- width 0.60→0.55 (narrower to fit)
 			Parent = TopBar,
 		})
 
@@ -9063,9 +9063,9 @@ function Library:CreateWindow(WindowInfo)
 		SearchBox = New("TextBox", {
 			BackgroundColor3 = "MainColor",
 			PlaceholderText = "Search",
-			Size = UDim2.new(0.69, 0, 0.85, 0), -- 75% width, slightly shorter height
-			AnchorPoint = Vector2.new(1, 0.5), -- anchor to right edge
-			Position = UDim2.new(1, -10, 0.5, 0), -- 10px from right edge of wrapper
+			Size = UDim2.new(0.70, 0, 0.85, 0), -- 0.75→0.70 (slightly narrower)
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(1, -4, 0.5, 0), -- -10→-4 (closer to right edge)
 			TextScaled = true,
 			Visible = not (WindowInfo.DisableSearch or false),
 			Parent = RightWrapper,
@@ -10266,9 +10266,9 @@ function Library:CreateWindow(WindowInfo)
 			if Description then
 				CurrentTabInfo.Visible = true
 
-				if IsDefaultSearchbarSize then
-					SearchBox.Size = UDim2.fromScale(0.5, 1)
-				end
+				--if IsDefaultSearchbarSize then
+				--	SearchBox.Size = UDim2.fromScale(0.5, 1)
+				--end
 
 				CurrentTabLabel.Text = Name
 				CurrentTabDescription.Text = Description
@@ -10293,9 +10293,9 @@ function Library:CreateWindow(WindowInfo)
 			end
 			TabContainer.Visible = false
 
-			if IsDefaultSearchbarSize then
-				SearchBox.Size = UDim2.fromScale(1, 1)
-			end
+			--if IsDefaultSearchbarSize then
+			--	SearchBox.Size = UDim2.fromScale(1, 1)
+			--end
 
 			CurrentTabInfo.Visible = false
 
