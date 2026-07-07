@@ -684,6 +684,7 @@ end
 --==============================================================================
 -- 9. WINDOW SYSTEM
 --==============================================================================
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", math.huge)
 local WindowSystem = {}
 WindowSystem.__index = WindowSystem
 
@@ -701,7 +702,7 @@ function WindowSystem.new(config)
 		Name = "LRX_UI_Core",
 		ResetOnSpawn = false,
 		DisplayOrder = 10,
-		Parent = (LocalPlayer:WaitForChild("PlayerGui")),
+		Parent = PlayerGui,
 	})
 
 	-- Modal Blur effect
