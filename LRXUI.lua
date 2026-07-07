@@ -78,16 +78,54 @@ local Library = {
 
 	IsLightTheme = false,
 	Scheme = {
-		BackgroundColor = Color3.fromRGB(15, 15, 15),
-		MainColor = Color3.fromRGB(25, 25, 25),
-		AccentColor = Color3.fromRGB(125, 85, 255),
-		OutlineColor = Color3.fromRGB(40, 40, 40),
-		FontColor = Color3.new(1, 1, 1),
-		Font = Font.fromEnum(Enum.Font.Code),
-
-		Red = Color3.fromRGB(255, 50, 50),
-		Dark = Color3.new(0, 0, 0),
-		White = Color3.new(1, 1, 1),
+		DarkSlate = {
+			Background = Color3.fromRGB(15, 17, 22),
+			Sidebar = Color3.fromRGB(21, 23, 29),
+			Content = Color3.fromRGB(18, 20, 25),
+			Surface = Color3.fromRGB(29, 32, 39),
+			SurfaceHover = Color3.fromRGB(37, 40, 48),
+			Border = Color3.fromRGB(53, 57, 67),
+			Text = Color3.fromRGB(255, 255, 255),
+			SubText = Color3.fromRGB(170, 170, 175),
+			Muted = Color3.fromRGB(120, 120, 125),
+			Accent = Color3.fromRGB(88, 166, 255),
+			Success = Color3.fromRGB(60, 210, 120),
+			Warning = Color3.fromRGB(255, 195, 90),
+			Danger = Color3.fromRGB(255, 90, 90),
+			Scrollbar = Color3.fromRGB(70, 74, 82),
+		},
+		NordicFrost = {
+			Background = Color3.fromRGB(43, 48, 59),
+			Sidebar = Color3.fromRGB(59, 66, 82),
+			Content = Color3.fromRGB(46, 52, 64),
+			Surface = Color3.fromRGB(76, 86, 106),
+			SurfaceHover = Color3.fromRGB(94, 108, 132),
+			Border = Color3.fromRGB(143, 188, 187),
+			Text = Color3.fromRGB(236, 239, 244),
+			SubText = Color3.fromRGB(216, 222, 233),
+			Muted = Color3.fromRGB(163, 190, 140),
+			Accent = Color3.fromRGB(136, 192, 208),
+			Success = Color3.fromRGB(163, 190, 140),
+			Warning = Color3.fromRGB(235, 203, 139),
+			Danger = Color3.fromRGB(191, 97, 106),
+			Scrollbar = Color3.fromRGB(129, 161, 193),
+		},
+		AmberGold = {
+			Background = Color3.fromRGB(18, 13, 8),
+			Sidebar = Color3.fromRGB(28, 20, 12),
+			Content = Color3.fromRGB(23, 16, 10),
+			Surface = Color3.fromRGB(43, 30, 18),
+			SurfaceHover = Color3.fromRGB(56, 39, 23),
+			Border = Color3.fromRGB(82, 58, 35),
+			Text = Color3.fromRGB(250, 245, 235),
+			SubText = Color3.fromRGB(210, 195, 175),
+			Muted = Color3.fromRGB(150, 135, 115),
+			Accent = Color3.fromRGB(245, 158, 11),
+			Success = Color3.fromRGB(52, 211, 153),
+			Warning = Color3.fromRGB(251, 191, 36),
+			Danger = Color3.fromRGB(239, 68, 68),
+			Scrollbar = Color3.fromRGB(120, 90, 60),
+		},
 	},
 
 	Registry = {},
@@ -10529,7 +10567,7 @@ function Library:CreateWindow(WindowInfo)
 
 	-- if Library.IsMobile then #button
 	if true then
-		local ToggleButton = Library:AddDraggableButton("<b><font color='#FFEA00'>Exotic</font></b>", function()
+		local ToggleButton = Library:AddDraggableButton("<b><font color='#FFEA00'>LRX</font></b>", function()
 			Library:Toggle()
 		end)
 

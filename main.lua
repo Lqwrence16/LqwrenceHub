@@ -35,13 +35,7 @@ local Window = Library:CreateWindow({
 -- TAB CREATION
 -- ==============================================================================
 local HomeTab = Window:AddTab("Home", "house")
-local AutoFarmTab = Window:AddTab("Auto-Farm", "sword")
-local AutoPlantTab = Window:AddTab("Auto-Plant", "flower-2")
-local AutoCollectTab = Window:AddTab("Auto-Collect", "shopping-basket")
-local AutoShovelTab = Window:AddTab("Auto-Shovel", "shovel")
-local PlotScanTab = Window:AddTab("Plot Scan", "scan")
-local TeleportTab = Window:AddTab("Teleports", "map-pin")
-local SettingsTab = Window:AddTab("Settings", "settings")
+local AutoFarmTab = Window:AddTab("Automation", "sword")
 
 -- ==============================================================================
 -- HOME TAB
