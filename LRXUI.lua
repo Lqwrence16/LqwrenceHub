@@ -9135,11 +9135,11 @@ function Library:CreateWindow(WindowInfo)
 		--// Tabs \\--
 		Tabs = New("ScrollingFrame", {
 			AutomaticCanvasSize = Enum.AutomaticSize.Y,
-			BackgroundColor3 = "MainColor",
+			BackgroundColor3 = "BackgroundColor",
 			CanvasSize = UDim2.fromScale(0, 0),
 			Position = UDim2.fromOffset(0, 49),
 			ScrollBarThickness = 0,
-			Size = UDim2.new(0, 60, 1, -70),
+			Size = UDim2.new(0.3, 0, 1, -70),
 			Parent = MainFrame,
 		})
 
@@ -9149,11 +9149,13 @@ function Library:CreateWindow(WindowInfo)
 
 		--// Container \\--
 		Container = New("Frame", {
-			AnchorPoint = Vector2.new(0, 0),
-			BackgroundColor3 = "BackgroundColor",
+			AnchorPoint = Vector2.new(1, 0),
+			BackgroundColor3 = function()
+				return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
+			end,
 			Name = "Container",
-			Position = UDim2.new(0, 60, 0, 49),
-			Size = UDim2.new(1, -60, 1, -70),
+			Position = UDim2.new(1, 0, 0, 49),
+			Size = UDim2.new(0.7, -1, 1, -70),
 			Parent = MainFrame,
 		})
 
