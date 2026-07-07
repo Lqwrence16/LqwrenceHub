@@ -8904,18 +8904,18 @@ function Library:CreateWindow(WindowInfo)
 		})
 		do
 			local Lines = {
-				-- REMOVED: Horizontal line between title and search area
+				{
+					Position = UDim2.fromOffset(0, 48), -- horizontal line under top bar (keep)
+					Size = UDim2.new(1, 0, 0, 1),
+				},
+				-- REMOVED: Vertical line between "LRX Premium Hub" and search bar
 				-- {
-				--     Position = UDim2.fromOffset(0, 48),
-				--     Size = UDim2.new(1, 0, 0, 1),
+				--     Position = UDim2.fromScale(0.3, 0),
+				--     Size = UDim2.new(0, 1, 1, -21),
 				-- },
 				{
-					Position = UDim2.fromScale(0.3, 0), -- Vertical sidebar separator (keep)
-					Size = UDim2.new(0, 1, 1, -21),
-				},
-				{
 					AnchorPoint = Vector2.new(0, 1),
-					Position = UDim2.new(0, 0, 1, -20), -- Horizontal line above footer (keep)
+					Position = UDim2.new(0, 0, 1, -20), -- horizontal line above footer (keep)
 					Size = UDim2.new(1, 0, 0, 1),
 				},
 			}
