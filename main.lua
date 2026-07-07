@@ -41,11 +41,65 @@
 --  0.  LOAD LRXUI
 -- ═══════════════════════════════════════════════════════════════════════════
 
--- Option A: Local module (recommended for development)
--- local LRXUI = require(game.ReplicatedStorage:WaitForChild("LRXUI"))
+local LRXUI
 
--- Option B: Loadstring (for exploit environments)
-local LRXUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.lua"))()
+-- Try multiple loading methods in order of preference
+
+-- Method 1: Local module (best for development / studio)
+local success, result = pcall(function()
+    return require(game:GetService("ReplicatedStorage"):WaitForChild("LRXUI", 5))
+end)
+if success and result then
+    LRXUI = result
+    print("[LRX Hub] LRXUI loaded from ReplicatedStorage")
+end
+
+-- Method 2: loadstring via HttpGet (exploit executors: Synapse, KRNL, Fluxus, etc.)
+if not LRXUI and typeof(game.HttpGet) == "function" then
+    success, result = pcall(function()
+        local src = game:HttpGet("https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.lua", true)
+        local fn, err = loadstring(src)
+        if not fn then
+            error("loadstring failed: " .. tostring(err))
+        end
+        return fn()
+    end)
+    if success and result then
+        LRXUI = result
+        print("[LRX Hub] LRXUI loaded via HttpGet + loadstring")
+    else
+        warn("[LRX Hub] HttpGet load failed:", result)
+    end
+end
+
+-- Method 3: Direct require from URL (some executors support this)
+if not LRXUI then
+    success, result = pcall(function()
+        return loadstring(game:HttpGet("https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.lua"))()
+    end)
+    if success and result then
+        LRXUI = result
+        print("[LRX Hub] LRXUI loaded via direct loadstring")
+    end
+end
+
+-- Method 4: getgenv cached version (if already loaded)
+if not LRXUI then
+    local genv = getgenv and getgenv() or shared
+    if genv.LRXUI then
+        LRXUI = genv.LRXUI
+        print("[LRX Hub] LRXUI loaded from getgenv cache")
+    end
+end
+
+-- Fatal: could not load LRXUI
+if not LRXUI then
+    error("[LRX Hub] FAILED to load LRXUI.\n" ..
+          "Make sure LRXUI.lua is available in one of these locations:\n" ..
+          "  1. ReplicatedStorage.LRXUI (module)\n" ..
+          "  2. GitHub raw URL (requires executor with HttpGet)\n" ..
+          "  3. getgenv().LRXUI (pre-loaded)")
+end
 
 -- ═══════════════════════════════════════════════════════════════════════════
 --  1.  WINDOW CREATION
