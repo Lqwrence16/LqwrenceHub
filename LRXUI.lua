@@ -9003,22 +9003,22 @@ function Library:CreateWindow(WindowInfo)
 		local RightWrapper = New("Frame", {
 			BackgroundTransparency = 1,
 			AnchorPoint = Vector2.new(0, 0.5),
-			Position = UDim2.new(0.32, 12, 0.5, 0), -- pushed a bit more right
-			Size = UDim2.new(0.62, -57, 1, -16), -- slightly narrower
+			Position = UDim2.new(0.32, 15, 0.5, 0), -- X: 0.3→0.32, offset 8→15 (more right)
+			Size = UDim2.new(0.60, -57, 1, -16), -- width: 0.7→0.6 (narrower)
 			Parent = TopBar,
 		})
 
 		New("UIListLayout", {
 			FillDirection = Enum.FillDirection.Horizontal,
-			HorizontalAlignment = Enum.HorizontalAlignment.Left, -- children start from left
+			HorizontalAlignment = Enum.HorizontalAlignment.Right,
 			VerticalAlignment = Enum.VerticalAlignment.Center,
-			Padding = UDim.new(0, 10),
+			Padding = UDim.new(0, 8),
 			Parent = RightWrapper,
 		})
 
 		CurrentTabInfo = New("Frame", {
 			Size = UDim2.fromScale(WindowInfo.DisableSearch and 1 or 0.40, 1), -- 0.5→0.4
-			Visible = true,
+			Visible = false,
 			BackgroundTransparency = 1,
 			Parent = RightWrapper,
 		})
@@ -9063,7 +9063,9 @@ function Library:CreateWindow(WindowInfo)
 		SearchBox = New("TextBox", {
 			BackgroundColor3 = "MainColor",
 			PlaceholderText = "Search",
-			Size = UDim2.new(0.50, 0, 0.85, 0), -- right 50% of wrapper
+			Size = UDim2.new(0.69, 0, 0.85, 0), -- 75% width, slightly shorter height
+			AnchorPoint = Vector2.new(1, 0.5), -- anchor to right edge
+			Position = UDim2.new(1, -10, 0.5, 0), -- 10px from right edge of wrapper
 			TextScaled = true,
 			Visible = not (WindowInfo.DisableSearch or false),
 			Parent = RightWrapper,
