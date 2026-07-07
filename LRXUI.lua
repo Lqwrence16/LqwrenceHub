@@ -2350,20 +2350,44 @@ function Library:OnUnload(Callback)
 	table.insert(Library.UnloadSignals, Callback)
 end
 
+-- NEW: More thorough cleanup
 function Library:Unload()
+	-- Disconnect all signals
 	for Index = #Library.Signals, 1, -1 do
 		local Connection = table.remove(Library.Signals, Index)
-		Connection:Disconnect()
+		pcall(function()
+			Connection:Disconnect()
+		end)
 	end
 
+	-- Run unload callbacks
 	for _, Callback in pairs(Library.UnloadSignals) do
 		Library:SafeCallback(Callback)
 	end
 
 	Library.Unloaded = true
-	ScreenGui:Destroy()
-	ModalScreenGui:Destroy()
+
+	-- Destroy ScreenGuis with error handling
+	pcall(function()
+		if ScreenGui and ScreenGui.Parent then
+			ScreenGui:Destroy()
+		end
+	end)
+
+	pcall(function()
+		if ModalScreenGui and ModalScreenGui.Parent then
+			ModalScreenGui:Destroy()
+		end
+	end)
+
+	-- Clear global reference
 	getgenv().Library = nil
+
+	-- Clear any cached references
+	Library.ScreenGui = nil
+	Library.KeybindFrame = nil
+	Library.KeybindContainer = nil
+	Library.Notifications = {}
 end
 
 local CheckIcon = Library:GetIcon("check")
