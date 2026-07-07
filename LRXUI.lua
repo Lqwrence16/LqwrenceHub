@@ -9017,9 +9017,8 @@ function Library:CreateWindow(WindowInfo)
 		})
 
 		CurrentTabInfo = New("Frame", {
-			Size = UDim2.new(1, -300, 1, 0), -- ← full width minus search space
-			Position = UDim2.fromOffset(0, 0),
-			Visible = true, -- ← ALWAYS VISIBLE
+			Size = UDim2.fromScale(1, 1), -- ← takes full width of RightWrapper
+			Visible = true, -- ← always visible
 			BackgroundTransparency = 1,
 			Parent = RightWrapper,
 		})
