@@ -9017,8 +9017,12 @@ function Library:CreateWindow(WindowInfo)
 			Parent = RightWrapper,
 		})
 
+		-- Right side of top bar: Tab info on LEFT, Search on RIGHT
+		-- We use absolute positioning - NO UIListLayout in RightWrapper
+
 		CurrentTabInfo = New("Frame", {
-			Size = UDim2.new(1, -300, 1, 0), -- flexible: takes remaining space minus search
+			Size = UDim2.new(0.55, 0, 1, 0), -- 55% of RightWrapper width
+			Position = UDim2.fromOffset(0, 0),
 			Visible = true,
 			BackgroundTransparency = 1,
 			Parent = RightWrapper,
@@ -9045,9 +9049,9 @@ function Library:CreateWindow(WindowInfo)
 			Size = UDim2.fromScale(1, 0),
 			AutomaticSize = Enum.AutomaticSize.Y,
 			Text = "",
-			TextSize = 15, -- ← slightly larger
+			TextSize = 15,
 			TextXAlignment = Enum.TextXAlignment.Left,
-			TextTransparency = 0, -- ← fully visible
+			TextTransparency = 0,
 			Parent = CurrentTabInfo,
 		})
 
@@ -9057,16 +9061,18 @@ function Library:CreateWindow(WindowInfo)
 			AutomaticSize = Enum.AutomaticSize.Y,
 			Text = "",
 			TextWrapped = true,
-			TextSize = 12, -- ← smaller description
+			TextSize = 12,
 			TextXAlignment = Enum.TextXAlignment.Left,
-			TextTransparency = 0.5, -- ← slightly faded
+			TextTransparency = 0.5,
 			Parent = CurrentTabInfo,
 		})
 
 		SearchBox = New("TextBox", {
 			BackgroundColor3 = "MainColor",
 			PlaceholderText = "Search",
-			Size = UDim2.new(0, 260, 1, 0), -- fixed width: 260px
+			Size = UDim2.new(0, 240, 0.75, 0), -- fixed width, slightly shorter height
+			Position = UDim2.new(1, -250, 0.125, 0), -- right side with margin
+			AnchorPoint = Vector2.new(1, 0),
 			TextScaled = true,
 			Visible = not (WindowInfo.DisableSearch or false),
 			Parent = RightWrapper,
