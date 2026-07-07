@@ -10545,7 +10545,7 @@ function Library:CreateWindow(WindowInfo)
 
 		-- task.spawn(function()
 		--     while true do
-		--         ToggleButton.Button.Text = string.format("<b><font color='%s'>Exotic</font></b>", colors[i])
+		--         ToggleButton.Button.Text = string.format("<b><font color='%s'>LRX</font></b>", colors[i])
 		--         i = (i % #colors) + 1
 		--         task.wait(0.3)
 		--     end
