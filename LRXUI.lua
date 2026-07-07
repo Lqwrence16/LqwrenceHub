@@ -9003,8 +9003,8 @@ function Library:CreateWindow(WindowInfo)
 		local RightWrapper = New("Frame", {
 			BackgroundTransparency = 1,
 			AnchorPoint = Vector2.new(0, 0.5),
-			Position = UDim2.new(0.32, 15, 0.5, 0), -- X: 0.3→0.32, offset 8→15 (more right)
-			Size = UDim2.new(0.60, -57, 1, -16), -- width: 0.7→0.6 (narrower)
+			Position = UDim2.new(0.3, 8, 0.5, 0),
+			Size = UDim2.new(0.7, -57, 1, -16),
 			Parent = TopBar,
 		})
 
@@ -9017,7 +9017,7 @@ function Library:CreateWindow(WindowInfo)
 		})
 
 		CurrentTabInfo = New("Frame", {
-			Size = UDim2.fromScale(WindowInfo.DisableSearch and 1 or 0.40, 1), -- 0.5→0.4
+			Size = UDim2.fromScale(WindowInfo.DisableSearch and 1 or 0.5, 1),
 			Visible = false,
 			BackgroundTransparency = 1,
 			Parent = RightWrapper,
@@ -9063,14 +9063,11 @@ function Library:CreateWindow(WindowInfo)
 		SearchBox = New("TextBox", {
 			BackgroundColor3 = "MainColor",
 			PlaceholderText = "Search",
-			Size = UDim2.new(0.69, 0, 0.85, 0), -- 75% width, slightly shorter height
-			AnchorPoint = Vector2.new(1, 0.5), -- anchor to right edge
-			Position = UDim2.new(1, -10, 0.5, 0), -- 10px from right edge of wrapper
+			Size = WindowInfo.SearchbarSize,
 			TextScaled = true,
 			Visible = not (WindowInfo.DisableSearch or false),
 			Parent = RightWrapper,
 		})
-
 		New("UICorner", {
 			CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
 			Parent = SearchBox,
@@ -10266,9 +10263,9 @@ function Library:CreateWindow(WindowInfo)
 			if Description then
 				CurrentTabInfo.Visible = true
 
-				--if IsDefaultSearchbarSize then
-				--	SearchBox.Size = UDim2.fromScale(0.5, 1)
-				--end
+				if IsDefaultSearchbarSize then
+					SearchBox.Size = UDim2.fromScale(0.5, 1)
+				end
 
 				CurrentTabLabel.Text = Name
 				CurrentTabDescription.Text = Description
@@ -10293,9 +10290,9 @@ function Library:CreateWindow(WindowInfo)
 			end
 			TabContainer.Visible = false
 
-			--if IsDefaultSearchbarSize then
-			--	SearchBox.Size = UDim2.fromScale(1, 1)
-			--end
+			if IsDefaultSearchbarSize then
+				SearchBox.Size = UDim2.fromScale(1, 1)
+			end
 
 			CurrentTabInfo.Visible = false
 
