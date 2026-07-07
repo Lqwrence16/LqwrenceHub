@@ -307,7 +307,7 @@ local function IsHover(input)
 		and input.UserInputState == Enum.UserInputState.Change
 end
 
-local function IsClick(input)
+local function IsClick(input, _ignoreProcessed)
 	return (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch)
 		and input.UserInputState == Enum.UserInputState.Begin
 end
@@ -1077,9 +1077,16 @@ do
 			currentMenu = tbl
 			tbl.Active = true
 
+			local offsetX, offsetY
+			if type(offset) == "function" then
+				local result = offset()
+				offsetX, offsetY = result[1], result[2]
+			else
+				offsetX, offsetY = offset[1], offset[2]
+			end
 			menu.Position = UDim2.fromOffset(
-				math.floor(holder.AbsolutePosition.X + offset[1]),
-				math.floor(holder.AbsolutePosition.Y + offset[2])
+				math.floor(holder.AbsolutePosition.X + offsetX),
+				math.floor(holder.AbsolutePosition.Y + offsetY)
 			)
 			menu.Size = type(size) == "function" and size() or size
 			menu.Visible = true
