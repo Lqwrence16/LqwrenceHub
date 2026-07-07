@@ -506,6 +506,7 @@ function Library:UpdateKeybindFrame()
 
 	Library.KeybindFrame.Size = UDim2.fromOffset(XSize + 18 * Library.DPIScale, 0)
 end
+
 function Library:UpdateDependencyBoxes()
 	for _, Depbox in pairs(Library.DependencyBoxes) do
 		Depbox:Update(true)
@@ -565,6 +566,7 @@ local function CheckDepbox(Box, Search)
 
 	return VisibleElements
 end
+
 local function RestoreDepbox(Box)
 	for _, ElementInfo in pairs(Box.Elements) do
 		ElementInfo.Holder.Visible = typeof(ElementInfo.Visible) == "boolean" and ElementInfo.Visible or true
@@ -954,6 +956,7 @@ local FetchIcons, Icons = pcall(function()
 		game:HttpGet("https://raw.githubusercontent.com/deividcomsono/lucide-roblox-direct/refs/heads/main/source.lua")
 	)()
 end)
+
 function Library:GetIcon(IconName: string)
 	if not FetchIcons then
 		return
@@ -1021,6 +1024,7 @@ local function FillInstance(Table: { [string]: any }, Instance: GuiObject)
 	if GetTableSize(ThemeProperties) > 0 then
 		Library.Registry[Instance] = ThemeProperties
 	end
+
 	if GetTableSize(DPIProperties) > 0 then
 		DPIProperties["DPIExclude"] = DPIExclude
 		DPIProperties["DPIOffset"] = DPIOffset
@@ -1053,7 +1057,7 @@ local function SafeParentUI(UI: Instance)
 	end)
 
 	if not success then
-		warn("[EXO UI] Failed to parent UI to PlayerGui:", err)
+		warn("[LRXUI] Failed to parent UI to PlayerGui:", err)
 		return false
 	end
 
@@ -1065,7 +1069,7 @@ local function ParentUI(UI: Instance, _SkipHiddenUI: boolean?)
 end
 
 local ScreenGui = New("ScreenGui", {
-	Name = "Obsidian",
+	Name = "LRXUI",
 	DisplayOrder = 2147483647,
 	ResetOnSpawn = false,
 })
@@ -1077,7 +1081,7 @@ ScreenGui.DescendantRemoving:Connect(function(Instance)
 end)
 
 local ModalScreenGui = New("ScreenGui", {
-	Name = "ObsidanModal",
+	Name = "LRXUI_Modal",
 	DisplayOrder = 2147483647,
 	ResetOnSpawn = false,
 })
@@ -1288,6 +1292,7 @@ function Library:MakeDraggable(UI: GuiObject, DragFrame: GuiObject, IgnoreToggle
 			end
 		end)
 	end)
+
 	Library:GiveSignal(UserInputService.InputChanged:Connect(function(Input: InputObject)
 		if
 			(not IgnoreToggled and not Library.Toggled)
@@ -1337,6 +1342,7 @@ function Library:MakeResizable(UI: GuiObject, DragFrame: GuiObject, Callback: ()
 			end
 		end)
 	end)
+
 	Library:GiveSignal(UserInputService.InputChanged:Connect(function(Input: InputObject)
 		if not UI.Visible or not (ScreenGui and ScreenGui.Parent) then
 			Dragging = false
