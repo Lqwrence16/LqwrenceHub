@@ -1,14 +1,5 @@
--- LRX Premium Hub v2.5
--- Main Hub Script using Obsidian UI Library
--- Place this in your executor alongside the UI library
-
 local Library =
 	loadstring(game:HttpGet("https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.lua"))()
--- ^ Replace with your actual UI library URL, or use local require if you have it saved
-
--- Alternative: if running locally:
--- local Library = require(game.ReplicatedStorage:WaitForChild("LRXUI"))
-
 -- ==============================================================================
 -- WINDOW SETUP
 -- ==============================================================================
