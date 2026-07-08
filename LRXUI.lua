@@ -10556,7 +10556,7 @@ function Library:CreateWindow(WindowInfo)
 
 	-- if Library.IsMobile then #button
 	if true then
-		local ToggleButton = Library:AddDraggableButton("<b><font color='#FFEA00'>LRX</font></b>", function()
+		local ToggleButton = Library:AddDraggableButton("<b><font color='#ffffff'>LRX</font></b>", function()
 			Library:Toggle()
 		end)
 
