@@ -7,7 +7,7 @@ local MarketplaceService = game:GetService("MarketplaceService")
 -- PHASE 1: CONSTANTS
 --==============================================================================
 
-local DEV_MODE = false
+local DEV_MODE = true
 
 local CONFIG_FILE = "LRX_Hub_Config.json"
 
