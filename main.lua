@@ -79,35 +79,53 @@ local GITHUB_URL = "https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/ref
 local Library
 local loadSource = "unknown"
 
+-- Helper: Check if file exists and has content
+local function fileExists(path)
+	return isfile and isfile(path) and readfile and #readfile(path) > 100
+end
+
 -- Priority 1: Dev mode local file (instant, for active development)
 if DEV_MODE then
-	if isfile and isfile(DEV_FILE) then
+	if fileExists(DEV_FILE) then
 		print("[LRX Hub] DEV MODE: Loading LRXUI from local file...")
-		Library = loadstring(readfile(DEV_FILE))()
-		loadSource = "dev_file"
+		local ok, result = pcall(function()
+			return loadstring(readfile(DEV_FILE))()
+		end)
+		if ok and result then
+			Library = result
+			loadSource = "dev_file"
+		else
+			warn("[LRX Hub] DEV file exists but failed to load!")
+		end
 	else
-		warn("[LRX Hub] DEV MODE is ON but '" .. DEV_FILE .. "' not found!")
-		warn("[LRX Hub] Run this to create it: writefile('" .. DEV_FILE .. "', [[paste LRXUI.lua code here]])")
+		warn("[LRX Hub] DEV MODE is ON but '" .. DEV_FILE .. "' not found or empty!")
 	end
 end
 
--- Priority 2: Cached local file (fast, no download)
-if not Library and isfile and isfile(CACHE_FILE) then
+-- Priority 2: Cached local file (fast, no download) -- ALWAYS CHECK THIS
+if not Library and fileExists(CACHE_FILE) then
 	print("[LRX Hub] Loading LRXUI from cache...")
-	Library = loadstring(readfile(CACHE_FILE))()
-	loadSource = "cache"
+	local ok, result = pcall(function()
+		return loadstring(readfile(CACHE_FILE))()
+	end)
+	if ok and result then
+		Library = result
+		loadSource = "cache"
+	else
+		warn("[LRX Hub] Cache file exists but failed to load, will re-download...")
+	end
 end
 
--- Priority 3: Download from GitHub
+-- Priority 3: Download from GitHub (only if no cache!)
 if not Library then
-	print("[LRX Hub] Downloading LRXUI from GitHub...")
-	print("[LRX Hub] URL: " .. GITHUB_URL)
+	print("[LRX Hub] Downloading LRXUI from GitHub (one-time)...")
 
 	local success, code = pcall(function()
 		return game:HttpGet(GITHUB_URL)
 	end)
 
-	if success and code and code ~= "" and not code:match("404") then
+	if success and code and #code > 100 and not code:match("404") and not code:match("429") then
+		-- Try to load it first
 		local loadSuccess, result = pcall(function()
 			return loadstring(code)()
 		end)
@@ -116,32 +134,34 @@ if not Library then
 			Library = result
 			loadSource = "github"
 
-			-- Save to cache for next time
-			if writefile then
-				writefile(CACHE_FILE, code)
-				print("[LRX Hub] Cached LRXUI for next load!")
-			end
+			-- Save to cache for next time (ignore errors)
+			pcall(function()
+				if writefile then
+					writefile(CACHE_FILE, code)
+					print("[LRX Hub] Cached LRXUI for future loads!")
+				end
+			end)
 		else
 			warn("[LRX Hub] Downloaded code failed to load: " .. tostring(result))
 		end
 	else
 		warn("[LRX Hub] Failed to download from GitHub!")
-		warn("[LRX Hub] Error/Success: " .. tostring(success))
-		warn("[LRX Hub] Response length: " .. tostring(code and #code or 0))
 		if code then
-			warn("[LRX Hub] Response preview: " .. code:sub(1, 100))
+			if code:match("429") then
+				warn("[LRX Hub] GitHub rate limited you (HTTP 429). Wait a few minutes.")
+			end
+			warn("[LRX Hub] Response: " .. code:sub(1, 150))
 		end
 	end
 end
 
 -- Final check
 if not Library then
-	error("[LRX Hub] CRITICAL: Could not load LRXUI from any source! (tried: " .. loadSource .. ")")
+	error("[LRX Hub] CRITICAL: Could not load LRXUI! No cache, no dev file, GitHub blocked.")
 	return
 end
 
-print("[LRX Hub] LRXUI loaded successfully from: " .. loadSource)
-
+print("[LRX Hub] LRXUI loaded from: " .. loadSource)
 -- ==============================================================================
 -- WINDOW SETUP
 -- ==============================================================================
