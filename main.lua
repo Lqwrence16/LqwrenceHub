@@ -1,198 +1,161 @@
 local HttpService = game:GetService("HttpService")
 local CONFIG_FILE = "LRX_Hub_Config.json"
 
--- ==============================================================================
--- CACHE SYSTEM FOR LRXUI.lua
--- ==============================================================================
+--==============================================================================
+-- CLEANUP FIRST (VERY IMPORTANT)
+--==============================================================================
+
+local function Cleanup()
+	pcall(function()
+		local Players = game:GetService("Players")
+		local CoreGui = game:GetService("CoreGui")
+		local LocalPlayer = Players.LocalPlayer
+
+		-- Proper unload
+		if getgenv and getgenv().Library then
+			pcall(function()
+				if getgenv().Library.Unload then
+					getgenv().Library:Unload()
+				end
+			end)
+
+			getgenv().Library = nil
+		end
+
+		_G.LRX_Hub_UI = nil
+		_G.LRX_Connections = {}
+		_G.LRX_KillSwitch = false
+		_G.AutoFarmEnabled = nil
+		_G.FastAttackEnabled = nil
+		_G.AutoEquipEnabled = nil
+		_G.AutoRejoinEnabled = nil
+		_G.AntiAFKEnabled = nil
+
+		local Targets = {
+			"Obsidian",
+			"ObsidanModal",
+			"LRXUI",
+			"LRXUI_Modal",
+		}
+
+		local function DestroyFrom(parent)
+			if not parent then
+				return
+			end
+
+			for _, v in ipairs(parent:GetChildren()) do
+				if table.find(Targets, v.Name) then
+					pcall(function()
+						v:Destroy()
+					end)
+				end
+			end
+		end
+
+		if LocalPlayer then
+			DestroyFrom(LocalPlayer:FindFirstChild("PlayerGui"))
+		end
+
+		DestroyFrom(CoreGui)
+
+		task.wait(0.15)
+	end)
+end
+
+Cleanup()
+
+--==============================================================================
+-- CACHE
+--==============================================================================
+
 local CACHE_FOLDER = "LRXHUB67/cache"
-local CACHE_UI_FILE = CACHE_FOLDER .. "/LRXUI.lua"
-local CACHE_VERSION_FILE = CACHE_FOLDER .. "/LRXUI.version"
+local CACHE_FILE = CACHE_FOLDER .. "/LRXUI.lua"
+local VERSION_FILE = CACHE_FOLDER .. "/LRXUI.version"
 
-local GITHUB_UI_URL = "https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.lua"
-local GITHUB_VERSION_URL = "https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.version"
+local UI_URL = "https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.lua"
 
-local function EnsureFolder(path)
-	if not isfolder then
-		return false
-	end
-	if not isfolder(path) then
-		makefolder(path)
-	end
-	return isfolder(path)
+local VERSION_URL = "https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.version"
+
+if makefolder and not isfolder(CACHE_FOLDER) then
+	makefolder("LRXHUB67")
+	makefolder(CACHE_FOLDER)
 end
 
-local function ReadFile(path)
-	if not isfile or not isfile(path) then
-		return nil
+local function Read(path)
+	if isfile and isfile(path) then
+		local ok, data = pcall(readfile, path)
+		if ok then
+			return data
+		end
 	end
-	local ok, content = pcall(readfile, path)
-	return ok and content or nil
 end
 
-local function WriteFile(path, content)
-	if not writefile then
-		return false
+local function Write(path, data)
+	if writefile then
+		pcall(writefile, path, data)
 	end
-	return pcall(writefile, path, content)
 end
 
 local function Download(url)
-	if not game or not game.HttpGet then
-		return nil
-	end
-	local ok, content = pcall(function()
+	local ok, data = pcall(function()
 		return game:HttpGet(url, true)
 	end)
-	return ok and content or nil
+
+	if ok then
+		return data
+	end
 end
 
-local function GetCachedUI()
-	EnsureFolder("LRXHUB67")
-	EnsureFolder(CACHE_FOLDER)
+local CachedUI = Read(CACHE_FILE)
+local CachedVersion = Read(VERSION_FILE)
+local LatestVersion = Download(VERSION_URL)
 
-	local cachedUI = ReadFile(CACHE_UI_FILE)
-	local cachedVersion = ReadFile(CACHE_VERSION_FILE)
-	local latestVersion = Download(GITHUB_VERSION_URL)
+local NeedDownload = not CachedUI or not CachedVersion or (LatestVersion and LatestVersion ~= CachedVersion)
 
-	-- DEBUG: print what we found
-	print("[LRX Cache] cachedUI exists:", cachedUI ~= nil, "len:", cachedUI and #cachedUI or 0)
-	print("[LRX Cache] cachedVersion:", cachedVersion or "nil")
-	print("[LRX Cache] latestVersion from GitHub:", latestVersion or "nil")
+if NeedDownload then
+	print("[LRX Cache] Updating cache...")
 
-	local needsDownload = false
+	local NewUI = Download(UI_URL)
 
-	if not cachedUI or not cachedVersion then
-		print("[LRX Cache] First run — downloading LRXUI.lua...")
-		needsDownload = true
-	elseif latestVersion and latestVersion ~= cachedVersion then
-		print("[LRX Cache] Version changed (" .. cachedVersion .. " → " .. latestVersion .. ") — updating...")
-		needsDownload = true
-	elseif not latestVersion then
-		print("[LRX Cache] Could not check version — using cached LRXUI.lua")
+	if NewUI and #NewUI > 100 then
+		CachedUI = NewUI
+
+		Write(CACHE_FILE, NewUI)
+		Write(VERSION_FILE, LatestVersion or "unknown")
+
+		print("[LRX Cache] Cache updated.")
+	elseif not CachedUI then
+		error("Unable to download LRXUI.")
 	else
-		print("[LRX Cache] Using cached LRXUI.lua (v" .. cachedVersion .. ")")
-	end
-
-	if needsDownload then
-		local newUI = Download(GITHUB_UI_URL)
-		print("[LRX Cache] Downloaded UI len:", newUI and #newUI or 0)
-
-		if newUI and #newUI > 100 then
-			WriteFile(CACHE_UI_FILE, newUI)
-			WriteFile(CACHE_VERSION_FILE, latestVersion or cachedVersion or "unknown")
-			cachedUI = newUI
-			print("[LRX Cache] Downloaded and cached successfully")
-		else
-			warn("[LRX Cache] Downloaded file is empty or too small!")
-			if not cachedUI then
-				error("[LRX Cache] No cached UI available and download failed!")
-			else
-				warn("[LRX Cache] Falling back to old cached UI")
-			end
-		end
-	end
-
-	return cachedUI
-end
-
--- ==============================================================================
--- LOAD UI LIBRARY FROM CACHE
--- ==============================================================================
-local Library
-local cachedUI = GetCachedUI()
-
-if cachedUI and #cachedUI > 100 then
-	local loadOk, loadResult = pcall(function()
-		return loadstring(cachedUI)()
-	end)
-
-	-- DEBUG: check what loadstring returned
-	print("[LRX Cache] loadstring ok:", loadOk)
-	print("[LRX Cache] loadstring result type:", typeof(loadResult))
-	print("[LRX Cache] loadstring result is table:", type(loadResult) == "table")
-
-	if loadOk and type(loadResult) == "table" then
-		Library = loadResult
-		print(Library.ScreenGui)
-		print(Library.ScreenGui and Library.ScreenGui.Parent)
-		print("[LRX Hub] Library loaded from cache")
-	else
-		warn("[LRX Hub] Failed to load cached library. Result:", tostring(loadResult))
-		warn("[LRX Hub] Falling back to direct download...")
-
-		local directUI = Download(GITHUB_UI_URL)
-		if directUI and #directUI > 100 then
-			local directOk, directResult = pcall(function()
-				return loadstring(directUI)()
-			end)
-			if directOk and type(directResult) == "table" then
-				Library = directResult
-				print("[LRX Hub] Library loaded from direct download")
-			else
-				error("[LRX Hub] Direct download also failed! Result: " .. tostring(directResult))
-			end
-		else
-			error("[LRX Hub] Direct download returned empty file!")
-		end
+		warn("[LRX Cache] Using previous cache.")
 	end
 else
-	warn("[LRX Cache] Cached file missing or too small, using direct download")
-	local directUI = Download(GITHUB_UI_URL)
-	if directUI and #directUI > 100 then
-		local directOk, directResult = pcall(function()
-			return loadstring(directUI)()
-		end)
-		if directOk and type(directResult) == "table" then
-			Library = directResult
-			print("[LRX Hub] Library loaded from direct download")
-		else
-			error("[LRX Hub] Direct download failed! Result: " .. tostring(directResult))
-		end
-	else
-		error("[LRX Hub] Cannot download LRXUI.lua — check your internet/repo URL!")
-	end
+	print("[LRX Cache] Using cached LRXUI (" .. CachedVersion .. ")")
 end
 
--- ==============================================================================
--- HARD RESET / CLEANUP
--- ==============================================================================
-pcall(function()
-	if getgenv and getgenv().Library then
-		if getgenv().Library.Unload then
-			getgenv().Library.Unload()
-		end
-		getgenv().Library = nil
-	end
+--==============================================================================
+-- LOAD LIBRARY
+--==============================================================================
 
-	_G.LRX_Hub_UI = nil
-	_G.LRX_Connections = nil
-	_G.LRX_KillSwitch = nil
-	_G.AutoFarmEnabled = nil
-	_G.FastAttackEnabled = nil
-	_G.AutoEquipEnabled = nil
-	_G.AutoRejoinEnabled = nil
-	_G.AntiAFKEnabled = nil
+assert(CachedUI, "Missing cached UI")
 
-	local Players = game:GetService("Players")
-	local CoreGui = game:GetService("CoreGui")
-	local lp = Players.LocalPlayer
-	local targets = { "LRXUI", "LRXUI_Modal", "Obsidian", "ObsidanModal" }
+local Chunk, CompileError = loadstring(CachedUI)
 
-	if lp and lp:FindFirstChild("PlayerGui") then
-		for _, gui in ipairs(lp.PlayerGui:GetChildren()) do
-			if table.find(targets, gui.Name) then
-				gui:Destroy()
-			end
-		end
-	end
-	for _, gui in ipairs(CoreGui:GetChildren()) do
-		if table.find(targets, gui.Name) then
-			gui:Destroy()
-		end
-	end
+assert(Chunk, CompileError)
 
-	task.wait(0.1)
-end)
+local Success, Result = xpcall(Chunk, debug.traceback)
+
+if not Success then
+	error(Result)
+end
+
+assert(type(Result) == "table", "LRXUI didn't return a library.")
+
+local Library = Result
+
+getgenv().Library = Library
+
+print("[LRX Hub] Library loaded successfully.")
 
 -- ==============================================================================
 -- CONFIG PERSISTENCE
