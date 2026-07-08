@@ -9163,7 +9163,7 @@ function Library:CreateWindow(WindowInfo)
 		-- ADD THIS SPACER: invisible frame that pushes first tab down
 		New("Frame", {
 			BackgroundTransparency = 1,
-			Size = UDim2.new(0.9, 0, 0, 8), -- 8px tall spacer, same width as tabs
+			Size = UDim2.new(0.9, 0, 0, 5), -- 8px tall spacer, same width as tabs
 			LayoutOrder = -100, -- ensures it stays at top
 			Parent = Tabs,
 		})
