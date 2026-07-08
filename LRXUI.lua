@@ -78,14 +78,14 @@ local Library = {
 
 	IsLightTheme = false,
 	Scheme = {
-		BackgroundColor = Color3.fromRGB(18, 20, 25),
-		MainColor = Color3.fromRGB(29, 32, 39),
-		AccentColor = Color3.fromRGB(88, 166, 255),
-		OutlineColor = Color3.fromRGB(53, 57, 67),
+		BackgroundColor = Color3.fromRGB(15, 15, 15),
+		MainColor = Color3.fromRGB(25, 25, 25),
+		AccentColor = Color3.fromRGB(125, 85, 255),
+		OutlineColor = Color3.fromRGB(40, 40, 40),
 		FontColor = Color3.new(1, 1, 1),
-		Font = Font.fromEnum(Enum.Font.BuilderSans),
+		Font = Font.fromEnum(Enum.Font.Code),
 
-		Red = Color3.fromRGB(255, 90, 90),
+		Red = Color3.fromRGB(255, 50, 50),
 		Dark = Color3.new(0, 0, 0),
 		White = Color3.new(1, 1, 1),
 	},
@@ -194,21 +194,7 @@ else
 		Library.DevicePlatform = UserInputService:GetPlatform()
 	end)
 	Library.IsMobile = (Library.DevicePlatform == Enum.Platform.Android or Library.DevicePlatform == Enum.Platform.IOS)
-
-	-- High-DPI mobile detection (Infinix GT 30 Pro: 1224x2720, 440 PPI)
-	local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(720, 1280)
-	local isHighDPI = viewport.Y >= 2400 or viewport.X >= 1200
-
-	if Library.IsMobile and isHighDPI then
-		Library.MinSize = Vector2.new(680, 420)
-		Library.DPIScale = 1.35
-	elseif Library.IsMobile then
-		Library.MinSize = Vector2.new(560, 320)
-		Library.DPIScale = 1.15
-	else
-		Library.MinSize = Vector2.new(480, 360)
-		Library.DPIScale = 1
-	end
+	Library.MinSize = Library.IsMobile and Vector2.new(480, 240) or Vector2.new(480, 360)
 end
 
 local Templates = {
@@ -262,7 +248,7 @@ local Templates = {
 		Title = "No Title",
 		Footer = "No Footer",
 		Position = UDim2.fromOffset(6, 6),
-		Size = Library.IsMobile and UDim2.fromOffset(840, 720) or UDim2.fromOffset(720, 600),
+		Size = UDim2.fromOffset(720, 600),
 		IconSize = UDim2.fromOffset(30, 30),
 		AutoShow = true,
 		Center = true,
@@ -8889,36 +8875,22 @@ function Library:CreateWindow(WindowInfo)
 		do
 			local Lines = {
 				{
-					Position = UDim2.fromOffset(0, 48), -- horizontal line under top bar (KEEP)
+					Position = UDim2.fromOffset(0, 48),
 					Size = UDim2.new(1, 0, 0, 1),
 				},
-				-- REMOVED: Full-height vertical line that cuts through top bar
-				-- {
-				--     Position = UDim2.fromScale(0.3, 0),
-				--     Size = UDim2.new(0, 1, 1, -21),
-				-- },
+				{
+					Position = UDim2.fromScale(0.3, 0),
+					Size = UDim2.new(0, 1, 1, -21),
+				},
 				{
 					AnchorPoint = Vector2.new(0, 1),
-					Position = UDim2.new(0, 0, 1, -20), -- horizontal line above footer (KEEP)
+					Position = UDim2.new(0, 0, 1, -20),
 					Size = UDim2.new(1, 0, 0, 1),
 				},
 			}
 			for _, Info in pairs(Lines) do
 				Library:MakeLine(MainFrame, Info)
 			end
-
-			-- NEW: Vertical line that starts BELOW the top bar (at Y=49)
-			-- This keeps the sidebar/content separator without dividing title and search
-			local VerticalLine = New("Frame", {
-				BackgroundColor3 = "OutlineColor",
-				Position = UDim2.new(0.3, 0, 0, 49), -- X=30%, Y=49 (below 48px top bar)
-				Size = UDim2.new(0, 1, 1, -69), -- 1px wide, height minus 49+20
-				Parent = MainFrame,
-			})
-			Library:AddToRegistry(VerticalLine, {
-				BackgroundColor3 = "OutlineColor",
-			})
-
 			Library:MakeOutline(MainFrame, WindowInfo.CornerRadius, 0)
 		end
 
@@ -10557,12 +10529,9 @@ function Library:CreateWindow(WindowInfo)
 
 	-- if Library.IsMobile then #button
 	if true then
-		local ToggleButton = Library:AddDraggableButton("<b><font color='#FFEA00'>LRX</font></b>", function()
+		local ToggleButton = Library:AddDraggableButton("<b><font color='#FFEA00'>Exotic</font></b>", function()
 			Library:Toggle()
 		end)
-		if Library.IsMobile then
-			ToggleButton.Button.Size = UDim2.fromOffset(64, 64)
-		end
 
 		-- local colors = {
 		--     "#FFD700", -- gold
@@ -10576,7 +10545,7 @@ function Library:CreateWindow(WindowInfo)
 
 		-- task.spawn(function()
 		--     while true do
-		--         ToggleButton.Button.Text = string.format("<b><font color='%s'>LRX</font></b>", colors[i])
+		--         ToggleButton.Button.Text = string.format("<b><font color='%s'>Exotic</font></b>", colors[i])
 		--         i = (i % #colors) + 1
 		--         task.wait(0.3)
 		--     end
@@ -10659,6 +10628,7 @@ end
 
 Library:GiveSignal(Players.PlayerAdded:Connect(OnPlayerChange))
 Library:GiveSignal(Players.PlayerRemoving:Connect(OnPlayerChange))
+
 Library:GiveSignal(Teams.ChildAdded:Connect(OnTeamChange))
 Library:GiveSignal(Teams.ChildRemoved:Connect(OnTeamChange))
 
