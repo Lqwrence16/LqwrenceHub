@@ -9141,7 +9141,7 @@ function Library:CreateWindow(WindowInfo)
 			AutomaticCanvasSize = Enum.AutomaticSize.Y,
 			BackgroundColor3 = "BackgroundColor",
 			CanvasSize = UDim2.fromScale(0, 0),
-			Position = UDim2.fromOffset(0, 57),
+			Position = UDim2.fromOffset(0, 62),
 			ScrollBarThickness = 0,
 			Size = UDim2.new(0.3, 0, 1, -78),
 			Parent = MainFrame,
@@ -9160,7 +9160,7 @@ function Library:CreateWindow(WindowInfo)
 				return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
 			end,
 			Name = "Container",
-			Position = UDim2.new(1, 0, 0, 49),
+			Position = UDim2.new(1, 0, 0, 63),
 			Size = UDim2.new(0.7, -1, 1, -70),
 			Parent = MainFrame,
 		})
