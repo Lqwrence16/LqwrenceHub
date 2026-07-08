@@ -9059,19 +9059,19 @@ function Library:CreateWindow(WindowInfo)
 		end
 
 		local MoveIcon = Library:GetIcon("move")
-		if MoveIcon then
-			New("ImageLabel", {
-				AnchorPoint = Vector2.new(1, 0.5),
-				Image = MoveIcon.Url,
-				ImageColor3 = "OutlineColor",
-				ImageRectOffset = MoveIcon.ImageRectOffset,
-				ImageRectSize = MoveIcon.ImageRectSize,
-				Position = UDim2.new(1, -10, 0.5, 0),
-				Size = UDim2.fromOffset(28, 28),
-				SizeConstraint = Enum.SizeConstraint.RelativeYY,
-				Parent = TopBar,
-			})
-		end
+		--if MoveIcon then
+		--	New("ImageLabel", {
+		--		AnchorPoint = Vector2.new(1, 0.5),
+			--	Image = MoveIcon.Url,
+			--	ImageColor3 = "OutlineColor",
+			--	ImageRectOffset = MoveIcon.ImageRectOffset,
+			--	ImageRectSize = MoveIcon.ImageRectSize,
+		--		Position = UDim2.new(1, -10, 0.5, 0),
+		--		Size = UDim2.fromOffset(28, 28),
+		--		SizeConstraint = Enum.SizeConstraint.RelativeYY,
+		-		Parent = TopBar,
+		--	})
+		--end
 
 		--// Bottom Bar \\--
 		local BottomBar = New("Frame", {
@@ -9141,9 +9141,9 @@ function Library:CreateWindow(WindowInfo)
 			AutomaticCanvasSize = Enum.AutomaticSize.Y,
 			BackgroundColor3 = "BackgroundColor",
 			CanvasSize = UDim2.fromScale(0, 0),
-			Position = UDim2.fromOffset(0, 49),
+			Position = UDim2.fromOffset(0, 57),
 			ScrollBarThickness = 0,
-			Size = UDim2.new(0.3, 0, 1, -70),
+			Size = UDim2.new(0.3, 0, 1, -78),
 			Parent = MainFrame,
 		})
 		New("UIListLayout", {
