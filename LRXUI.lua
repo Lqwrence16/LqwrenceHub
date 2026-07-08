@@ -8961,12 +8961,12 @@ function Library:CreateWindow(WindowInfo)
 			Parent = TitleHolder,
 		})
 
-		--// Top Right Bar
+		--// Top Right Area (Tab Info)
 		local RightWrapper = New("Frame", {
 			BackgroundTransparency = 1,
 			AnchorPoint = Vector2.new(0, 0.5),
-			Position = UDim2.new(0.32, 12, 0.5, 0),
-			Size = UDim2.new(0.30, 0, 1, -16),
+			Position = UDim2.new(0.30, 8, 0.5, 0),
+			Size = UDim2.new(0.40, 0, 1, -16),
 			Parent = TopBar,
 		})
 
@@ -8993,10 +8993,10 @@ function Library:CreateWindow(WindowInfo)
 		})
 
 		New("UIPadding", {
-			PaddingBottom = UDim.new(0, 8),
+			PaddingBottom = UDim.new(0, 4),
 			PaddingLeft = UDim.new(0, 8),
 			PaddingRight = UDim.new(0, 8),
-			PaddingTop = UDim.new(0, 8),
+			PaddingTop = UDim.new(0, 4),
 			Parent = CurrentTabInfo,
 		})
 
@@ -9016,21 +9016,22 @@ function Library:CreateWindow(WindowInfo)
 			AutomaticSize = Enum.AutomaticSize.Y,
 			Text = "",
 			TextWrapped = true,
-			TextSize = 14,
+			TextSize = 12,
 			TextXAlignment = Enum.TextXAlignment.Left,
 			TextTransparency = 0.5,
 			Parent = CurrentTabInfo,
 		})
 
+		--// Search Box (direct child of TopBar, right edge)
 		SearchBox = New("TextBox", {
 			BackgroundColor3 = "MainColor",
 			PlaceholderText = "Search",
 			Size = UDim2.new(0.38, 0, 0, 34),
 			AnchorPoint = Vector2.new(1, 0.5),
-			Position = UDim2.new(1, -10, 0.5, 0), -- 10px from TRUE right edge
+			Position = UDim2.new(1, -10, 0.5, 0),
 			TextScaled = true,
 			Visible = not (WindowInfo.DisableSearch or false),
-			Parent = TopBar, -- <-- PARENT IS TOPBAR NOW
+			Parent = TopBar,
 		})
 
 		New("UICorner", {
@@ -9062,6 +9063,12 @@ function Library:CreateWindow(WindowInfo)
 				Parent = SearchBox,
 			})
 		end
+
+		-- Dynamic sizing variables
+		local SearchBoxBaseWidth = 0.38
+		local SearchBoxShrinkWidth = 0.22
+		local SearchBoxBaseOffset = -10
+		local SearchBoxShrinkOffset = -8
 
 		--local MoveIcon = Library:GetIcon("move")
 		--if MoveIcon then
@@ -10233,16 +10240,21 @@ function Library:CreateWindow(WindowInfo)
 				}):Play()
 			end
 
+			-- Show tab info and description
 			if Description then
 				CurrentTabInfo.Visible = true
-
-				--if IsDefaultSearchbarSize then
-				--	SearchBox.Size = UDim2.fromScale(0.5, 1)
-				--end
-
 				CurrentTabLabel.Text = Name
 				CurrentTabDescription.Text = Description
+			else
+				-- No description: just hide the info panel, don't touch search
+				CurrentTabInfo.Visible = false
 			end
+
+			-- Search bar always stays in the shrunk position
+			TweenService:Create(Library.SearchBox, Library.TweenInfo, {
+				Size = UDim2.new(Library.SearchBoxShrinkWidth, 0, 0, 34),
+				Position = UDim2.new(1, Library.SearchBoxShrinkOffset, 0.5, 0),
+			}):Play()
 
 			TabContainer.Visible = true
 
