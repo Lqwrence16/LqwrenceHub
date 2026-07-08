@@ -101,9 +101,9 @@ end
 -- ==============================================================================
 -- TAB CREATION
 -- ==============================================================================
-local HomeTab = Window:AddTab("Home", "house")
-local AutoFarmTab = Window:AddTab("Auto-Farm", "sword")
-local SettingsTab = Window:AddTab("Settings", "settings")
+local HomeTab = Window:AddTab("Home", "house", "Welcome to LRX Hub")
+local AutoFarmTab = Window:AddTab("Auto-Farm", "sword", "Automated farming controls")
+local SettingsTab = Window:AddTab("Settings", "settings", "Configure your preferences")
 
 -- ==============================================================================
 -- HOME TAB

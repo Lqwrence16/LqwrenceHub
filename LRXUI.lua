@@ -8926,14 +8926,15 @@ function Library:CreateWindow(WindowInfo)
 		Library:MakeDraggable(MainFrame, TopBar, false, true)
 
 		--// Title
+		--// Title
 		local TitleHolder = New("Frame", {
 			BackgroundTransparency = 1,
-			Size = UDim2.fromScale(0.3, 1),
+			Size = UDim2.fromScale(0.25, 1), -- slightly smaller width
 			Parent = TopBar,
 		})
 		New("UIListLayout", {
 			FillDirection = Enum.FillDirection.Horizontal,
-			HorizontalAlignment = Enum.HorizontalAlignment.Center,
+			HorizontalAlignment = Enum.HorizontalAlignment.Left, -- align left
 			VerticalAlignment = Enum.VerticalAlignment.Center,
 			Padding = UDim.new(0, 6),
 			Parent = TitleHolder,
@@ -8955,6 +8956,7 @@ function Library:CreateWindow(WindowInfo)
 		)
 		New("TextLabel", {
 			BackgroundTransparency = 1,
+			Position = UDim2.fromOffset(12, 0), -- <-- ADD THIS: 12px left padding
 			Size = UDim2.new(0, X, 1, 0),
 			Text = WindowInfo.Title,
 			TextSize = 20,
@@ -10242,6 +10244,8 @@ function Library:CreateWindow(WindowInfo)
 
 				CurrentTabLabel.Text = Name
 				CurrentTabDescription.Text = Description
+			else
+				CurrentTabInfo.Visible = false
 			end
 
 			TabContainer.Visible = true
