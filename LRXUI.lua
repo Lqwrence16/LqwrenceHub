@@ -8964,7 +8964,7 @@ function Library:CreateWindow(WindowInfo)
 			BackgroundTransparency = 1,
 			AnchorPoint = Vector2.new(0, 0.5),
 			Position = UDim2.new(0.3, 8, 0.5, 0),
-			Size = UDim2.new(0.7, -57, 1, -16),
+			Size = UDim2.new(0.7, -57, 0, 32),
 			Parent = TopBar,
 		})
 		New("UIPadding", {
@@ -8985,6 +8985,7 @@ function Library:CreateWindow(WindowInfo)
 			Size = UDim2.fromScale(WindowInfo.DisableSearch and 1 or 0.5, 1),
 			Visible = false,
 			BackgroundTransparency = 1,
+			ClipsDescendants = true, -- ADD THIS: prevents overflow
 			Parent = RightWrapper,
 		})
 
@@ -9146,9 +9147,9 @@ function Library:CreateWindow(WindowInfo)
 			AutomaticCanvasSize = Enum.AutomaticSize.Y,
 			BackgroundColor3 = "BackgroundColor",
 			CanvasSize = UDim2.fromScale(0, 0),
-			Position = UDim2.fromOffset(0, 62), -- was 56, now 62 (14px gap below line)
+			Position = UDim2.fromOffset(0, 52), -- was 56, now 62 (14px gap below line)
 			ScrollBarThickness = 0,
-			Size = UDim2.new(0.3, 0, 1, -82), -- 62 + 82 = 144, keeps bottom aligned
+			Size = UDim2.new(0.3, 0, 1, -72), -- 62 + 82 = 144, keeps bottom aligned
 			Parent = MainFrame,
 		})
 
@@ -9166,8 +9167,8 @@ function Library:CreateWindow(WindowInfo)
 				return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
 			end,
 			Name = "Container",
-			Position = UDim2.new(1, 0, 0, 62), -- match Tabs
-			Size = UDim2.new(0.7, -1, 1, -82), -- match Tabs
+			Position = UDim2.new(1, 0, 0, 52), -- match Tabs
+			Size = UDim2.new(0.7, -1, 1, -72), -- match Tabs
 			Parent = MainFrame,
 		})
 
