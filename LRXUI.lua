@@ -78,14 +78,14 @@ local Library = {
 
 	IsLightTheme = false,
 	Scheme = {
-		BackgroundColor = Color3.fromRGB(15, 15, 15),
-		MainColor = Color3.fromRGB(25, 25, 25),
-		AccentColor = Color3.fromRGB(125, 85, 255),
-		OutlineColor = Color3.fromRGB(40, 40, 40),
+		BackgroundColor = Color3.fromRGB(18, 20, 25),
+		MainColor = Color3.fromRGB(29, 32, 39),
+		AccentColor = Color3.fromRGB(88, 166, 255),
+		OutlineColor = Color3.fromRGB(53, 57, 67),
 		FontColor = Color3.new(1, 1, 1),
-		Font = Font.fromEnum(Enum.Font.Code),
+		Font = Font.fromEnum(Enum.Font.BuilderSans),
 
-		Red = Color3.fromRGB(255, 50, 50),
+		Red = Color3.fromRGB(255, 90, 90),
 		Dark = Color3.new(0, 0, 0),
 		White = Color3.new(1, 1, 1),
 	},
@@ -94,97 +94,15 @@ local Library = {
 	DPIRegistry = {},
 }
 
-local ObsidianImageManager = {
-	Assets = {
-		TransparencyTexture = {
-			RobloxId = 139785960036434,
-			Path = "Obsidian/assets/TransparencyTexture.png",
-
-			Id = nil,
-		},
-
-		SaturationMap = {
-			RobloxId = 4155801252,
-			Path = "Obsidian/assets/SaturationMap.png",
-
-			Id = nil,
-		},
-	},
+local LRXAssets = {
+	TransparencyTexture = "rbxassetid://139785960036434",
+	SaturationMap = "rbxassetid://4155801252",
 }
-do
-	local BaseURL = "https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/"
-
-	local function RecursiveCreatePath(Path: string, IsFile: boolean?)
-		if not isfolder or not makefolder then
-			return
-		end
-
-		local Segments = Path:split("/")
-		local TraversedPath = ""
-
-		if IsFile then
-			table.remove(Segments, #Segments)
-		end
-
-		for _, Segment in ipairs(Segments) do
-			if not isfolder(TraversedPath .. Segment) then
-				makefolder(TraversedPath .. Segment)
-			end
-
-			TraversedPath = TraversedPath .. Segment .. "/"
-		end
-
-		return TraversedPath
-	end
-
-	function ObsidianImageManager.GetAsset(AssetName: string)
-		if not ObsidianImageManager.Assets[AssetName] then
-			return nil
-		end
-
-		local AssetData = ObsidianImageManager.Assets[AssetName]
-		if AssetData.Id then
-			return AssetData.Id
-		end
-
-		local AssetID = `rbxassetid://{AssetData.RobloxId}`
-
-		if getcustomasset then
-			local Success, NewID = pcall(getcustomasset, AssetData.Path)
-
-			if Success and NewID then
-				AssetID = NewID
-			end
-		end
-
-		AssetData.Id = AssetID
-		return AssetID
-	end
-
-	function ObsidianImageManager.DownloadAsset(AssetPath: string)
-		if not getcustomasset or not writefile or not isfile then
-			return
-		end
-
-		RecursiveCreatePath(AssetPath, true)
-
-		if isfile(AssetPath) then
-			return
-		end
-
-		local URLPath = AssetPath:gsub("Obsidian/", "")
-		writefile(AssetPath, game:HttpGet(`{BaseURL}{URLPath}`))
-	end
-
-	for _, Data in ObsidianImageManager.Assets do
-		ObsidianImageManager.DownloadAsset(Data.Path)
-	end
-end
 
 if RunService:IsStudio() then
 	if UserInputService.TouchEnabled and not UserInputService.MouseEnabled then
 		Library.IsMobile = true
-		Library.MinSize = Vector2.new(480, 240)
+		Library.MinSize = Vector2.new(320, 200) -- smaller minimum for phones
 	else
 		Library.IsMobile = false
 		Library.MinSize = Vector2.new(480, 360)
@@ -194,7 +112,15 @@ else
 		Library.DevicePlatform = UserInputService:GetPlatform()
 	end)
 	Library.IsMobile = (Library.DevicePlatform == Enum.Platform.Android or Library.DevicePlatform == Enum.Platform.IOS)
-	Library.MinSize = Library.IsMobile and Vector2.new(480, 240) or Vector2.new(480, 360)
+	-- Dynamic minimum based on actual screen size for mobile
+	if Library.IsMobile then
+		local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(720, 1280)
+		local minDim = math.min(viewport.X, viewport.Y)
+		Library.MinSize =
+			Vector2.new(math.max(math.floor(minDim * 0.85), 280), math.max(math.floor(minDim * 0.65), 200))
+	else
+		Library.MinSize = Vector2.new(480, 360)
+	end
 end
 
 local Templates = {
@@ -506,6 +432,7 @@ function Library:UpdateKeybindFrame()
 
 	Library.KeybindFrame.Size = UDim2.fromOffset(XSize + 18 * Library.DPIScale, 0)
 end
+
 function Library:UpdateDependencyBoxes()
 	for _, Depbox in pairs(Library.DependencyBoxes) do
 		Depbox:Update(true)
@@ -565,6 +492,7 @@ local function CheckDepbox(Box, Search)
 
 	return VisibleElements
 end
+
 local function RestoreDepbox(Box)
 	for _, ElementInfo in pairs(Box.Elements) do
 		ElementInfo.Holder.Visible = typeof(ElementInfo.Visible) == "boolean" and ElementInfo.Visible or true
@@ -954,6 +882,7 @@ local FetchIcons, Icons = pcall(function()
 		game:HttpGet("https://raw.githubusercontent.com/deividcomsono/lucide-roblox-direct/refs/heads/main/source.lua")
 	)()
 end)
+
 function Library:GetIcon(IconName: string)
 	if not FetchIcons then
 		return
@@ -1021,6 +950,7 @@ local function FillInstance(Table: { [string]: any }, Instance: GuiObject)
 	if GetTableSize(ThemeProperties) > 0 then
 		Library.Registry[Instance] = ThemeProperties
 	end
+
 	if GetTableSize(DPIProperties) > 0 then
 		DPIProperties["DPIExclude"] = DPIExclude
 		DPIProperties["DPIOffset"] = DPIOffset
@@ -1053,7 +983,7 @@ local function SafeParentUI(UI: Instance)
 	end)
 
 	if not success then
-		warn("[EXO UI] Failed to parent UI to PlayerGui:", err)
+		warn("[LRXUI] Failed to parent UI to PlayerGui:", err)
 		return false
 	end
 
@@ -1065,7 +995,7 @@ local function ParentUI(UI: Instance, _SkipHiddenUI: boolean?)
 end
 
 local ScreenGui = New("ScreenGui", {
-	Name = "Obsidian",
+	Name = "LRXUI",
 	DisplayOrder = 2147483647,
 	ResetOnSpawn = false,
 })
@@ -1077,7 +1007,7 @@ ScreenGui.DescendantRemoving:Connect(function(Instance)
 end)
 
 local ModalScreenGui = New("ScreenGui", {
-	Name = "ObsidanModal",
+	Name = "LRXUI_Modal",
 	DisplayOrder = 2147483647,
 	ResetOnSpawn = false,
 })
@@ -1288,6 +1218,7 @@ function Library:MakeDraggable(UI: GuiObject, DragFrame: GuiObject, IgnoreToggle
 			end
 		end)
 	end)
+
 	Library:GiveSignal(UserInputService.InputChanged:Connect(function(Input: InputObject)
 		if
 			(not IgnoreToggled and not Library.Toggled)
@@ -1337,6 +1268,7 @@ function Library:MakeResizable(UI: GuiObject, DragFrame: GuiObject, Callback: ()
 			end
 		end)
 	end)
+
 	Library:GiveSignal(UserInputService.InputChanged:Connect(function(Input: InputObject)
 		if not UI.Visible or not (ScreenGui and ScreenGui.Parent) then
 			Dragging = false
@@ -2344,20 +2276,44 @@ function Library:OnUnload(Callback)
 	table.insert(Library.UnloadSignals, Callback)
 end
 
+-- NEW: More thorough cleanup
 function Library:Unload()
+	-- Disconnect all signals
 	for Index = #Library.Signals, 1, -1 do
 		local Connection = table.remove(Library.Signals, Index)
-		Connection:Disconnect()
+		pcall(function()
+			Connection:Disconnect()
+		end)
 	end
 
+	-- Run unload callbacks
 	for _, Callback in pairs(Library.UnloadSignals) do
 		Library:SafeCallback(Callback)
 	end
 
 	Library.Unloaded = true
-	ScreenGui:Destroy()
-	ModalScreenGui:Destroy()
+
+	-- Destroy ScreenGuis with error handling
+	pcall(function()
+		if ScreenGui and ScreenGui.Parent then
+			ScreenGui:Destroy()
+		end
+	end)
+
+	pcall(function()
+		if ModalScreenGui and ModalScreenGui.Parent then
+			ModalScreenGui:Destroy()
+		end
+	end)
+
+	-- Clear global reference
 	getgenv().Library = nil
+
+	-- Clear any cached references
+	Library.ScreenGui = nil
+	Library.KeybindFrame = nil
+	Library.KeybindContainer = nil
+	Library.Notifications = {}
 end
 
 local CheckIcon = Library:GetIcon("check")
@@ -2800,7 +2756,7 @@ do
 		})
 
 		local HolderTransparency = New("ImageLabel", {
-			Image = ObsidianImageManager.GetAsset("TransparencyTexture"),
+			Image = LRXAssets.SaturationMap,
 			ImageTransparency = (1 - ColorPicker.Transparency),
 			ScaleType = Enum.ScaleType.Tile,
 			Size = UDim2.fromScale(1, 1),
@@ -2853,7 +2809,7 @@ do
 		--// Sat Map
 		local SatVipMap = New("ImageButton", {
 			BackgroundColor3 = ColorPicker.Value,
-			Image = ObsidianImageManager.GetAsset("SaturationMap"),
+			Image = LRXAssets.SaturationMap,
 			Size = UDim2.fromOffset(200, 200),
 			Parent = ColorHolder,
 		})
@@ -2899,7 +2855,7 @@ do
 		local TransparencySelector, TransparencyColor, TransparencyCursor
 		if Info.Transparency then
 			TransparencySelector = New("ImageButton", {
-				Image = ObsidianImageManager.GetAsset("TransparencyTexture"),
+				Image = LRXAssets.TransparencyTexture,
 				ScaleType = Enum.ScaleType.Tile,
 				Size = UDim2.fromOffset(16, 200),
 				TileSize = UDim2.fromOffset(8, 8),
@@ -8806,14 +8762,27 @@ function Library:CreateWindow(WindowInfo)
 		until ViewportSize.X > 5 and ViewportSize.Y > 5
 	end
 
-	local MaxX = ViewportSize.X - 64
-	local MaxY = ViewportSize.Y - 64
+	local MaxX = ViewportSize.X - 32
+	local MaxY = ViewportSize.Y - 32
 
 	Library.MinSize = Vector2.new(math.min(Library.MinSize.X, MaxX), math.min(Library.MinSize.Y, MaxY))
-	WindowInfo.Size = UDim2.fromOffset(
-		math.clamp(WindowInfo.Size.X.Offset, Library.MinSize.X, MaxX),
-		math.clamp(WindowInfo.Size.Y.Offset, Library.MinSize.Y, MaxY)
-	)
+
+	-- For mobile: default to 92% of screen if not specified, or clamp to fit
+	if Library.IsMobile then
+		local defaultWidth = math.floor(ViewportSize.X * 0.92)
+		local defaultHeight = math.floor(ViewportSize.Y * 0.85)
+		local targetWidth = (WindowInfo.Size.X.Offset > 0 and WindowInfo.Size.X.Offset) or defaultWidth
+		local targetHeight = (WindowInfo.Size.Y.Offset > 0 and WindowInfo.Size.Y.Offset) or defaultHeight
+		WindowInfo.Size = UDim2.fromOffset(
+			math.clamp(targetWidth, Library.MinSize.X, MaxX),
+			math.clamp(targetHeight, Library.MinSize.Y, MaxY)
+		)
+	else
+		WindowInfo.Size = UDim2.fromOffset(
+			math.clamp(WindowInfo.Size.X.Offset, Library.MinSize.X, MaxX),
+			math.clamp(WindowInfo.Size.Y.Offset, Library.MinSize.Y, MaxY)
+		)
+	end
 	if typeof(WindowInfo.Font) == "EnumItem" then
 		WindowInfo.Font = Font.fromEnum(WindowInfo.Font)
 	end
@@ -8875,22 +8844,36 @@ function Library:CreateWindow(WindowInfo)
 		do
 			local Lines = {
 				{
-					Position = UDim2.fromOffset(0, 48),
+					Position = UDim2.fromOffset(0, 48), -- horizontal line under top bar (KEEP)
 					Size = UDim2.new(1, 0, 0, 1),
 				},
-				{
-					Position = UDim2.fromScale(0.3, 0),
-					Size = UDim2.new(0, 1, 1, -21),
-				},
+				-- REMOVED: Full-height vertical line that cuts through top bar
+				-- {
+				--     Position = UDim2.fromScale(0.3, 0),
+				--     Size = UDim2.new(0, 1, 1, -21),
+				-- },
 				{
 					AnchorPoint = Vector2.new(0, 1),
-					Position = UDim2.new(0, 0, 1, -20),
+					Position = UDim2.new(0, 0, 1, -20), -- horizontal line above footer (KEEP)
 					Size = UDim2.new(1, 0, 0, 1),
 				},
 			}
 			for _, Info in pairs(Lines) do
 				Library:MakeLine(MainFrame, Info)
 			end
+
+			-- NEW: Vertical line that starts BELOW the top bar (at Y=49)
+			-- This keeps the sidebar/content separator without dividing title and search
+			local VerticalLine = New("Frame", {
+				BackgroundColor3 = "OutlineColor",
+				Position = UDim2.new(0.3, 0, 0, 49), -- X=30%, Y=49 (below 48px top bar)
+				Size = UDim2.new(0, 1, 1, -69), -- 1px wide, height minus 49+20
+				Parent = MainFrame,
+			})
+			Library:AddToRegistry(VerticalLine, {
+				BackgroundColor3 = "OutlineColor",
+			})
+
 			Library:MakeOutline(MainFrame, WindowInfo.CornerRadius, 0)
 		end
 
@@ -9054,20 +9037,20 @@ function Library:CreateWindow(WindowInfo)
 			})
 		end
 
-		local MoveIcon = Library:GetIcon("move")
-		if MoveIcon then
-			New("ImageLabel", {
-				AnchorPoint = Vector2.new(1, 0.5),
-				Image = MoveIcon.Url,
-				ImageColor3 = "OutlineColor",
-				ImageRectOffset = MoveIcon.ImageRectOffset,
-				ImageRectSize = MoveIcon.ImageRectSize,
-				Position = UDim2.new(1, -10, 0.5, 0),
-				Size = UDim2.fromOffset(28, 28),
-				SizeConstraint = Enum.SizeConstraint.RelativeYY,
-				Parent = TopBar,
-			})
-		end
+		--local MoveIcon = Library:GetIcon("move")
+		--if MoveIcon then
+		--New("ImageLabel", {
+		--		AnchorPoint = Vector2.new(1, 0.5),
+		--		Image = MoveIcon.Url,
+		--		ImageColor3 = "OutlineColor",
+		--		ImageRectOffset = MoveIcon.ImageRectOffset,
+		--		ImageRectSize = MoveIcon.ImageRectSize,
+		--		Position = UDim2.new(1, -10, 0.5, 0),
+		--		Size = UDim2.fromOffset(28, 28),
+		--		SizeConstraint = Enum.SizeConstraint.RelativeYY,
+		--		Parent = TopBar,
+		--	})
+		--end
 
 		--// Bottom Bar \\--
 		local BottomBar = New("Frame", {
@@ -9171,6 +9154,14 @@ function Library:CreateWindow(WindowInfo)
 	--// Window Table \\--
 	local Window = {}
 
+	function Window:Center()
+		local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
+		local frameSize = MainFrame.AbsoluteSize
+		if frameSize.X > 0 and frameSize.Y > 0 then
+			MainFrame.Position = UDim2.new(0.5, -math.floor(frameSize.X / 2), 0.5, -math.floor(frameSize.Y / 2))
+		end
+	end
+
 	function Window:SetFooterText(NewText)
 		if FooterLabel then
 			FooterLabel.Text = tostring(NewText or "")
@@ -9218,6 +9209,11 @@ function Library:CreateWindow(WindowInfo)
 				Size = UDim2.new(1, 0, 0, 40),
 				Text = "",
 				Parent = Tabs,
+			})
+
+			New("UICorner", {
+				CornerRadius = UDim.new(0, 6),
+				Parent = TabButton,
 			})
 
 			New("UIPadding", {
@@ -10196,6 +10192,15 @@ function Library:CreateWindow(WindowInfo)
 					ImageTransparency = Hovering and 0.25 or 0.5,
 				}):Play()
 			end
+
+			-- Border highlight on hover
+			local Stroke = TabButton:FindFirstChildOfClass("UIStroke")
+			if Stroke then
+				TweenService:Create(Stroke, Library.TweenInfo, {
+					Transparency = Hovering and 0.2 or 0.6,
+					Color = Hovering and Library.Scheme.AccentColor or Library.Scheme.OutlineColor,
+				}):Play()
+			end
 		end
 
 		function Tab:Show()
@@ -10204,7 +10209,8 @@ function Library:CreateWindow(WindowInfo)
 			end
 
 			TweenService:Create(TabButton, Library.TweenInfo, {
-				BackgroundTransparency = 0,
+				BackgroundColor3 = Library.Scheme.MainColor,
+				BackgroundTransparency = 0.5,
 			}):Play()
 			TweenService:Create(TabLabel, Library.TweenInfo, {
 				TextTransparency = 0,
@@ -10218,12 +10224,14 @@ function Library:CreateWindow(WindowInfo)
 			if Description then
 				CurrentTabInfo.Visible = true
 
-				if IsDefaultSearchbarSize then
-					SearchBox.Size = UDim2.fromScale(0.5, 1)
-				end
+				--if IsDefaultSearchbarSize then
+				--	SearchBox.Size = UDim2.fromScale(0.5, 1)
+				--end
 
 				CurrentTabLabel.Text = Name
 				CurrentTabDescription.Text = Description
+			else
+				CurrentTabInfo.Visible = false
 			end
 
 			TabContainer.Visible = true
@@ -10245,9 +10253,9 @@ function Library:CreateWindow(WindowInfo)
 			end
 			TabContainer.Visible = false
 
-			if IsDefaultSearchbarSize then
-				SearchBox.Size = UDim2.fromScale(1, 1)
-			end
+			--if IsDefaultSearchbarSize then
+			--	SearchBox.Size = UDim2.fromScale(1, 1)
+			--end
 
 			CurrentTabInfo.Visible = false
 
@@ -10529,7 +10537,7 @@ function Library:CreateWindow(WindowInfo)
 
 	-- if Library.IsMobile then #button
 	if true then
-		local ToggleButton = Library:AddDraggableButton("<b><font color='#FFEA00'>Exotic</font></b>", function()
+		local ToggleButton = Library:AddDraggableButton("<b><font color='#FFEA00'>LRX</font></b>", function()
 			Library:Toggle()
 		end)
 
@@ -10545,7 +10553,7 @@ function Library:CreateWindow(WindowInfo)
 
 		-- task.spawn(function()
 		--     while true do
-		--         ToggleButton.Button.Text = string.format("<b><font color='%s'>Exotic</font></b>", colors[i])
+		--         ToggleButton.Button.Text = string.format("<b><font color='%s'>LRX</font></b>", colors[i])
 		--         i = (i % #colors) + 1
 		--         task.wait(0.3)
 		--     end
@@ -10628,6 +10636,7 @@ end
 
 Library:GiveSignal(Players.PlayerAdded:Connect(OnPlayerChange))
 Library:GiveSignal(Players.PlayerRemoving:Connect(OnPlayerChange))
+
 Library:GiveSignal(Teams.ChildAdded:Connect(OnTeamChange))
 Library:GiveSignal(Teams.ChildRemoved:Connect(OnTeamChange))
 
