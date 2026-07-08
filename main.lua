@@ -25,7 +25,7 @@ _G.LRX_Connections = nil
 _G.LRX_KillSwitch = nil
 
 game:GetService("RunService").RenderStepped:Wait()
-
+--try this
 -- ==============================================================================
 -- CONFIG PERSISTENCE
 -- ==============================================================================
