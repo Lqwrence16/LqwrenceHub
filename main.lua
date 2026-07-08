@@ -85,9 +85,9 @@ _G.LRX_KillSwitch = false
 -- ==============================================================================
 -- UI LIBRARY
 -- ==============================================================================
-local Library =
-	loadstring(game:HttpGet("https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.lua"))()
 
+local Library = "https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.lua"
+loadstring(game:HttpGet(Library .. "?t=" .. tostring(tick())))()
 -- ==============================================================================
 -- WINDOW SETUP
 -- ==============================================================================
