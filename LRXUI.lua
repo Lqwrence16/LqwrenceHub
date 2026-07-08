@@ -9147,7 +9147,7 @@ function Library:CreateWindow(WindowInfo)
 			AutomaticCanvasSize = Enum.AutomaticSize.Y,
 			BackgroundColor3 = "BackgroundColor",
 			CanvasSize = UDim2.fromScale(0, 0),
-			Position = UDim2.fromOffset(0, 58),
+			Position = UDim2.fromOffset(0, 49),
 			ScrollBarThickness = 0,
 			Size = UDim2.new(0.3, 0, 1, -70),
 			Parent = MainFrame,
@@ -9157,6 +9157,14 @@ function Library:CreateWindow(WindowInfo)
 			Padding = UDim.new(0, 6),
 			HorizontalAlignment = Enum.HorizontalAlignment.Center,
 			VerticalAlignment = Enum.VerticalAlignment.Top,
+			Parent = Tabs,
+		})
+
+		-- ADD THIS SPACER: invisible frame that pushes first tab down
+		New("Frame", {
+			BackgroundTransparency = 1,
+			Size = UDim2.new(0.9, 0, 0, 8), -- 8px tall spacer, same width as tabs
+			LayoutOrder = -100, -- ensures it stays at top
 			Parent = Tabs,
 		})
 
