@@ -70,7 +70,7 @@ _G.LRX_KillSwitch = false
 -- ==============================================================================
 
 -- << CHANGE THIS TO TRUE WHEN TESTING UI UPDATES >>
-local DEV_MODE = true
+local DEV_MODE = false
 
 local CACHE_FILE = "LRXUI_Cache.lua"
 local DEV_FILE = "LRXUI_Dev.lua"

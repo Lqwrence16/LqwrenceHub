@@ -194,7 +194,21 @@ else
 		Library.DevicePlatform = UserInputService:GetPlatform()
 	end)
 	Library.IsMobile = (Library.DevicePlatform == Enum.Platform.Android or Library.DevicePlatform == Enum.Platform.IOS)
-	Library.MinSize = Library.IsMobile and Vector2.new(480, 240) or Vector2.new(480, 360)
+
+	-- High-DPI mobile detection (Infinix GT 30 Pro: 1224x2720, 440 PPI)
+	local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(720, 1280)
+	local isHighDPI = viewport.Y >= 2400 or viewport.X >= 1200
+
+	if Library.IsMobile and isHighDPI then
+		Library.MinSize = Vector2.new(680, 420)
+		Library.DPIScale = 1.35
+	elseif Library.IsMobile then
+		Library.MinSize = Vector2.new(560, 320)
+		Library.DPIScale = 1.15
+	else
+		Library.MinSize = Vector2.new(480, 360)
+		Library.DPIScale = 1
+	end
 end
 
 local Templates = {
@@ -248,7 +262,7 @@ local Templates = {
 		Title = "No Title",
 		Footer = "No Footer",
 		Position = UDim2.fromOffset(6, 6),
-		Size = UDim2.fromOffset(720, 600),
+		Size = Library.IsMobile and UDim2.fromOffset(840, 720) or UDim2.fromOffset(720, 600),
 		IconSize = UDim2.fromOffset(30, 30),
 		AutoShow = true,
 		Center = true,
@@ -10546,6 +10560,9 @@ function Library:CreateWindow(WindowInfo)
 		local ToggleButton = Library:AddDraggableButton("<b><font color='#FFEA00'>LRX</font></b>", function()
 			Library:Toggle()
 		end)
+		if Library.IsMobile then
+			ToggleButton.Button.Size = UDim2.fromOffset(64, 64)
+		end
 
 		-- local colors = {
 		--     "#FFD700", -- gold
