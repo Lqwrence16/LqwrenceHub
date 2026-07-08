@@ -8968,8 +8968,8 @@ function Library:CreateWindow(WindowInfo)
 			Parent = TopBar,
 		})
 		New("UIPadding", {
-			PaddingTop = UDim.new(0, 6), -- pushes content down
-			PaddingBottom = UDim.new(0, 4),
+			PaddingTop = UDim.new(0, 2), -- less push
+			PaddingBottom = UDim.new(0, 2), -- less push
 			Parent = RightWrapper,
 		})
 
@@ -8982,10 +8982,10 @@ function Library:CreateWindow(WindowInfo)
 		})
 
 		CurrentTabInfo = New("Frame", {
-			Size = UDim2.fromScale(WindowInfo.DisableSearch and 1 or 0.5, 1),
+			Size = UDim2.fromScale(WindowInfo.DisableSearch and 1 or 0.6, 1),
 			Visible = false,
 			BackgroundTransparency = 1,
-			ClipsDescendants = true, -- ADD THIS: prevents overflow
+			ClipsDescendants = false,
 			Parent = RightWrapper,
 		})
 
@@ -8997,31 +8997,33 @@ function Library:CreateWindow(WindowInfo)
 		})
 
 		New("UIPadding", {
-			PaddingBottom = UDim.new(0, 8),
-			PaddingLeft = UDim.new(0, 8),
-			PaddingRight = UDim.new(0, 8),
-			PaddingTop = UDim.new(0, 8),
+			PaddingBottom = UDim.new(0, 2), -- minimal
+			PaddingLeft = UDim.new(0, 4), -- minimal
+			PaddingRight = UDim.new(0, 4), -- minimal
+			PaddingTop = UDim.new(0, 2), -- minimal
 			Parent = CurrentTabInfo,
 		})
 
 		CurrentTabLabel = New("TextLabel", {
 			BackgroundTransparency = 1,
-			Size = UDim2.fromScale(1, 0),
-			AutomaticSize = Enum.AutomaticSize.Y,
+			Size = UDim2.new(1, 0, 0.5, 0), -- fixed: give it 50% height instead of 0
+			-- Remove: AutomaticSize = Enum.AutomaticSize.Y,
 			Text = "",
 			TextSize = 14,
 			TextXAlignment = Enum.TextXAlignment.Left,
+			TextTruncate = Enum.TextTruncate.AtEnd, -- add: gracefully truncate with "..."
 			Parent = CurrentTabInfo,
 		})
 
 		CurrentTabDescription = New("TextLabel", {
 			BackgroundTransparency = 1,
-			Size = UDim2.fromScale(1, 0),
-			AutomaticSize = Enum.AutomaticSize.Y,
+			Size = UDim2.new(1, 0, 0.5, 0), -- fixed: give it 50% height
+			-- Remove: AutomaticSize = Enum.AutomaticSize.Y,
+			-- Remove: TextWrapped = true,  -- or keep but it causes overflow
 			Text = "",
-			TextWrapped = true,
-			TextSize = 14,
+			TextSize = 12, -- slightly smaller
 			TextXAlignment = Enum.TextXAlignment.Left,
+			TextTruncate = Enum.TextTruncate.AtEnd, -- add: gracefully truncate
 			TextTransparency = 0.5,
 			Parent = CurrentTabInfo,
 		})
@@ -10256,7 +10258,7 @@ function Library:CreateWindow(WindowInfo)
 				CurrentTabInfo.Visible = true
 
 				if IsDefaultSearchbarSize then
-					SearchBox.Size = UDim2.fromScale(0.5, 1)
+					SearchBox.Size = UDim2.fromScale(0.38, 1) -- smaller so info gets more room
 				end
 
 				CurrentTabLabel.Text = Name
@@ -10283,7 +10285,7 @@ function Library:CreateWindow(WindowInfo)
 			TabContainer.Visible = false
 
 			if IsDefaultSearchbarSize then
-				SearchBox.Size = UDim2.fromScale(1, 1)
+				SearchBox.Size = UDim2.fromScale(0.38, 1) -- smaller so info gets more room
 			end
 
 			CurrentTabInfo.Visible = false

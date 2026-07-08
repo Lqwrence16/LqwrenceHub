@@ -9,14 +9,48 @@ local MarketplaceService = game:GetService("MarketplaceService")
 
 local DEV_MODE = true
 
-local CONFIG_FILE = "LRX_Hub_Config.json"
+local CONSTANTS = {
+	Config = {
+		FILE = "LRX_Hub_Config.json",
+		AutoSaveDefault = true,
+	},
+	Paths = {
+		CACHE_FOLDER = "LRXHUB69/cache",
+		CACHE_FILE = "LRXHUB69/cache/LRXUI.lua",
+		VERSION_FILE = "LRXHUB69/cache/LRXUI.version",
+	},
+	URLs = {
+		UI = "https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.lua",
+		VERSION = "https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.version",
+	},
+	Version = {
+		HUB = "v0.0.05",
+	},
+	UI = {
+		Targets = { "Obsidian", "ObsidanModal", "LRXUI", "LRXUI_Modal" },
+	},
+}
 
-local CACHE_FOLDER = "LRXHUB69/cache"
-local CACHE_FILE = CACHE_FOLDER .. "/LRXUI.lua"
-local VERSION_FILE = CACHE_FOLDER .. "/LRXUI.version"
+--==============================================================================
+-- PHASE 1b: PRODUCTION LOGGER
+--==============================================================================
 
-local UI_URL = "https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.lua"
-local VERSION_URL = "https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.version"
+local Logger = {
+	Debug = function(tag, msg)
+		if DEV_MODE then
+			print("[LRX " .. tostring(tag) .. "] " .. tostring(msg))
+		end
+	end,
+	Info = function(tag, msg)
+		print("[LRX " .. tostring(tag) .. "] " .. tostring(msg))
+	end,
+	Warn = function(tag, msg)
+		warn("[LRX " .. tostring(tag) .. "] " .. tostring(msg))
+	end,
+	Error = function(msg)
+		error("[LRX Loader] " .. tostring(msg))
+	end,
+}
 
 --==============================================================================
 -- PHASE 2: HELPER FUNCTIONS
@@ -47,8 +81,8 @@ local function EnsureCacheFolders()
 	if not isfolder("LRXHUB69") then
 		pcall(makefolder, "LRXHUB69")
 	end
-	if not isfolder(CACHE_FOLDER) then
-		pcall(makefolder, CACHE_FOLDER)
+	if not isfolder(CONSTANTS.Paths.CACHE_FOLDER) then
+		pcall(makefolder, CONSTANTS.Paths.CACHE_FOLDER)
 	end
 end
 
@@ -93,26 +127,26 @@ end
 
 -- Reads the cache once and validates both files before returning them.
 local function ReadCache()
-	local ui = ReadFile(CACHE_FILE)
+	local ui = ReadFile(CONSTANTS.Paths.CACHE_FILE)
 	if not ui then
 		return nil
 	end
 	if #ui < 100 then
-		warn("[LRX Cache] Cached UI is too small (" .. #ui .. " bytes), treating as invalid")
+		Logger.Warn("Cache", "Cached UI is too small (" .. #ui .. " bytes), treating as invalid")
 		return nil
 	end
 
-	local version = ReadFile(VERSION_FILE)
+	local version = ReadFile(CONSTANTS.Paths.VERSION_FILE)
 	if not version then
-		warn("[LRX Cache] Version file missing")
+		Logger.Warn("Cache", "Version file missing")
 		return nil
 	end
 	if #version == 0 then
-		warn("[LRX Cache] Version file is empty")
+		Logger.Warn("Cache", "Version file is empty")
 		return nil
 	end
 	if not version:match("%S") then
-		warn("[LRX Cache] Version file contains only whitespace")
+		Logger.Warn("Cache", "Version file contains only whitespace")
 		return nil
 	end
 
@@ -126,15 +160,15 @@ local function WriteCache(ui, version)
 	local ok1 = true
 	local ok2 = true
 	if ui then
-		ok1 = WriteFile(CACHE_FILE, ui)
+		ok1 = WriteFile(CONSTANTS.Paths.CACHE_FILE, ui)
 		if not ok1 then
-			warn("[LRX Cache] Failed to write LRXUI.lua")
+			Logger.Warn("Cache", "Failed to write LRXUI.lua")
 		end
 	end
 	if version then
-		ok2 = WriteFile(VERSION_FILE, version)
+		ok2 = WriteFile(CONSTANTS.Paths.VERSION_FILE, version)
 		if not ok2 then
-			warn("[LRX Cache] Failed to write version file")
+			Logger.Warn("Cache", "Failed to write version file")
 		end
 	end
 	return ok1 and ok2
@@ -142,24 +176,24 @@ end
 
 -- Downloads the latest package. Optionally reuses a pre-fetched version string.
 local function DownloadLatest(preFetchedVersion)
-	print("[LRX Cache] Downloading latest package...")
+	Logger.Info("Cache", "Downloading latest package...")
 
-	local ui = Download(UI_URL)
+	local ui = Download(CONSTANTS.URLs.UI)
 	if not ui or #ui <= 100 then
-		warn("[LRX Cache] Failed to download LRXUI.lua or file too short")
+		Logger.Warn("Cache", "Failed to download LRXUI.lua or file too short")
 		return nil
 	end
 
 	local version = preFetchedVersion
 	if not IsValidVersion(version) then
-		version = Download(VERSION_URL)
+		version = Download(CONSTANTS.URLs.VERSION)
 	end
 	if not IsValidVersion(version) then
-		warn("[LRX Cache] Version file invalid, using 'unknown'")
+		Logger.Warn("Cache", "Version file invalid, using 'unknown'")
 		version = "unknown"
 	end
 
-	print("[LRX Cache] Download complete.")
+	Logger.Info("Cache", "Download complete.")
 	return {
 		UI = ui,
 		Version = version,
@@ -169,18 +203,18 @@ end
 -- Checks if the local version matches the remote version.
 -- Reuses the downloaded version string for the package download if an update is needed.
 local function CheckVersion(localVersion)
-	print("[LRX Cache] Local version: " .. tostring(localVersion))
+	Logger.Info("Cache", "Local version: " .. tostring(localVersion))
 
-	local remoteVersion = Download(VERSION_URL)
+	local remoteVersion = Download(CONSTANTS.URLs.VERSION)
 	if not IsValidVersion(remoteVersion) then
-		warn("[LRX Cache] Failed to download valid version file. Assuming cache is up to date.")
+		Logger.Warn("Cache", "Failed to download valid version file. Assuming cache is up to date.")
 		return {
 			Match = true,
 			RemoteVersion = nil,
 		}
 	end
 
-	print("[LRX Cache] Remote version: " .. remoteVersion)
+	Logger.Info("Cache", "Remote version: " .. remoteVersion)
 
 	if localVersion == remoteVersion then
 		return {
@@ -195,9 +229,11 @@ local function CheckVersion(localVersion)
 	end
 end
 
--- Validates a downloaded UI by compiling and executing it BEFORE the cache is touched.
-local function ValidateLibrary(source)
-	print("[LRX Cache] Validating download...")
+-- Validates and loads a library source in one step.
+-- Returns (true, libraryTable) on success, (false, errorMessage) on failure.
+-- This eliminates double compilation by producing the library table immediately.
+local function ValidateAndLoad(source)
+	Logger.Info("Cache", "Validating library...")
 	if not source or type(source) ~= "string" then
 		return false, "Source is nil or not a string"
 	end
@@ -205,13 +241,13 @@ local function ValidateLibrary(source)
 		return false, "Source is too short (" .. #source .. " chars)"
 	end
 
-	print("[LRX Cache] Compiling...")
+	Logger.Info("Cache", "Compiling...")
 	local chunk, compileError = loadstring(source)
 	if not chunk then
 		return false, "Syntax error: " .. tostring(compileError)
 	end
 
-	print("[LRX Cache] Executing test run...")
+	Logger.Info("Cache", "Executing test run...")
 	local success, result = xpcall(chunk, debug.traceback)
 	if not success then
 		return false, "Runtime error: " .. tostring(result)
@@ -221,37 +257,40 @@ local function ValidateLibrary(source)
 		return false, "Did not return a library table. Got: " .. type(result)
 	end
 
-	print("[LRX Cache] Validation passed.")
-	return true, nil
-end
-
-local function LoadLibrary(source)
-	print("[LRX Loader] Loading library...")
-
-	local chunk, compileError = loadstring(source)
-	if not chunk then
-		error("[LRX Loader] Syntax error in LRXUI.lua: " .. tostring(compileError))
-	end
-
-	local success, result = xpcall(chunk, debug.traceback)
-	if not success then
-		error("[LRX Loader] Runtime error loading library: " .. tostring(result))
-	end
-
-	if type(result) ~= "table" then
-		error("[LRX Loader] LRXUI.lua did not return a library table. Got: " .. type(result))
-	end
-
-	print("[LRX Loader] Library loaded successfully.")
-	return result
+	Logger.Info("Cache", "Validation passed. Library loaded.")
+	return true, result
 end
 
 --==============================================================================
 -- PHASE 3: CLEANUP
 --==============================================================================
 
+-- Shared UI destruction helper used by both Cleanup() and Close All.
+local function DestroyHubUI()
+	local targets = CONSTANTS.UI.Targets
+
+	local function DestroyIn(parent)
+		if not parent then
+			return
+		end
+		for _, child in ipairs(parent:GetChildren()) do
+			if table.find(targets, child.Name) then
+				pcall(function()
+					child:Destroy()
+				end)
+			end
+		end
+	end
+
+	local localPlayer = Players.LocalPlayer
+	if localPlayer and localPlayer:FindFirstChild("PlayerGui") then
+		DestroyIn(localPlayer.PlayerGui)
+	end
+	DestroyIn(CoreGui)
+end
+
 local function Cleanup()
-	print("[LRX Loader] Running cleanup...")
+	Logger.Info("Loader", "Running cleanup...")
 
 	pcall(function()
 		if getgenv and getgenv().Library then
@@ -272,36 +311,11 @@ local function Cleanup()
 		_G.AutoRejoinEnabled = nil
 		_G.AntiAFKEnabled = nil
 
-		local targets = {
-			"Obsidian",
-			"ObsidanModal",
-			"LRXUI",
-			"LRXUI_Modal",
-		}
-
-		local function DestroyTargets(parent)
-			if not parent then
-				return
-			end
-			for _, child in ipairs(parent:GetChildren()) do
-				if table.find(targets, child.Name) then
-					pcall(function()
-						child:Destroy()
-					end)
-				end
-			end
-		end
-
-		local localPlayer = Players.LocalPlayer
-		if localPlayer and localPlayer:FindFirstChild("PlayerGui") then
-			DestroyTargets(localPlayer.PlayerGui)
-		end
-
-		DestroyTargets(CoreGui)
+		DestroyHubUI()
 	end)
 
 	task.wait(0.15)
-	print("[LRX Loader] Cleanup complete.")
+	Logger.Info("Loader", "Cleanup complete.")
 end
 
 Cleanup()
@@ -316,78 +330,105 @@ EnsureCacheFolders()
 -- PHASE 5 & 6: DEV MODE / RELEASE MODE
 --==============================================================================
 
-local CachedUI = nil
+local Library = nil
 
 if DEV_MODE then
-	print("[LRX Loader] DEV_MODE enabled.")
-	print("[LRX Loader] Loading local LRXUI.lua...")
+	Logger.Info("Loader", "DEV_MODE enabled.")
+	Logger.Info("Loader", "Loading local LRXUI.lua...")
 
-	local devSource = ReadFile(CACHE_FILE)
+	local devSource = ReadFile(CONSTANTS.Paths.CACHE_FILE)
 	if not devSource then
-		error(
-			"[LRX Loader] DEV_MODE requires a local LRXUI.lua at '"
-				.. CACHE_FILE
+		Logger.Error(
+			"DEV_MODE requires a local LRXUI.lua at '"
+				.. CONSTANTS.Paths.CACHE_FILE
 				.. "'. Please place your local file there and re-execute."
 		)
 	end
 
-	CachedUI = devSource
-	print("[LRX Loader] Local library loaded. (GitHub ignored, cache untouched)")
+	local valid, result = ValidateAndLoad(devSource)
+	if not valid then
+		Logger.Error("DEV_MODE validation failed: " .. tostring(result))
+	end
+
+	Library = result
+	Logger.Info("Loader", "Local library validated and loaded. (GitHub ignored, cache untouched)")
 else
-	print("[LRX Loader] Release mode.")
-	print("[LRX Cache] Checking cache...")
+	Logger.Info("Loader", "Release mode.")
+	Logger.Info("Cache", "Checking cache...")
 
 	local cache = ReadCache()
+	local librarySource = nil
 
 	if not cache then
-		print("[LRX Cache] Cache missing or corrupted.")
-		print("[LRX Cache] Downloading fresh package...")
+		Logger.Info("Cache", "Cache missing or corrupted.")
+		Logger.Info("Cache", "Downloading fresh package...")
 
 		local latest = DownloadLatest()
 		if not latest then
-			error("[LRX Cache] Failed to download LRXUI. No local cache available.")
+			Logger.Error("Failed to download LRXUI. No local cache available.")
 		end
 
-		local valid, err = ValidateLibrary(latest.UI)
+		local valid, result = ValidateAndLoad(latest.UI)
 		if not valid then
-			error("[LRX Cache] Validation failed: " .. tostring(err))
+			Logger.Error("Validation failed: " .. tostring(result))
 		end
 
-		print("[LRX Cache] Updating cache...")
-		WriteCache(latest.UI, latest.Version)
-		CachedUI = latest.UI
+		Logger.Info("Cache", "Updating cache...")
+		local writeOk = WriteCache(latest.UI, latest.Version)
+		if not writeOk then
+			Logger.Warn("Cache", "Cache write failed. Library loaded but cache may be stale on next run.")
+		end
 
-		print("[LRX Cache] Cache created successfully.")
+		Library = result
+		librarySource = latest.UI
+
+		Logger.Info("Cache", "Cache created successfully.")
 	else
-		print("[LRX Cache] Cache found.")
-		print("[LRX Cache] Checking version...")
+		Logger.Info("Cache", "Cache found.")
+		Logger.Info("Cache", "Checking version...")
 
 		local versionCheck = CheckVersion(cache.Version)
 
 		if versionCheck.Match then
-			print("[LRX Cache] Cache is up to date.")
-			CachedUI = cache.UI
+			Logger.Info("Cache", "Cache is up to date.")
+			librarySource = cache.UI
 		else
-			print("[LRX Cache] Update available.")
-			print("[LRX Cache] Downloading latest package...")
+			Logger.Info("Cache", "Update available.")
+			Logger.Info("Cache", "Downloading latest package...")
 
 			local latest = DownloadLatest(versionCheck.RemoteVersion)
 			if not latest then
-				warn("[LRX Cache] Download failed. Falling back to existing cache.")
-				CachedUI = cache.UI
+				Logger.Warn("Cache", "Download failed. Falling back to existing cache.")
+				librarySource = cache.UI
 			else
-				local valid, err = ValidateLibrary(latest.UI)
+				local valid, result = ValidateAndLoad(latest.UI)
 				if not valid then
-					warn("[LRX Cache] Validation failed: " .. tostring(err) .. ". Falling back to existing cache.")
-					CachedUI = cache.UI
+					Logger.Warn(
+						"Cache",
+						"Validation failed: " .. tostring(result) .. ". Falling back to existing cache."
+					)
+					librarySource = cache.UI
 				else
-					print("[LRX Cache] Updating cache...")
-					WriteCache(latest.UI, latest.Version)
-					CachedUI = latest.UI
-					print("[LRX Cache] Cache updated successfully.")
+					Logger.Info("Cache", "Updating cache...")
+					local writeOk = WriteCache(latest.UI, latest.Version)
+					if not writeOk then
+						Logger.Warn("Cache", "Cache write failed. Library loaded but cache may be stale on next run.")
+					end
+					Library = result
+					librarySource = latest.UI
+					Logger.Info("Cache", "Cache updated successfully.")
 				end
 			end
 		end
+	end
+
+	-- If we only have source (fallback cases), compile and load it now.
+	if not Library and librarySource then
+		local valid, result = ValidateAndLoad(librarySource)
+		if not valid then
+			Logger.Error("Failed to load cached library: " .. tostring(result))
+		end
+		Library = result
 	end
 end
 
@@ -395,9 +436,10 @@ end
 -- PHASE 7: LIBRARY LOADING
 --==============================================================================
 
-assert(CachedUI, "[LRX Loader] No library source available.")
+if not Library then
+	Logger.Error("No library source available.")
+end
 
-local Library = LoadLibrary(CachedUI)
 getgenv().Library = Library
 
 --==============================================================================
@@ -406,15 +448,15 @@ getgenv().Library = Library
 
 local SavedConfig = {}
 pcall(function()
-	if readfile and isfile and isfile(CONFIG_FILE) then
-		SavedConfig = HttpService:JSONDecode(readfile(CONFIG_FILE))
+	if readfile and isfile and isfile(CONSTANTS.Config.FILE) then
+		SavedConfig = HttpService:JSONDecode(readfile(CONSTANTS.Config.FILE))
 	end
 end)
 
 local function SaveConfig()
 	pcall(function()
 		if writefile then
-			writefile(CONFIG_FILE, HttpService:JSONEncode(SavedConfig))
+			writefile(CONSTANTS.Config.FILE, HttpService:JSONEncode(SavedConfig))
 		end
 	end)
 end
@@ -428,7 +470,11 @@ end
 
 local function SetSaved(key, value)
 	SavedConfig[key] = value
-	SaveConfig()
+	-- Always save when the AutoSaveConfig toggle itself changes so the preference persists.
+	-- Otherwise respect the user's AutoSaveConfig setting.
+	if key == "AutoSaveConfig" or (SavedConfig["AutoSaveConfig"] ~= false) then
+		SaveConfig()
+	end
 end
 
 _G.LRX_Connections = _G.LRX_Connections or {}
@@ -440,7 +486,7 @@ _G.LRX_KillSwitch = false
 
 local Window = Library:CreateWindow({
 	Title = "LRX_Hub",
-	Footer = "v0.0.05",
+	Footer = CONSTANTS.Version.HUB,
 	Icon = "fan",
 	IconSize = UDim2.fromOffset(28, 28),
 	Size = UDim2.fromOffset(740, 520),
@@ -482,7 +528,7 @@ HomeLeft:AddLabel("Status: Idle")
 HomeLeft:AddLabel("Ping: -- ms")
 
 HomeRight:AddLabel("Client Info:")
-HomeRight:AddLabel("Version: v2.5.0")
+HomeRight:AddLabel("Version: " .. CONSTANTS.Version.HUB)
 HomeRight:AddLabel("Game: " .. MarketplaceService:GetProductInfo(game.PlaceId).Name)
 HomeRight:AddDivider()
 
@@ -689,29 +735,14 @@ SettingsRight:AddButton("Close All / Stop Everything", function()
 	task.wait(0.1)
 
 	pcall(function()
-		local lp = Players.LocalPlayer
-		local targets = { "LRXUI", "LRXUI_Modal", "Obsidian", "ObsidanModal" }
-
 		if Library and Library.Unload then
 			Library:Unload()
 		end
-
-		if lp and lp:FindFirstChild("PlayerGui") then
-			for _, gui in ipairs(lp.PlayerGui:GetChildren()) do
-				if table.find(targets, gui.Name) then
-					gui:Destroy()
-				end
-			end
-		end
-		for _, gui in ipairs(CoreGui:GetChildren()) do
-			if table.find(targets, gui.Name) then
-				gui:Destroy()
-			end
-		end
+		DestroyHubUI()
 	end)
 
 	_G.LRX_Hub_UI = nil
-	print("[LRX Hub] Fully closed. Config saved.")
+	Logger.Info("Hub", "Fully closed. Config saved.")
 end)
 
 SettingsRight:AddDivider()
@@ -725,7 +756,7 @@ SettingsRight:AddButton("Reset All Settings", function()
 			if accepted then
 				pcall(function()
 					if delfile then
-						delfile(CONFIG_FILE)
+						delfile(CONSTANTS.Config.FILE)
 					end
 				end)
 				SavedConfig = {}
@@ -743,4 +774,4 @@ SettingsRight:AddButton("Reset All Settings", function()
 	})
 end)
 
-print("[LRX Hub] Main script loaded successfully!")
+Logger.Info("Hub", "Main script loaded successfully!")
