@@ -113,6 +113,8 @@ if cachedUI and #cachedUI > 100 then
 
 	if loadOk and type(loadResult) == "table" then
 		Library = loadResult
+		print(Library.ScreenGui)
+		print(Library.ScreenGui and Library.ScreenGui.Parent)
 		print("[LRX Hub] Library loaded from cache")
 	else
 		warn("[LRX Hub] Failed to load cached library. Result:", tostring(loadResult))
@@ -243,6 +245,14 @@ local Window = Library:CreateWindow({
 	ToggleKeybind = Enum.KeyCode.RightControl,
 	MobileButtonsSide = "Left",
 })
+
+print("Window:", Window)
+
+print("Children:", #Library.ScreenGui:GetChildren())
+
+for _, v in ipairs(Library.ScreenGui:GetChildren()) do
+	print(v.Name, v.ClassName)
+end
 
 -- ==============================================================================
 -- TABS
