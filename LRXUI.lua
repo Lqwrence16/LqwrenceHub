@@ -8968,8 +8968,8 @@ function Library:CreateWindow(WindowInfo)
 			Parent = TopBar,
 		})
 		New("UIPadding", {
-			PaddingTop = UDim.new(0, 4), -- adds gap at top
-			PaddingBottom = UDim.new(0, 4), -- optional: balance bottom
+			PaddingTop = UDim.new(0, 6), -- pushes content down
+			PaddingBottom = UDim.new(0, 4),
 			Parent = RightWrapper,
 		})
 
@@ -9146,11 +9146,12 @@ function Library:CreateWindow(WindowInfo)
 			AutomaticCanvasSize = Enum.AutomaticSize.Y,
 			BackgroundColor3 = "BackgroundColor",
 			CanvasSize = UDim2.fromScale(0, 0),
-			Position = UDim2.fromOffset(0, 49), -- starts right after topbar (48 + 1px line)
+			Position = UDim2.fromOffset(0, 56), -- 48 (topbar) + 1 (line) + 7px gap
 			ScrollBarThickness = 0,
-			Size = UDim2.new(0.3, 0, 1, -69), -- adjusted: 49 + 69 = 118, was 57 + 78 = 135, so -69 keeps bottom aligned
+			Size = UDim2.new(0.3, 0, 1, -76), -- adjust to match: 56 + 76 = 132, was 49+69=118, bottom stays same
 			Parent = MainFrame,
 		})
+
 		New("UIListLayout", {
 			Padding = UDim.new(0, 6),
 			HorizontalAlignment = Enum.HorizontalAlignment.Center,
@@ -9165,8 +9166,8 @@ function Library:CreateWindow(WindowInfo)
 				return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
 			end,
 			Name = "Container",
-			Position = UDim2.new(1, 0, 0, 49), -- keep same, aligns with tabs
-			Size = UDim2.new(0.7, -1, 1, -69), -- match tabs height adjustment
+			Position = UDim2.new(1, 0, 0, 56), -- match Tabs
+			Size = UDim2.new(0.7, -1, 1, -76), -- match Tabs height adjustment
 			Parent = MainFrame,
 		})
 
