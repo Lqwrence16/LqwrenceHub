@@ -8967,6 +8967,11 @@ function Library:CreateWindow(WindowInfo)
 			Size = UDim2.new(0.7, -57, 1, -16),
 			Parent = TopBar,
 		})
+		New("UIPadding", {
+			PaddingTop = UDim.new(0, 4), -- adds gap at top
+			PaddingBottom = UDim.new(0, 4), -- optional: balance bottom
+			Parent = RightWrapper,
+		})
 
 		New("UIListLayout", {
 			FillDirection = Enum.FillDirection.Horizontal,

@@ -92,7 +92,7 @@ local Library =
 -- WINDOW SETUP
 -- ==============================================================================
 local Window = Library:CreateWindow({
-	Title = "NEW TAB",
+	Title = "udjusted tab",
 	Footer = "v2.5.0",
 	Icon = "fan",
 	IconSize = UDim2.fromOffset(28, 28),
