@@ -9146,9 +9146,10 @@ function Library:CreateWindow(WindowInfo)
 			Size = UDim2.new(0.3, 0, 1, -70),
 			Parent = MainFrame,
 		})
-
 		New("UIListLayout", {
 			Padding = UDim.new(0, 6),
+			HorizontalAlignment = Enum.HorizontalAlignment.Center,
+			VerticalAlignment = Enum.VerticalAlignment.Top,
 			Parent = Tabs,
 		})
 
@@ -9219,8 +9220,8 @@ function Library:CreateWindow(WindowInfo)
 		do
 			TabButton = New("TextButton", {
 				BackgroundColor3 = "MainColor",
-				BackgroundTransparency = 0.6, -- Visible background (was 1, now 0.6)
-				Size = UDim2.new(1, -12, 0, 40), -- Slightly narrower for margin effect
+				BackgroundTransparency = 0.6,
+				Size = UDim2.new(0.9, 0, 0, 40), -- equal margin on both sides
 				Text = "",
 				Parent = Tabs,
 			})
