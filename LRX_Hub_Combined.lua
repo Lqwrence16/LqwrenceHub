@@ -949,11 +949,11 @@ function Library:GiveSignal(Connection: RBXScriptConnection)
 	return Connection
 end
 
-local FetchIcons, Icons = pcall(function()
-	return loadstring(
-		game:HttpGet("https://raw.githubusercontent.com/deividcomsono/lucide-roblox-direct/refs/heads/main/source.lua")
-	)()
-end)
+--local FetchIcons, Icons = pcall(function()
+--	return loadstring(
+--		game:HttpGet("https://raw.githubusercontent.com/deividcomsono/lucide-roblox-direct/refs/heads/main/source.lua")
+--	)()
+--end)
 function Library:GetIcon(IconName: string)
 	if not FetchIcons then
 		return
