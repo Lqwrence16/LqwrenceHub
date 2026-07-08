@@ -102,7 +102,7 @@ local LRXAssets = {
 if RunService:IsStudio() then
 	if UserInputService.TouchEnabled and not UserInputService.MouseEnabled then
 		Library.IsMobile = true
-		Library.MinSize = Vector2.new(480, 240)
+		Library.MinSize = Vector2.new(320, 200) -- smaller minimum for phones
 	else
 		Library.IsMobile = false
 		Library.MinSize = Vector2.new(480, 360)
@@ -112,7 +112,15 @@ else
 		Library.DevicePlatform = UserInputService:GetPlatform()
 	end)
 	Library.IsMobile = (Library.DevicePlatform == Enum.Platform.Android or Library.DevicePlatform == Enum.Platform.IOS)
-	Library.MinSize = Library.IsMobile and Vector2.new(480, 240) or Vector2.new(480, 360)
+	-- Dynamic minimum based on actual screen size for mobile
+	if Library.IsMobile then
+		local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(720, 1280)
+		local minDim = math.min(viewport.X, viewport.Y)
+		Library.MinSize =
+			Vector2.new(math.max(math.floor(minDim * 0.85), 280), math.max(math.floor(minDim * 0.65), 200))
+	else
+		Library.MinSize = Vector2.new(480, 360)
+	end
 end
 
 local Templates = {
@@ -8754,14 +8762,27 @@ function Library:CreateWindow(WindowInfo)
 		until ViewportSize.X > 5 and ViewportSize.Y > 5
 	end
 
-	local MaxX = ViewportSize.X - 64
-	local MaxY = ViewportSize.Y - 64
+	local MaxX = ViewportSize.X - 32
+	local MaxY = ViewportSize.Y - 32
 
 	Library.MinSize = Vector2.new(math.min(Library.MinSize.X, MaxX), math.min(Library.MinSize.Y, MaxY))
-	WindowInfo.Size = UDim2.fromOffset(
-		math.clamp(WindowInfo.Size.X.Offset, Library.MinSize.X, MaxX),
-		math.clamp(WindowInfo.Size.Y.Offset, Library.MinSize.Y, MaxY)
-	)
+
+	-- For mobile: default to 92% of screen if not specified, or clamp to fit
+	if Library.IsMobile then
+		local defaultWidth = math.floor(ViewportSize.X * 0.92)
+		local defaultHeight = math.floor(ViewportSize.Y * 0.85)
+		local targetWidth = (WindowInfo.Size.X.Offset > 0 and WindowInfo.Size.X.Offset) or defaultWidth
+		local targetHeight = (WindowInfo.Size.Y.Offset > 0 and WindowInfo.Size.Y.Offset) or defaultHeight
+		WindowInfo.Size = UDim2.fromOffset(
+			math.clamp(targetWidth, Library.MinSize.X, MaxX),
+			math.clamp(targetHeight, Library.MinSize.Y, MaxY)
+		)
+	else
+		WindowInfo.Size = UDim2.fromOffset(
+			math.clamp(WindowInfo.Size.X.Offset, Library.MinSize.X, MaxX),
+			math.clamp(WindowInfo.Size.Y.Offset, Library.MinSize.Y, MaxY)
+		)
+	end
 	if typeof(WindowInfo.Font) == "EnumItem" then
 		WindowInfo.Font = Font.fromEnum(WindowInfo.Font)
 	end
@@ -8869,9 +8890,32 @@ function Library:CreateWindow(WindowInfo)
 			})
 		end
 
-		if WindowInfo.Center then
-			MainFrame.Position = UDim2.new(0.5, -MainFrame.Size.X.Offset / 2, 0.5, -MainFrame.Size.Y.Offset / 2)
+		-- Center the window properly on all devices
+		local function CenterWindow()
+			local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
+			local frameSize = MainFrame.AbsoluteSize
+			if frameSize.X > 0 and frameSize.Y > 0 then
+				MainFrame.Position = UDim2.new(0.5, -math.floor(frameSize.X / 2), 0.5, -math.floor(frameSize.Y / 2))
+			else
+				MainFrame.Position = UDim2.new(
+					0.5,
+					-math.floor(WindowInfo.Size.X.Offset / 2),
+					0.5,
+					-math.floor(WindowInfo.Size.Y.Offset / 2)
+				)
+			end
 		end
+
+		if WindowInfo.Center then
+			CenterWindow()
+		end
+
+		-- Recenter on viewport resize (handles orientation changes)
+		Library:GiveSignal(workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+			if WindowInfo.Center and MainFrame and MainFrame.Parent then
+				CenterWindow()
+			end
+		end))
 
 		--// Top Bar \\-
 		local TopBar = New("Frame", {
@@ -9135,6 +9179,14 @@ function Library:CreateWindow(WindowInfo)
 
 	--// Window Table \\--
 	local Window = {}
+
+	function Window:Center()
+		local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
+		local frameSize = MainFrame.AbsoluteSize
+		if frameSize.X > 0 and frameSize.Y > 0 then
+			MainFrame.Position = UDim2.new(0.5, -math.floor(frameSize.X / 2), 0.5, -math.floor(frameSize.Y / 2))
+		end
+	end
 
 	function Window:SetFooterText(NewText)
 		if FooterLabel then

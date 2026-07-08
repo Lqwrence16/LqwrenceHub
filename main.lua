@@ -96,9 +96,9 @@ local Window = Library:CreateWindow({
 	Footer = "v2.5.0",
 	Icon = "fan",
 	IconSize = UDim2.fromOffset(28, 28),
-	Size = UDim2.fromOffset(740, 520),
+	Size = UDim2.fromOffset(0, 0),
 	Position = UDim2.fromOffset(80, 80),
-	Center = false,
+	Center = true,
 	AutoShow = true,
 	Resizable = true,
 	SearchbarSize = UDim2.fromScale(1, 1),
@@ -109,6 +109,9 @@ local Window = Library:CreateWindow({
 	ToggleKeybind = Enum.KeyCode.RightControl,
 	MobileButtonsSide = "Left",
 })
+if Window.Center then
+	Window:Center()
+end
 
 -- ==============================================================================
 -- TAB CREATION
