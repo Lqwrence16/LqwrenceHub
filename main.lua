@@ -7,7 +7,7 @@ local MarketplaceService = game:GetService("MarketplaceService")
 -- PHASE 1: CONSTANTS
 --==============================================================================
 
-local DEV_MODE = true
+local DEV_MODE = false
 
 local CONSTANTS = {
 	Config = {
