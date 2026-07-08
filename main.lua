@@ -85,9 +85,9 @@ _G.LRX_KillSwitch = false
 -- ==============================================================================
 -- UI LIBRARY
 -- ==============================================================================
+local Library =
+	loadstring(game:HttpGet("https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.lua"))()
 
-local Library = "https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.lua"
-loadstring(game:HttpGet(Library .. "?t=" .. tostring(tick())))()
 -- ==============================================================================
 -- WINDOW SETUP
 -- ==============================================================================
@@ -96,9 +96,9 @@ local Window = Library:CreateWindow({
 	Footer = "v2.5.0",
 	Icon = "fan",
 	IconSize = UDim2.fromOffset(28, 28),
-	Size = UDim2.fromOffset(0, 0),
+	Size = UDim2.fromOffset(740, 520),
 	Position = UDim2.fromOffset(80, 80),
-	Center = true,
+	Center = false,
 	AutoShow = true,
 	Resizable = true,
 	SearchbarSize = UDim2.fromScale(1, 1),
@@ -109,9 +109,6 @@ local Window = Library:CreateWindow({
 	ToggleKeybind = Enum.KeyCode.RightControl,
 	MobileButtonsSide = "Left",
 })
-if Window.Center then
-	Window:Center()
-end
 
 -- ==============================================================================
 -- TAB CREATION
