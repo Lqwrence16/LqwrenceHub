@@ -2,32 +2,54 @@ local HttpService = game:GetService("HttpService")
 local CONFIG_FILE = "LRX_Hub_Config.json"
 
 -- ==============================================================================
--- INSTANT CLEANUP
+-- HARD RESET / CLEANUP (run this first to clear any previous session)
 -- ==============================================================================
-local Players = game:GetService("Players")
-local lp = Players.LocalPlayer or Players.PlayerAdded:Wait()
-local PlayerGui = lp:WaitForChild("PlayerGui", 3)
+pcall(function()
+	-- Clear old Library from global environment
+	if getgenv and getgenv().Library then
+		-- Try to unload properly
+		if getgenv().Library.Unload then
+			getgenv().Library.Unload()
+		end
+		getgenv().Library = nil
+	end
 
-if PlayerGui then
-	for _, gui in ipairs(PlayerGui:GetChildren()) do
-		if gui.Name == "LRXUI" or gui.Name == "LRXUI_Modal" then
+	-- Clear _G references
+	_G.LRX_Hub_UI = nil
+	_G.LRX_Connections = nil
+	_G.LRX_KillSwitch = nil
+	_G.AutoFarmEnabled = nil
+	_G.FastAttackEnabled = nil
+	_G.AutoEquipEnabled = nil
+	_G.AutoRejoinEnabled = nil
+	_G.AntiAFKEnabled = nil
+
+	-- Destroy any existing UI instances
+	local Players = game:GetService("Players")
+	local CoreGui = game:GetService("CoreGui")
+	local lp = Players.LocalPlayer
+
+	local targets = { "LRXUI", "LRXUI_Modal", "Obsidian", "ObsidanModal" }
+
+	if lp and lp:FindFirstChild("PlayerGui") then
+		for _, gui in ipairs(lp.PlayerGui:GetChildren()) do
+			if table.find(targets, gui.Name) then
+				gui:Destroy()
+			end
+		end
+	end
+
+	for _, gui in ipairs(CoreGui:GetChildren()) do
+		if table.find(targets, gui.Name) then
 			gui:Destroy()
 		end
 	end
-end
 
-if getgenv and getgenv().Library then
-	getgenv().Library = nil
-end
-
-_G.LRX_Hub_UI = nil
-_G.LRX_Connections = nil
-_G.LRX_KillSwitch = nil
-
-game:GetService("RunService").RenderStepped:Wait()
---try this
+	-- Small delay to let destruction propagate
+	task.wait(0.1)
+end)
 -- ==============================================================================
--- CONFIG PERSISTENCE
+-- CONFIG PERSISTENCE SYSTEM
 -- ==============================================================================
 local SavedConfig = {}
 pcall(function()
@@ -45,7 +67,10 @@ local function SaveConfig()
 end
 
 local function GetSaved(key, default)
-	return SavedConfig[key] ~= nil and SavedConfig[key] or default
+	if SavedConfig[key] ~= nil then
+		return SavedConfig[key]
+	end
+	return default
 end
 
 local function SetSaved(key, value)
@@ -53,54 +78,21 @@ local function SetSaved(key, value)
 	SaveConfig()
 end
 
+-- Global connection storage for cleanup
 _G.LRX_Connections = _G.LRX_Connections or {}
 _G.LRX_KillSwitch = false
 
 -- ==============================================================================
--- DEV MODE (set to true when testing locally)
+-- UI LIBRARY
 -- ==============================================================================
-local DEV_MODE = false
-local DEV_FILE = "LRXUI_Dev.lua"
 
--- << CHANGE THIS TO YOUR VERCEL URL >>
-local VERCEL_URL = "https://lrxhub.vercel.app/lrxui"
-
-local code, loadSource
-
-if DEV_MODE and isfile and isfile(DEV_FILE) then
-	code = readfile(DEV_FILE)
-	loadSource = "local_dev"
-	print("[LRX Hub] DEV MODE: Loading from " .. DEV_FILE)
-else
-	print("[LRX Hub] Loading from Vercel...")
-	local success, result = pcall(function()
-		return game:HttpGet(VERCEL_URL)
-	end)
-
-	if success and result and #result > 100 then
-		code = result
-		loadSource = "vercel"
-	else
-		error("[LRX Hub] Failed to load from Vercel: " .. tostring(result))
-	end
-end
-
--- Load the library
-local loadSuccess, Library = pcall(function()
-	return loadstring(code)()
-end)
-
-if not loadSuccess or not Library then
-	error("[LRX Hub] Failed to execute LRXUI: " .. tostring(Library))
-end
-
-print("[LRX Hub] LRXUI loaded from: " .. loadSource)
-
+local Library = "https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.lua"
+loadstring(game:HttpGet(Library .. "?t=" .. tostring(tick())))()
 -- ==============================================================================
 -- WINDOW SETUP
 -- ==============================================================================
 local Window = Library:CreateWindow({
-	Title = "LRX_Hub",
+	Title = "LRX Premium Hub",
 	Footer = "v2.5.0",
 	Icon = "fan",
 	IconSize = UDim2.fromOffset(28, 28),
@@ -117,13 +109,16 @@ local Window = Library:CreateWindow({
 	ToggleKeybind = Enum.KeyCode.RightControl,
 	MobileButtonsSide = "Left",
 })
+if Window.Center then
+	Window:Center()
+end
 
 -- ==============================================================================
 -- TAB CREATION
 -- ==============================================================================
-local HomeTab = Window:AddTab("Home", "house", "Welcome to LRX Hub")
-local AutoFarmTab = Window:AddTab("Auto-Farm", "sword", "Automated farming controls")
-local SettingsTab = Window:AddTab("Settings", "settings", "Configure your preferences")
+local HomeTab = Window:AddTab("Home", "house")
+local AutoFarmTab = Window:AddTab("Auto-Farm", "sword")
+local SettingsTab = Window:AddTab("Settings", "settings")
 
 -- ==============================================================================
 -- HOME TAB
@@ -317,24 +312,6 @@ SettingsRight:AddLabel("⚠️ Close All stops automation & UI.")
 SettingsRight:AddLabel("Your settings are saved automatically.")
 SettingsRight:AddDivider()
 
-SettingsRight:AddButton("Clear UI Cache", function()
-	pcall(function()
-		if isfile and isfile("LRXUI_Cache.lua") then
-			delfile("LRXUI_Cache.lua")
-		end
-		if isfile and isfile("LRXUI_Dev.lua") then
-			delfile("LRXUI_Dev.lua")
-		end
-	end)
-	Library:Notify({
-		Title = "Cache Cleared",
-		Description = "Next load will fetch fresh LRXUI from GitHub.",
-		Time = 3,
-	})
-end)
-
-SettingsRight:AddDivider()
-
 SettingsRight:AddButton("Close All / Stop Everything", function()
 	-- 1. STOP ALL AUTOMATION FLAGS
 	_G.AutoFarmEnabled = false
@@ -365,8 +342,21 @@ SettingsRight:AddButton("Close All / Stop Everything", function()
 	-- 5. DESTROY UI
 	task.wait(0.1)
 
+	-- NEW CODE: Destroy ALL possible UI instances
 	pcall(function()
-		local targets = { "LRXUI", "LRXUI_Modal" }
+		local Players = game:GetService("Players")
+		local CoreGui = game:GetService("CoreGui")
+		local lp = Players.LocalPlayer
+
+		-- Try proper unload first
+		if Library and Library.Unload then
+			Library:Unload()
+		end
+
+		-- Force destroy any leftover ScreenGuis
+		local targets = { "LRXUI", "LRXUI_Modal", "Obsidian", "ObsidanModal" }
+
+		-- Check PlayerGui
 		if lp and lp:FindFirstChild("PlayerGui") then
 			for _, gui in ipairs(lp.PlayerGui:GetChildren()) do
 				if table.find(targets, gui.Name) then
@@ -374,8 +364,12 @@ SettingsRight:AddButton("Close All / Stop Everything", function()
 				end
 			end
 		end
-		if Library and Library.Unload then
-			Library:Unload()
+
+		-- Check CoreGui (some executors parent here)
+		for _, gui in ipairs(CoreGui:GetChildren()) do
+			if table.find(targets, gui.Name) then
+				gui:Destroy()
+			end
 		end
 	end)
 
@@ -413,5 +407,8 @@ SettingsRight:AddButton("Reset All Settings", function()
 		end,
 	})
 end)
+-- ==============================================================================
+-- SETTINGS TAB-end
+-- ==============================================================================
 
-print("[LRX Hub] Loaded successfully!")
+print("[LRX Hub] Main script loaded successfully!")
