@@ -1053,7 +1053,7 @@ local function SafeParentUI(UI: Instance)
 	end)
 
 	if not success then
-		warn("[EXO UI] Failed to parent UI to PlayerGui:", err)
+		warn("[LRX UI] Failed to parent UI to PlayerGui:", err)
 		return false
 	end
 
@@ -8826,7 +8826,7 @@ function Library:CreateWindow(WindowInfo)
 	end)
 
 	if not notifySideOk then
-		warn("[EXO UI] SetNotifySide failed:", notifySideErr)
+		warn("[LRX UI] SetNotifySide failed:", notifySideErr)
 	end
 
 	Library.ShowCustomCursor = WindowInfo.ShowCustomCursor
@@ -8925,9 +8925,13 @@ function Library:CreateWindow(WindowInfo)
 			Size = UDim2.fromScale(0.3, 1),
 			Parent = TopBar,
 		})
+		New("UIPadding", {
+			PaddingLeft = UDim.new(0, 12), -- Adjust this number (12, 8, 16, etc.)
+			Parent = TitleHolder,
+		})
 		New("UIListLayout", {
 			FillDirection = Enum.FillDirection.Horizontal,
-			HorizontalAlignment = Enum.HorizontalAlignment.Center,
+			HorizontalAlignment = Enum.HorizontalAlignment.Left,
 			VerticalAlignment = Enum.VerticalAlignment.Center,
 			Padding = UDim.new(0, 6),
 			Parent = TitleHolder,
@@ -9144,6 +9148,7 @@ function Library:CreateWindow(WindowInfo)
 		})
 
 		New("UIListLayout", {
+			Padding = UDim.new(0, 6),
 			Parent = Tabs,
 		})
 
@@ -9214,10 +9219,21 @@ function Library:CreateWindow(WindowInfo)
 		do
 			TabButton = New("TextButton", {
 				BackgroundColor3 = "MainColor",
-				BackgroundTransparency = 1,
-				Size = UDim2.new(1, 0, 0, 40),
+				BackgroundTransparency = 0.6, -- Visible background (was 1, now 0.6)
+				Size = UDim2.new(1, -12, 0, 40), -- Slightly narrower for margin effect
 				Text = "",
 				Parent = Tabs,
+			})
+			New("UICorner", {
+				CornerRadius = UDim.new(0, 6), -- Rounded corners
+				Parent = TabButton,
+			})
+
+			New("UIStroke", {
+				Color = "OutlineColor",
+				Thickness = 1,
+				Transparency = 0.5,
+				Parent = TabButton,
 			})
 
 			New("UIPadding", {
@@ -10196,6 +10212,11 @@ function Library:CreateWindow(WindowInfo)
 					ImageTransparency = Hovering and 0.25 or 0.5,
 				}):Play()
 			end
+
+			-- ADD THIS: Button hover effect
+			TweenService:Create(TabButton, Library.TweenInfo, {
+				BackgroundTransparency = Hovering and 0.4 or 0.6,
+			}):Play()
 		end
 
 		function Tab:Show()
@@ -10204,7 +10225,7 @@ function Library:CreateWindow(WindowInfo)
 			end
 
 			TweenService:Create(TabButton, Library.TweenInfo, {
-				BackgroundTransparency = 0,
+				BackgroundTransparency = 0.2, -- Active tab is more visible
 			}):Play()
 			TweenService:Create(TabLabel, Library.TweenInfo, {
 				TextTransparency = 0,
@@ -10233,7 +10254,7 @@ function Library:CreateWindow(WindowInfo)
 
 		function Tab:Hide()
 			TweenService:Create(TabButton, Library.TweenInfo, {
-				BackgroundTransparency = 1,
+				BackgroundTransparency = 0.6, -- Back to normal
 			}):Play()
 			TweenService:Create(TabLabel, Library.TweenInfo, {
 				TextTransparency = 0.5,
@@ -10529,7 +10550,7 @@ function Library:CreateWindow(WindowInfo)
 
 	-- if Library.IsMobile then #button
 	if true then
-		local ToggleButton = Library:AddDraggableButton("<b><font color='#FFEA00'>Exotic</font></b>", function()
+		local ToggleButton = Library:AddDraggableButton("<b><font color='#FFEA00'>LRX</font></b>", function()
 			Library:Toggle()
 		end)
 
