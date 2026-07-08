@@ -9146,9 +9146,9 @@ function Library:CreateWindow(WindowInfo)
 			AutomaticCanvasSize = Enum.AutomaticSize.Y,
 			BackgroundColor3 = "BackgroundColor",
 			CanvasSize = UDim2.fromScale(0, 0),
-			Position = UDim2.fromOffset(0, 56), -- 48 (topbar) + 1 (line) + 7px gap
+			Position = UDim2.fromOffset(0, 62), -- was 56, now 62 (14px gap below line)
 			ScrollBarThickness = 0,
-			Size = UDim2.new(0.3, 0, 1, -76), -- adjust to match: 56 + 76 = 132, was 49+69=118, bottom stays same
+			Size = UDim2.new(0.3, 0, 1, -82), -- 62 + 82 = 144, keeps bottom aligned
 			Parent = MainFrame,
 		})
 
@@ -9166,8 +9166,8 @@ function Library:CreateWindow(WindowInfo)
 				return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
 			end,
 			Name = "Container",
-			Position = UDim2.new(1, 0, 0, 56), -- match Tabs
-			Size = UDim2.new(0.7, -1, 1, -76), -- match Tabs height adjustment
+			Position = UDim2.new(1, 0, 0, 62), -- match Tabs
+			Size = UDim2.new(0.7, -1, 1, -82), -- match Tabs
 			Parent = MainFrame,
 		})
 
