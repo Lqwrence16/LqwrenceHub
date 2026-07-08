@@ -77,39 +77,70 @@ local DEV_FILE = "LRXUI_Dev.lua"
 local GITHUB_URL = "https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.lua"
 
 local Library
+local loadSource = "unknown"
 
 -- Priority 1: Dev mode local file (instant, for active development)
-if DEV_MODE and isfile and isfile(DEV_FILE) then
-	print("[LRX Hub] DEV MODE: Loading LRXUI from local file...")
-	Library = loadstring(readfile(DEV_FILE))()
+if DEV_MODE then
+	if isfile and isfile(DEV_FILE) then
+		print("[LRX Hub] DEV MODE: Loading LRXUI from local file...")
+		Library = loadstring(readfile(DEV_FILE))()
+		loadSource = "dev_file"
+	else
+		warn("[LRX Hub] DEV MODE is ON but '" .. DEV_FILE .. "' not found!")
+		warn("[LRX Hub] Run this to create it: writefile('" .. DEV_FILE .. "', [[paste LRXUI.lua code here]])")
+	end
+end
 
 -- Priority 2: Cached local file (fast, no download)
-elseif isfile and isfile(CACHE_FILE) then
+if not Library and isfile and isfile(CACHE_FILE) then
 	print("[LRX Hub] Loading LRXUI from cache...")
 	Library = loadstring(readfile(CACHE_FILE))()
+	loadSource = "cache"
+end
 
--- Priority 3: Download from GitHub (slow, but fresh)
-else
+-- Priority 3: Download from GitHub
+if not Library then
 	print("[LRX Hub] Downloading LRXUI from GitHub...")
+	print("[LRX Hub] URL: " .. GITHUB_URL)
+
 	local success, code = pcall(function()
 		return game:HttpGet(GITHUB_URL)
 	end)
 
-	if not success or not code or code == "" then
-		error("[LRX Hub] Failed to download LRXUI from GitHub!")
-		return
-	end
+	if success and code and code ~= "" and not code:match("404") then
+		local loadSuccess, result = pcall(function()
+			return loadstring(code)()
+		end)
 
-	Library = loadstring(code)()
+		if loadSuccess and result then
+			Library = result
+			loadSource = "github"
 
-	-- Save to cache for next time
-	if writefile then
-		writefile(CACHE_FILE, code)
-		print("[LRX Hub] Cached LRXUI for next load!")
+			-- Save to cache for next time
+			if writefile then
+				writefile(CACHE_FILE, code)
+				print("[LRX Hub] Cached LRXUI for next load!")
+			end
+		else
+			warn("[LRX Hub] Downloaded code failed to load: " .. tostring(result))
+		end
+	else
+		warn("[LRX Hub] Failed to download from GitHub!")
+		warn("[LRX Hub] Error/Success: " .. tostring(success))
+		warn("[LRX Hub] Response length: " .. tostring(code and #code or 0))
+		if code then
+			warn("[LRX Hub] Response preview: " .. code:sub(1, 100))
+		end
 	end
 end
 
-print("[LRX Hub] LRXUI loaded successfully!")
+-- Final check
+if not Library then
+	error("[LRX Hub] CRITICAL: Could not load LRXUI from any source! (tried: " .. loadSource .. ")")
+	return
+end
+
+print("[LRX Hub] LRXUI loaded successfully from: " .. loadSource)
 
 -- ==============================================================================
 -- WINDOW SETUP
