@@ -2,52 +2,35 @@ local HttpService = game:GetService("HttpService")
 local CONFIG_FILE = "LRX_Hub_Config.json"
 
 -- ==============================================================================
--- HARD RESET / CLEANUP (run this first to clear any previous session)
+-- INSTANT CLEANUP (no delays, destroys old UI immediately)
 -- ==============================================================================
-pcall(function()
-	-- Clear old Library from global environment
-	if getgenv and getgenv().Library then
-		-- Try to unload properly
-		if getgenv().Library.Unload then
-			getgenv().Library.Unload()
-		end
-		getgenv().Library = nil
-	end
 
-	-- Clear _G references
-	_G.LRX_Hub_UI = nil
-	_G.LRX_Connections = nil
-	_G.LRX_KillSwitch = nil
-	_G.AutoFarmEnabled = nil
-	_G.FastAttackEnabled = nil
-	_G.AutoEquipEnabled = nil
-	_G.AutoRejoinEnabled = nil
-	_G.AntiAFKEnabled = nil
+-- Fast path: destroy old UI instances directly
+local Players = game:GetService("Players")
+local lp = Players.LocalPlayer or Players.PlayerAdded:Wait()
+local PlayerGui = lp:WaitForChild("PlayerGui", 3)
 
-	-- Destroy any existing UI instances
-	local Players = game:GetService("Players")
-	local CoreGui = game:GetService("CoreGui")
-	local lp = Players.LocalPlayer
-
-	local targets = { "LRXUI", "LRXUI_Modal", "Obsidian", "ObsidanModal" }
-
-	if lp and lp:FindFirstChild("PlayerGui") then
-		for _, gui in ipairs(lp.PlayerGui:GetChildren()) do
-			if table.find(targets, gui.Name) then
-				gui:Destroy()
-			end
-		end
-	end
-
-	for _, gui in ipairs(CoreGui:GetChildren()) do
-		if table.find(targets, gui.Name) then
+if PlayerGui then
+	for _, gui in ipairs(PlayerGui:GetChildren()) do
+		if gui.Name == "LRXUI" or gui.Name == "LRXUI_Modal" then
 			gui:Destroy()
 		end
 	end
+end
 
-	-- Small delay to let destruction propagate
-	task.wait(0.1)
-end)
+-- Clear old Library reference (don't call Unload, just wipe it)
+if getgenv and getgenv().Library then
+	getgenv().Library = nil
+end
+
+-- Clear _G references
+_G.LRX_Hub_UI = nil
+_G.LRX_Connections = nil
+_G.LRX_KillSwitch = nil
+
+-- Force one render frame so destruction is processed BEFORE new UI loads
+game:GetService("RunService").RenderStepped:Wait()
+
 -- ==============================================================================
 -- CONFIG PERSISTENCE SYSTEM
 -- ==============================================================================
@@ -83,11 +66,12 @@ _G.LRX_Connections = _G.LRX_Connections or {}
 _G.LRX_KillSwitch = false
 
 -- ==============================================================================
--- UI LIBRARY
+-- UI LIBRARY (with cache buster for instant updates)
 -- ==============================================================================
 
-local Library = "https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.lua"
-loadstring(game:HttpGet(Library .. "?t=" .. tostring(tick())))()
+local LibraryURL = "https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.lua"
+local Library = loadstring(game:HttpGet(LibraryURL .. "?t=" .. tostring(tick())))()
+
 -- ==============================================================================
 -- WINDOW SETUP
 -- ==============================================================================
@@ -109,6 +93,7 @@ local Window = Library:CreateWindow({
 	ToggleKeybind = Enum.KeyCode.RightControl,
 	MobileButtonsSide = "Left",
 })
+
 if Window.Center then
 	Window:Center()
 end
@@ -342,21 +327,8 @@ SettingsRight:AddButton("Close All / Stop Everything", function()
 	-- 5. DESTROY UI
 	task.wait(0.1)
 
-	-- NEW CODE: Destroy ALL possible UI instances
 	pcall(function()
-		local Players = game:GetService("Players")
-		local CoreGui = game:GetService("CoreGui")
-		local lp = Players.LocalPlayer
-
-		-- Try proper unload first
-		if Library and Library.Unload then
-			Library:Unload()
-		end
-
-		-- Force destroy any leftover ScreenGuis
-		local targets = { "LRXUI", "LRXUI_Modal", "Obsidian", "ObsidanModal" }
-
-		-- Check PlayerGui
+		local targets = { "LRXUI", "LRXUI_Modal" }
 		if lp and lp:FindFirstChild("PlayerGui") then
 			for _, gui in ipairs(lp.PlayerGui:GetChildren()) do
 				if table.find(targets, gui.Name) then
@@ -364,12 +336,8 @@ SettingsRight:AddButton("Close All / Stop Everything", function()
 				end
 			end
 		end
-
-		-- Check CoreGui (some executors parent here)
-		for _, gui in ipairs(CoreGui:GetChildren()) do
-			if table.find(targets, gui.Name) then
-				gui:Destroy()
-			end
+		if Library and Library.Unload then
+			Library:Unload()
 		end
 	end)
 
@@ -407,8 +375,5 @@ SettingsRight:AddButton("Reset All Settings", function()
 		end,
 	})
 end)
--- ==============================================================================
--- SETTINGS TAB-end
--- ==============================================================================
 
-print("[LRX Hub] Main script loaded successfully!")
+print("[LRX Hub] Loaded successfully!")
