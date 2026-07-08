@@ -2,19 +2,166 @@ local HttpService = game:GetService("HttpService")
 local CONFIG_FILE = "LRX_Hub_Config.json"
 
 -- ==============================================================================
--- HARD RESET / CLEANUP (run this first to clear any previous session)
+-- CACHE SYSTEM FOR LRXUI.lua
+-- ==============================================================================
+local CACHE_FOLDER = "LRXHUB67/cache"
+local CACHE_UI_FILE = CACHE_FOLDER .. "/LRXUI.lua"
+local CACHE_VERSION_FILE = CACHE_FOLDER .. "/LRXUI.version"
+
+local GITHUB_UI_URL = "https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.lua"
+local GITHUB_VERSION_URL = "https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.version"
+
+local function EnsureFolder(path)
+	if not isfolder then
+		return false
+	end
+	if not isfolder(path) then
+		makefolder(path)
+	end
+	return isfolder(path)
+end
+
+local function ReadFile(path)
+	if not isfile or not isfile(path) then
+		return nil
+	end
+	local ok, content = pcall(readfile, path)
+	return ok and content or nil
+end
+
+local function WriteFile(path, content)
+	if not writefile then
+		return false
+	end
+	return pcall(writefile, path, content)
+end
+
+local function Download(url)
+	if not game or not game.HttpGet then
+		return nil
+	end
+	local ok, content = pcall(function()
+		return game:HttpGet(url, true)
+	end)
+	return ok and content or nil
+end
+
+local function GetCachedUI()
+	EnsureFolder("LRXHUB67")
+	EnsureFolder(CACHE_FOLDER)
+
+	local cachedUI = ReadFile(CACHE_UI_FILE)
+	local cachedVersion = ReadFile(CACHE_VERSION_FILE)
+	local latestVersion = Download(GITHUB_VERSION_URL)
+
+	-- DEBUG: print what we found
+	print("[LRX Cache] cachedUI exists:", cachedUI ~= nil, "len:", cachedUI and #cachedUI or 0)
+	print("[LRX Cache] cachedVersion:", cachedVersion or "nil")
+	print("[LRX Cache] latestVersion from GitHub:", latestVersion or "nil")
+
+	local needsDownload = false
+
+	if not cachedUI or not cachedVersion then
+		print("[LRX Cache] First run — downloading LRXUI.lua...")
+		needsDownload = true
+	elseif latestVersion and latestVersion ~= cachedVersion then
+		print("[LRX Cache] Version changed (" .. cachedVersion .. " → " .. latestVersion .. ") — updating...")
+		needsDownload = true
+	elseif not latestVersion then
+		print("[LRX Cache] Could not check version — using cached LRXUI.lua")
+	else
+		print("[LRX Cache] Using cached LRXUI.lua (v" .. cachedVersion .. ")")
+	end
+
+	if needsDownload then
+		local newUI = Download(GITHUB_UI_URL)
+		print("[LRX Cache] Downloaded UI len:", newUI and #newUI or 0)
+
+		if newUI and #newUI > 100 then
+			WriteFile(CACHE_UI_FILE, newUI)
+			WriteFile(CACHE_VERSION_FILE, latestVersion or cachedVersion or "unknown")
+			cachedUI = newUI
+			print("[LRX Cache] Downloaded and cached successfully")
+		else
+			warn("[LRX Cache] Downloaded file is empty or too small!")
+			if not cachedUI then
+				error("[LRX Cache] No cached UI available and download failed!")
+			else
+				warn("[LRX Cache] Falling back to old cached UI")
+			end
+		end
+	end
+
+	return cachedUI
+end
+
+-- ==============================================================================
+-- LOAD UI LIBRARY FROM CACHE
+-- ==============================================================================
+local Library
+local cachedUI = GetCachedUI()
+
+if cachedUI and #cachedUI > 100 then
+	local loadOk, loadResult = pcall(function()
+		return loadstring(cachedUI)()
+	end)
+
+	-- DEBUG: check what loadstring returned
+	print("[LRX Cache] loadstring ok:", loadOk)
+	print("[LRX Cache] loadstring result type:", typeof(loadResult))
+	print("[LRX Cache] loadstring result is table:", type(loadResult) == "table")
+
+	if loadOk and type(loadResult) == "table" then
+		Library = loadResult
+		print("[LRX Hub] Library loaded from cache")
+	else
+		warn("[LRX Hub] Failed to load cached library. Result:", tostring(loadResult))
+		warn("[LRX Hub] Falling back to direct download...")
+
+		local directUI = Download(GITHUB_UI_URL)
+		if directUI and #directUI > 100 then
+			local directOk, directResult = pcall(function()
+				return loadstring(directUI)()
+			end)
+			if directOk and type(directResult) == "table" then
+				Library = directResult
+				print("[LRX Hub] Library loaded from direct download")
+			else
+				error("[LRX Hub] Direct download also failed! Result: " .. tostring(directResult))
+			end
+		else
+			error("[LRX Hub] Direct download returned empty file!")
+		end
+	end
+else
+	warn("[LRX Cache] Cached file missing or too small, using direct download")
+	local directUI = Download(GITHUB_UI_URL)
+	if directUI and #directUI > 100 then
+		local directOk, directResult = pcall(function()
+			return loadstring(directUI)()
+		end)
+		if directOk and type(directResult) == "table" then
+			Library = directResult
+			print("[LRX Hub] Library loaded from direct download")
+		else
+			error("[LRX Hub] Direct download failed! Result: " .. tostring(directResult))
+		end
+	else
+		error("[LRX Hub] Cannot download LRXUI.lua — check your internet/repo URL!")
+	end
+end
+
+-- ==============================================================================
+-- HARD RESET / CLEANUP
 -- ==============================================================================
 pcall(function()
-	-- Clear old Library from global environment
 	if getgenv and getgenv().Library then
-		-- Try to unload properly
 		if getgenv().Library.Unload then
 			getgenv().Library.Unload()
 		end
 		getgenv().Library = nil
 	end
 
-	-- Clear _G references
 	_G.LRX_Hub_UI = nil
 	_G.LRX_Connections = nil
 	_G.LRX_KillSwitch = nil
@@ -24,11 +171,9 @@ pcall(function()
 	_G.AutoRejoinEnabled = nil
 	_G.AntiAFKEnabled = nil
 
-	-- Destroy any existing UI instances
 	local Players = game:GetService("Players")
 	local CoreGui = game:GetService("CoreGui")
 	local lp = Players.LocalPlayer
-
 	local targets = { "LRXUI", "LRXUI_Modal", "Obsidian", "ObsidanModal" }
 
 	if lp and lp:FindFirstChild("PlayerGui") then
@@ -38,18 +183,17 @@ pcall(function()
 			end
 		end
 	end
-
 	for _, gui in ipairs(CoreGui:GetChildren()) do
 		if table.find(targets, gui.Name) then
 			gui:Destroy()
 		end
 	end
 
-	-- Small delay to let destruction propagate
 	task.wait(0.1)
 end)
+
 -- ==============================================================================
--- CONFIG PERSISTENCE SYSTEM
+-- CONFIG PERSISTENCE
 -- ==============================================================================
 local SavedConfig = {}
 pcall(function()
@@ -67,10 +211,7 @@ local function SaveConfig()
 end
 
 local function GetSaved(key, default)
-	if SavedConfig[key] ~= nil then
-		return SavedConfig[key]
-	end
-	return default
+	return SavedConfig[key] ~= nil and SavedConfig[key] or default
 end
 
 local function SetSaved(key, value)
@@ -78,15 +219,8 @@ local function SetSaved(key, value)
 	SaveConfig()
 end
 
--- Global connection storage for cleanup
 _G.LRX_Connections = _G.LRX_Connections or {}
 _G.LRX_KillSwitch = false
-
--- ==============================================================================
--- UI LIBRARY
--- ==============================================================================
-local Library =
-	loadstring(game:HttpGet("https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.lua"))()
 
 -- ==============================================================================
 -- WINDOW SETUP
@@ -111,19 +245,20 @@ local Window = Library:CreateWindow({
 })
 
 -- ==============================================================================
--- TAB CREATION
+-- TABS
 -- ==============================================================================
 local HomeTab = Window:AddTab("Home", "house", "Welcome to LRX Hub!")
 local AutoFarmTab = Window:AddTab("Auto-Farm", "sword", "Automation controls for farming.")
 local SettingsTab = Window:AddTab("Settings", "settings", "Configure your preferences and manage the hub.")
+
 -- ==============================================================================
 -- HOME TAB
 -- ==============================================================================
 local HomeLeft = HomeTab:AddLeftGroupbox("Welcome", "user")
 local HomeRight = HomeTab:AddRightGroupbox("Status", "activity")
 
-local StatusLabel = HomeLeft:AddLabel("Status: Idle")
-local PingLabel = HomeLeft:AddLabel("Ping: -- ms")
+HomeLeft:AddLabel("Status: Idle")
+HomeLeft:AddLabel("Ping: -- ms")
 
 HomeRight:AddLabel("Client Info:")
 HomeRight:AddLabel("Version: v2.5.0")
@@ -155,7 +290,7 @@ end)
 local FarmLeft = AutoFarmTab:AddLeftGroupbox("Auto-Farm Controls", "sword")
 local FarmRight = AutoFarmTab:AddRightGroupbox("Farm Settings", "sliders-horizontal")
 
-local AutoFarmToggle = FarmLeft:AddToggle("AutoFarmMain", {
+FarmLeft:AddToggle("AutoFarmMain", {
 	Text = "Enable Auto-Farm",
 	Default = GetSaved("AutoFarm", false),
 	Tooltip = "Master toggle for all farming automation",
@@ -166,7 +301,7 @@ local AutoFarmToggle = FarmLeft:AddToggle("AutoFarmMain", {
 	end,
 })
 
-local FastAttackToggle = FarmLeft:AddToggle("FastAttack", {
+FarmLeft:AddToggle("FastAttack", {
 	Text = "Fast Attack Mode",
 	Default = GetSaved("FastAttack", true),
 	Tooltip = "Increases attack speed significantly",
@@ -176,7 +311,7 @@ local FastAttackToggle = FarmLeft:AddToggle("FastAttack", {
 	end,
 })
 
-local AutoEquipToggle = FarmLeft:AddToggle("AutoEquip", {
+FarmLeft:AddToggle("AutoEquip", {
 	Text = "Auto-Equip Best Tool",
 	Default = GetSaved("AutoEquip", true),
 	Tooltip = "Automatically equips the best available farming tool",
@@ -249,13 +384,13 @@ FarmRight:AddDivider()
 FarmRight:AddButton("Reset Farm Stats", function()
 	Library:Dialog({
 		Title = "Confirm Reset",
-		Description = "Are you sure you want to reset all farm statistics? This cannot be undone.",
+		Description = "Are you sure you want to reset all farm statistics?",
 		Type = "confirm",
 		Callback = function(accepted)
 			if accepted then
 				Library:Notify({
 					Title = "Reset Complete",
-					Description = "All farm statistics have been cleared.",
+					Description = "All farm statistics cleared.",
 					Time = 3,
 				})
 			end
@@ -303,17 +438,14 @@ SettingsLeft:AddButton("Export Config", function()
 	end)
 end)
 
--- -- -- DANGER ZONE -- -- --
 SettingsRight:AddLabel("⚠️ Close All stops automation & UI.")
 SettingsRight:AddLabel("Your settings are saved automatically.")
 SettingsRight:AddDivider()
 
 SettingsRight:AddButton("Close All / Stop Everything", function()
-	-- 1. STOP ALL AUTOMATION FLAGS
 	_G.AutoFarmEnabled = false
 	_G.LRX_KillSwitch = true
 
-	-- 2. DISCONNECT ALL CONNECTIONS
 	if _G.LRX_Connections then
 		for _, conn in ipairs(_G.LRX_Connections) do
 			pcall(function()
@@ -325,34 +457,26 @@ SettingsRight:AddButton("Close All / Stop Everything", function()
 		_G.LRX_Connections = {}
 	end
 
-	-- 3. SAVE FINAL STATE
 	SaveConfig()
 
-	-- 4. NOTIFY
 	Library:Notify({
 		Title = "Closing LRX Hub...",
 		Description = "All automation stopped. Settings saved.",
 		Time = 2,
 	})
 
-	-- 5. DESTROY UI
 	task.wait(0.1)
 
-	-- NEW CODE: Destroy ALL possible UI instances
 	pcall(function()
 		local Players = game:GetService("Players")
 		local CoreGui = game:GetService("CoreGui")
 		local lp = Players.LocalPlayer
+		local targets = { "LRXUI", "LRXUI_Modal", "Obsidian", "ObsidanModal" }
 
-		-- Try proper unload first
 		if Library and Library.Unload then
 			Library:Unload()
 		end
 
-		-- Force destroy any leftover ScreenGuis
-		local targets = { "LRXUI", "LRXUI_Modal", "Obsidian", "ObsidanModal" }
-
-		-- Check PlayerGui
 		if lp and lp:FindFirstChild("PlayerGui") then
 			for _, gui in ipairs(lp.PlayerGui:GetChildren()) do
 				if table.find(targets, gui.Name) then
@@ -360,8 +484,6 @@ SettingsRight:AddButton("Close All / Stop Everything", function()
 				end
 			end
 		end
-
-		-- Check CoreGui (some executors parent here)
 		for _, gui in ipairs(CoreGui:GetChildren()) do
 			if table.find(targets, gui.Name) then
 				gui:Destroy()
@@ -378,7 +500,7 @@ SettingsRight:AddDivider()
 SettingsRight:AddButton("Reset All Settings", function()
 	Library:Dialog({
 		Title = "Reset All Settings?",
-		Description = "This will delete ALL saved config. Next launch will use defaults. This cannot be undone!",
+		Description = "This will delete ALL saved config. Cannot be undone!",
 		Type = "confirm",
 		Callback = function(accepted)
 			if accepted then
@@ -388,13 +510,11 @@ SettingsRight:AddButton("Reset All Settings", function()
 					end
 				end)
 				SavedConfig = {}
-
 				Library:Notify({
 					Title = "Settings Reset",
 					Description = "All config cleared. Re-execute to load defaults.",
 					Time = 4,
 				})
-
 				task.wait(1)
 				if Library and Library.Unload then
 					Library:Unload()
@@ -403,8 +523,5 @@ SettingsRight:AddButton("Reset All Settings", function()
 		end,
 	})
 end)
--- ==============================================================================
--- SETTINGS TAB-end
--- ==============================================================================
 
 print("[LRX Hub] Main script loaded successfully!")
