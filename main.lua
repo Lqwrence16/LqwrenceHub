@@ -93,7 +93,7 @@ local Library =
 -- ==============================================================================
 local Window = Library:CreateWindow({
 	Title = "LRX_Hub",
-	Footer = "v0.0.01",
+	Footer = "v0.0.02",
 	Icon = "fan",
 	IconSize = UDim2.fromOffset(28, 28),
 	Size = UDim2.fromOffset(740, 520),
