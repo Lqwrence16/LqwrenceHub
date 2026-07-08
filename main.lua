@@ -66,11 +66,50 @@ _G.LRX_Connections = _G.LRX_Connections or {}
 _G.LRX_KillSwitch = false
 
 -- ==============================================================================
--- UI LIBRARY (with cache buster for instant updates)
+-- SMART LOAD: Local cache + GitHub fallback (with Dev Mode)
 -- ==============================================================================
 
-local LibraryURL = "https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.lua"
-local Library = loadstring(game:HttpGet(LibraryURL .. "?t=" .. tostring(tick())))()
+-- << CHANGE THIS TO TRUE WHEN TESTING UI UPDATES >>
+local DEV_MODE = true
+
+local CACHE_FILE = "LRXUI_Cache.lua"
+local DEV_FILE = "LRXUI_Dev.lua"
+local GITHUB_URL = "https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.lua"
+
+local Library
+
+-- Priority 1: Dev mode local file (instant, for active development)
+if DEV_MODE and isfile and isfile(DEV_FILE) then
+	print("[LRX Hub] DEV MODE: Loading LRXUI from local file...")
+	Library = loadstring(readfile(DEV_FILE))()
+
+-- Priority 2: Cached local file (fast, no download)
+elseif isfile and isfile(CACHE_FILE) then
+	print("[LRX Hub] Loading LRXUI from cache...")
+	Library = loadstring(readfile(CACHE_FILE))()
+
+-- Priority 3: Download from GitHub (slow, but fresh)
+else
+	print("[LRX Hub] Downloading LRXUI from GitHub...")
+	local success, code = pcall(function()
+		return game:HttpGet(GITHUB_URL)
+	end)
+
+	if not success or not code or code == "" then
+		error("[LRX Hub] Failed to download LRXUI from GitHub!")
+		return
+	end
+
+	Library = loadstring(code)()
+
+	-- Save to cache for next time
+	if writefile then
+		writefile(CACHE_FILE, code)
+		print("[LRX Hub] Cached LRXUI for next load!")
+	end
+end
+
+print("[LRX Hub] LRXUI loaded successfully!")
 
 -- ==============================================================================
 -- WINDOW SETUP
@@ -295,6 +334,24 @@ end)
 -- -- -- DANGER ZONE -- -- --
 SettingsRight:AddLabel("⚠️ Close All stops automation & UI.")
 SettingsRight:AddLabel("Your settings are saved automatically.")
+SettingsRight:AddDivider()
+
+SettingsRight:AddButton("Clear UI Cache", function()
+	pcall(function()
+		if isfile and isfile("LRXUI_Cache.lua") then
+			delfile("LRXUI_Cache.lua")
+		end
+		if isfile and isfile("LRXUI_Dev.lua") then
+			delfile("LRXUI_Dev.lua")
+		end
+	end)
+	Library:Notify({
+		Title = "Cache Cleared",
+		Description = "Next load will fetch fresh LRXUI from GitHub.",
+		Time = 3,
+	})
+end)
+
 SettingsRight:AddDivider()
 
 SettingsRight:AddButton("Close All / Stop Everything", function()
