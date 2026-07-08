@@ -9141,9 +9141,9 @@ function Library:CreateWindow(WindowInfo)
 			AutomaticCanvasSize = Enum.AutomaticSize.Y,
 			BackgroundColor3 = "BackgroundColor",
 			CanvasSize = UDim2.fromScale(0, 0),
-			Position = UDim2.fromOffset(0, 62),
+			Position = UDim2.fromOffset(0, 49), -- starts right after topbar (48 + 1px line)
 			ScrollBarThickness = 0,
-			Size = UDim2.new(0.3, 0, 1, -78),
+			Size = UDim2.new(0.3, 0, 1, -69), -- adjusted: 49 + 69 = 118, was 57 + 78 = 135, so -69 keeps bottom aligned
 			Parent = MainFrame,
 		})
 		New("UIListLayout", {
@@ -9160,8 +9160,8 @@ function Library:CreateWindow(WindowInfo)
 				return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
 			end,
 			Name = "Container",
-			Position = UDim2.new(1, 0, 0, 63),
-			Size = UDim2.new(0.7, -1, 1, -70),
+			Position = UDim2.new(1, 0, 0, 49), -- keep same, aligns with tabs
+			Size = UDim2.new(0.7, -1, 1, -69), -- match tabs height adjustment
 			Parent = MainFrame,
 		})
 
