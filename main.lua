@@ -63,7 +63,7 @@ local DEV_MODE = false
 local DEV_FILE = "LRXUI_Dev.lua"
 
 -- << CHANGE THIS TO YOUR VERCEL URL >>
-local VERCEL_URL = "https://lrx-hub.vercel.app/lrxui"
+local VERCEL_URL = "https://lrxhub.vercel.app/lrxui"
 
 local code, loadSource
 
