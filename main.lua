@@ -2,10 +2,8 @@ local HttpService = game:GetService("HttpService")
 local CONFIG_FILE = "LRX_Hub_Config.json"
 
 -- ==============================================================================
--- INSTANT CLEANUP (no delays, destroys old UI immediately)
+-- INSTANT CLEANUP
 -- ==============================================================================
-
--- Fast path: destroy old UI instances directly
 local Players = game:GetService("Players")
 local lp = Players.LocalPlayer or Players.PlayerAdded:Wait()
 local PlayerGui = lp:WaitForChild("PlayerGui", 3)
@@ -18,21 +16,18 @@ if PlayerGui then
 	end
 end
 
--- Clear old Library reference (don't call Unload, just wipe it)
 if getgenv and getgenv().Library then
 	getgenv().Library = nil
 end
 
--- Clear _G references
 _G.LRX_Hub_UI = nil
 _G.LRX_Connections = nil
 _G.LRX_KillSwitch = nil
 
--- Force one render frame so destruction is processed BEFORE new UI loads
 game:GetService("RunService").RenderStepped:Wait()
 
 -- ==============================================================================
--- CONFIG PERSISTENCE SYSTEM
+-- CONFIG PERSISTENCE
 -- ==============================================================================
 local SavedConfig = {}
 pcall(function()
@@ -50,10 +45,7 @@ local function SaveConfig()
 end
 
 local function GetSaved(key, default)
-	if SavedConfig[key] ~= nil then
-		return SavedConfig[key]
-	end
-	return default
+	return SavedConfig[key] ~= nil and SavedConfig[key] or default
 end
 
 local function SetSaved(key, value)
@@ -61,107 +53,49 @@ local function SetSaved(key, value)
 	SaveConfig()
 end
 
--- Global connection storage for cleanup
 _G.LRX_Connections = _G.LRX_Connections or {}
 _G.LRX_KillSwitch = false
 
 -- ==============================================================================
--- SMART LOAD: Local cache + GitHub fallback (with Dev Mode)
+-- DEV MODE (set to true when testing locally)
 -- ==============================================================================
-
--- << CHANGE THIS TO TRUE WHEN TESTING UI UPDATES >>
 local DEV_MODE = false
-
-local CACHE_FILE = "LRXUI_Cache.lua"
 local DEV_FILE = "LRXUI_Dev.lua"
-local GITHUB_URL = "https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.lua"
 
-local Library
-local loadSource = "unknown"
+-- << CHANGE THIS TO YOUR VERCEL URL >>
+local VERCEL_URL = "https://lrxui-host-abc123.vercel.app/lrxui"
 
--- Helper: Check if file exists and has content
-local function fileExists(path)
-	return isfile and isfile(path) and readfile and #readfile(path) > 100
-end
+local code, loadSource
 
--- Priority 1: Dev mode local file (instant, for active development)
-if DEV_MODE then
-	if fileExists(DEV_FILE) then
-		print("[LRX Hub] DEV MODE: Loading LRXUI from local file...")
-		local ok, result = pcall(function()
-			return loadstring(readfile(DEV_FILE))()
-		end)
-		if ok and result then
-			Library = result
-			loadSource = "dev_file"
-		else
-			warn("[LRX Hub] DEV file exists but failed to load!")
-		end
-	else
-		warn("[LRX Hub] DEV MODE is ON but '" .. DEV_FILE .. "' not found or empty!")
-	end
-end
-
--- Priority 2: Cached local file (fast, no download) -- ALWAYS CHECK THIS
-if not Library and fileExists(CACHE_FILE) then
-	print("[LRX Hub] Loading LRXUI from cache...")
-	local ok, result = pcall(function()
-		return loadstring(readfile(CACHE_FILE))()
-	end)
-	if ok and result then
-		Library = result
-		loadSource = "cache"
-	else
-		warn("[LRX Hub] Cache file exists but failed to load, will re-download...")
-	end
-end
-
--- Priority 3: Download from GitHub (only if no cache!)
-if not Library then
-	print("[LRX Hub] Downloading LRXUI from GitHub (one-time)...")
-
-	local success, code = pcall(function()
-		return game:HttpGet(GITHUB_URL)
+if DEV_MODE and isfile and isfile(DEV_FILE) then
+	code = readfile(DEV_FILE)
+	loadSource = "local_dev"
+	print("[LRX Hub] DEV MODE: Loading from " .. DEV_FILE)
+else
+	print("[LRX Hub] Loading from Vercel...")
+	local success, result = pcall(function()
+		return game:HttpGet(VERCEL_URL)
 	end)
 
-	if success and code and #code > 100 and not code:match("404") and not code:match("429") then
-		-- Try to load it first
-		local loadSuccess, result = pcall(function()
-			return loadstring(code)()
-		end)
-
-		if loadSuccess and result then
-			Library = result
-			loadSource = "github"
-
-			-- Save to cache for next time (ignore errors)
-			pcall(function()
-				if writefile then
-					writefile(CACHE_FILE, code)
-					print("[LRX Hub] Cached LRXUI for future loads!")
-				end
-			end)
-		else
-			warn("[LRX Hub] Downloaded code failed to load: " .. tostring(result))
-		end
+	if success and result and #result > 100 then
+		code = result
+		loadSource = "vercel"
 	else
-		warn("[LRX Hub] Failed to download from GitHub!")
-		if code then
-			if code:match("429") then
-				warn("[LRX Hub] GitHub rate limited you (HTTP 429). Wait a few minutes.")
-			end
-			warn("[LRX Hub] Response: " .. code:sub(1, 150))
-		end
+		error("[LRX Hub] Failed to load from Vercel: " .. tostring(result))
 	end
 end
 
--- Final check
-if not Library then
-	error("[LRX Hub] CRITICAL: Could not load LRXUI! No cache, no dev file, GitHub blocked.")
-	return
+-- Load the library
+local loadSuccess, Library = pcall(function()
+	return loadstring(code)()
+end)
+
+if not loadSuccess or not Library then
+	error("[LRX Hub] Failed to execute LRXUI: " .. tostring(Library))
 end
 
 print("[LRX Hub] LRXUI loaded from: " .. loadSource)
+
 -- ==============================================================================
 -- WINDOW SETUP
 -- ==============================================================================
@@ -183,10 +117,6 @@ local Window = Library:CreateWindow({
 	ToggleKeybind = Enum.KeyCode.RightControl,
 	MobileButtonsSide = "Left",
 })
-
-if Window.Center then
-	Window:Center()
-end
 
 -- ==============================================================================
 -- TAB CREATION
