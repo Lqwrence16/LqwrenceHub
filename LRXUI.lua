@@ -8892,6 +8892,20 @@ function Library:CreateWindow(WindowInfo)
 			for _, Info in pairs(Lines) do
 				Library:MakeLine(MainFrame, Info)
 			end
+
+			-- NEW: Vertical line that starts BELOW the top bar (at Y=49)
+			-- This keeps the sidebar/content separator without dividing title and search
+			local VerticalLine = New("Frame", {
+				BackgroundColor3 = "OutlineColor",
+				Position = UDim2.new(0.3, 0, 0, 49), -- X=30%, Y=49 (below 48px top bar)
+				Size = UDim2.new(0, 1, 1, -69), -- 1px wide, height minus 49+20
+				Parent = MainFrame,
+			})
+			Library:AddToRegistry(VerticalLine, {
+				BackgroundColor3 = "OutlineColor",
+			})
+
+			Library:MakeOutline(MainFrame, WindowInfo.CornerRadius, 0)
 		end
 
 		if WindowInfo.BackgroundImage then
