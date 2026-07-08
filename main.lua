@@ -113,10 +113,9 @@ local Window = Library:CreateWindow({
 -- ==============================================================================
 -- TAB CREATION
 -- ==============================================================================
-local HomeTab = Window:AddTab("Home", "house")
-local AutoFarmTab = Window:AddTab("Auto-Farm", "sword")
-local SettingsTab = Window:AddTab("Settings", "settings")
-
+local HomeTab = Window:AddTab("Home", "house", "Welcome to LRX Hub!")
+local AutoFarmTab = Window:AddTab("Auto-Farm", "sword", "Automation controls for farming.")
+local SettingsTab = Window:AddTab("Settings", "settings", "Configure your preferences and manage the hub.")
 -- ==============================================================================
 -- HOME TAB
 -- ==============================================================================
