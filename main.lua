@@ -24,7 +24,7 @@ local CONSTANTS = {
 		VERSION = "https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.version",
 	},
 	Version = {
-		HUB = "v0.0.02",
+		HUB = "v0.0.05",
 		UI = "0.0.02",
 	},
 	UI = {
@@ -116,6 +116,60 @@ local function IsValidVersion(str)
 	end
 	return true
 end
+-- Validates that a downloaded library source is not an HTTP error page.
+local function IsValidLibrarySource(str)
+	if type(str) ~= "string" then
+		return false
+	end
+	if #str <= 100 then
+		return false, "Source is too short (" .. #str .. " chars)"
+	end
+	-- Reject HTML responses
+	if str:find("<!DOCTYPE", 1, true) or str:find("<html", 1, true) then
+		return false, "Download returned HTML instead of Lua (likely an error page)"
+	end
+	-- Reject HTTP error codes at start
+	local firstLine = str:match("^([^\n]+)")
+	if firstLine then
+		if firstLine:find("^%d%d%d[%s:]") then
+			return false, "Download returned HTTP error response: " .. firstLine
+		end
+		if firstLine:lower():find("error") and #firstLine < 100 then
+			return false, "Download returned error page: " .. firstLine
+		end
+	end
+	-- Must look like Lua code
+	local start = str:match("^%s*([^\n]+)")
+	if start then
+		local lower = start:lower()
+		-- Common Lua start patterns
+		local validStarts = {
+			"local ",
+			"return",
+			"function",
+			"--",
+			"[[",
+			"(",
+			"{",
+			"do",
+			"if ",
+			"for ",
+			"while ",
+			"repeat",
+		}
+		local looksLikeLua = false
+		for _, pattern in ipairs(validStarts) do
+			if lower:find(pattern, 1, true) == 1 then
+				looksLikeLua = true
+				break
+			end
+		end
+		if not looksLikeLua then
+			return false, "Download does not look like Lua code. First line: " .. start
+		end
+	end
+	return true
+end
 -- Reads the cache once and validates both files before returning them.
 local function ReadCache()
 	local ui = ReadFile(CONSTANTS.Paths.CACHE_FILE)
@@ -170,6 +224,12 @@ local function DownloadLatest()
 	local ui = Download(CONSTANTS.URLs.UI)
 	if not ui or #ui <= 100 then
 		Logger.Warn("Cache", "Failed to download LRXUI.lua or file too short")
+		return nil
+	end
+
+	local uiOk, uiErr = IsValidLibrarySource(ui)
+	if not uiOk then
+		Logger.Warn("Cache", "LRXUI.lua download invalid: " .. tostring(uiErr))
 		return nil
 	end
 
@@ -287,6 +347,7 @@ if DEV_MODE then
 	local valid, result = ValidateAndLoad(devSource)
 	if not valid then
 		Logger.Error("DEV_MODE validation failed: " .. tostring(result))
+		return
 	end
 
 	Library = result
@@ -305,11 +366,13 @@ else
 		local latest = DownloadLatest()
 		if not latest then
 			Logger.Error("Failed to download LRXUI. No local cache available.")
+			return
 		end
 
 		local valid, result = ValidateAndLoad(latest.UI)
 		if not valid then
 			Logger.Error("Validation failed: " .. tostring(result))
+			return
 		end
 
 		Logger.Info("Cache", "Updating cache...")
@@ -365,6 +428,7 @@ else
 		local valid, result = ValidateAndLoad(librarySource)
 		if not valid then
 			Logger.Error("Failed to load cached library: " .. tostring(result))
+			return
 		end
 		Library = result
 	end
@@ -372,6 +436,7 @@ end
 -- PHASE 7: LIBRARY LOADING
 if not Library then
 	Logger.Error("No library source available.")
+	return
 end
 
 getgenv().Library = Library
