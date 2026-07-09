@@ -4,7 +4,7 @@ local CoreGui = game:GetService("CoreGui")
 local MarketplaceService = game:GetService("MarketplaceService")
 
 --==============================================================================
--- PHASE 1: CONSTANTS
+--
 --==============================================================================
 
 local DEV_MODE = false
@@ -24,17 +24,14 @@ local CONSTANTS = {
 		VERSION = "https://raw.githubusercontent.com/Lqwrence16/LqwrenceHub/refs/heads/main/LRXUI.version",
 	},
 	Version = {
-		HUB = "v0.0.05",
+		HUB = "v0.0.02",
+		UI = "0.0.02",
 	},
 	UI = {
 		Targets = { "Obsidian", "ObsidanModal", "LRXUI", "LRXUI_Modal" },
 	},
 }
-
---==============================================================================
 -- PHASE 1b: PRODUCTION LOGGER
---==============================================================================
-
 local Logger = {
 	Debug = function(tag, msg)
 		if DEV_MODE then
@@ -51,11 +48,7 @@ local Logger = {
 		error("[LRX Loader] " .. tostring(msg))
 	end,
 }
-
---==============================================================================
 -- PHASE 2: HELPER FUNCTIONS
---==============================================================================
-
 local function ReadFile(path)
 	if not isfile or not isfile(path) then
 		return nil
@@ -98,7 +91,6 @@ local function Download(url)
 	end
 	return nil
 end
-
 -- Validates that a version string is not an error page, HTML, or garbage.
 local function IsValidVersion(str)
 	if type(str) ~= "string" then
@@ -124,7 +116,6 @@ local function IsValidVersion(str)
 	end
 	return true
 end
-
 -- Reads the cache once and validates both files before returning them.
 local function ReadCache()
 	local ui = ReadFile(CONSTANTS.Paths.CACHE_FILE)
@@ -155,7 +146,6 @@ local function ReadCache()
 		Version = version,
 	}
 end
-
 local function WriteCache(ui, version)
 	local ok1 = true
 	local ok2 = true
@@ -173,9 +163,8 @@ local function WriteCache(ui, version)
 	end
 	return ok1 and ok2
 end
-
--- Downloads the latest package. Optionally reuses a pre-fetched version string.
-local function DownloadLatest(preFetchedVersion)
+-- Downloads the latest package.
+local function DownloadLatest()
 	Logger.Info("Cache", "Downloading latest package...")
 
 	local ui = Download(CONSTANTS.URLs.UI)
@@ -184,10 +173,7 @@ local function DownloadLatest(preFetchedVersion)
 		return nil
 	end
 
-	local version = preFetchedVersion
-	if not IsValidVersion(version) then
-		version = Download(CONSTANTS.URLs.VERSION)
-	end
+	local version = Download(CONSTANTS.URLs.VERSION)
 	if not IsValidVersion(version) then
 		Logger.Warn("Cache", "Version file invalid, using 'unknown'")
 		version = "unknown"
@@ -199,36 +185,6 @@ local function DownloadLatest(preFetchedVersion)
 		Version = version,
 	}
 end
-
--- Checks if the local version matches the remote version.
--- Reuses the downloaded version string for the package download if an update is needed.
-local function CheckVersion(localVersion)
-	Logger.Info("Cache", "Local version: " .. tostring(localVersion))
-
-	local remoteVersion = Download(CONSTANTS.URLs.VERSION)
-	if not IsValidVersion(remoteVersion) then
-		Logger.Warn("Cache", "Failed to download valid version file. Assuming cache is up to date.")
-		return {
-			Match = true,
-			RemoteVersion = nil,
-		}
-	end
-
-	Logger.Info("Cache", "Remote version: " .. remoteVersion)
-
-	if localVersion == remoteVersion then
-		return {
-			Match = true,
-			RemoteVersion = remoteVersion,
-		}
-	else
-		return {
-			Match = false,
-			RemoteVersion = remoteVersion,
-		}
-	end
-end
-
 -- Validates and loads a library source in one step.
 -- Returns (true, libraryTable) on success, (false, errorMessage) on failure.
 -- This eliminates double compilation by producing the library table immediately.
@@ -260,11 +216,7 @@ local function ValidateAndLoad(source)
 	Logger.Info("Cache", "Validation passed. Library loaded.")
 	return true, result
 end
-
---==============================================================================
 -- PHASE 3: CLEANUP
---==============================================================================
-
 -- Shared UI destruction helper used by both Cleanup() and Close All.
 local function DestroyHubUI()
 	local targets = CONSTANTS.UI.Targets
@@ -306,10 +258,6 @@ local function Cleanup()
 		_G.LRX_Connections = {}
 		_G.LRX_KillSwitch = false
 		_G.AutoFarmEnabled = nil
-		_G.FastAttackEnabled = nil
-		_G.AutoEquipEnabled = nil
-		_G.AutoRejoinEnabled = nil
-		_G.AntiAFKEnabled = nil
 
 		DestroyHubUI()
 	end)
@@ -317,19 +265,10 @@ local function Cleanup()
 	task.wait(0.15)
 	Logger.Info("Loader", "Cleanup complete.")
 end
-
 Cleanup()
-
---==============================================================================
 -- PHASE 4: CACHE SETUP
---==============================================================================
-
 EnsureCacheFolders()
-
---==============================================================================
 -- PHASE 5 & 6: DEV MODE / RELEASE MODE
---==============================================================================
-
 local Library = nil
 
 if DEV_MODE then
@@ -385,18 +324,17 @@ else
 		Logger.Info("Cache", "Cache created successfully.")
 	else
 		Logger.Info("Cache", "Cache found.")
-		Logger.Info("Cache", "Checking version...")
+		Logger.Info("Cache", "Cached version: " .. tostring(cache.Version))
+		Logger.Info("Cache", "Expected version: " .. CONSTANTS.Version.UI)
 
-		local versionCheck = CheckVersion(cache.Version)
-
-		if versionCheck.Match then
+		if cache.Version == CONSTANTS.Version.UI then
 			Logger.Info("Cache", "Cache is up to date.")
 			librarySource = cache.UI
 		else
-			Logger.Info("Cache", "Update available.")
+			Logger.Info("Cache", "Version mismatch.")
 			Logger.Info("Cache", "Downloading latest package...")
 
-			local latest = DownloadLatest(versionCheck.RemoteVersion)
+			local latest = DownloadLatest()
 			if not latest then
 				Logger.Warn("Cache", "Download failed. Falling back to existing cache.")
 				librarySource = cache.UI
@@ -431,21 +369,13 @@ else
 		Library = result
 	end
 end
-
---==============================================================================
 -- PHASE 7: LIBRARY LOADING
---==============================================================================
-
 if not Library then
 	Logger.Error("No library source available.")
 end
 
 getgenv().Library = Library
-
---==============================================================================
 -- PHASE 8: CONFIG PERSISTENCE
---==============================================================================
-
 local SavedConfig = {}
 pcall(function()
 	if readfile and isfile and isfile(CONSTANTS.Config.FILE) then
@@ -479,11 +409,18 @@ end
 
 _G.LRX_Connections = _G.LRX_Connections or {}
 _G.LRX_KillSwitch = false
+--==============================================================================
+--
+--==============================================================================
+
+--
+--
+--
+--
 
 --==============================================================================
--- PHASE 9: WINDOW SETUP
+-- #1 //WindowSetup\
 --==============================================================================
-
 local Window = Library:CreateWindow({
 	Title = "LRX_Hub",
 	Footer = CONSTANTS.Version.HUB,
@@ -511,34 +448,21 @@ for _, v in ipairs(Library.ScreenGui:GetChildren()) do
 end
 
 --==============================================================================
--- PHASE 10: UI
+-- #2 //TABS\\
 --==============================================================================
 
+-- //HOME TAB\\
 local HomeTab = Window:AddTab("Home", "house", "Welcome to LRX Hub!")
-local AutoFarmTab = Window:AddTab("Auto-Farm", "sword", "Automation controls for farming.")
-local SettingsTab = Window:AddTab("Settings", "settings", "Configure your preferences and manage the hub.")
-
--- ==============================================================================
--- HOME TAB
--- ==============================================================================
 local HomeLeft = HomeTab:AddLeftGroupbox("Welcome", "user")
 local HomeRight = HomeTab:AddRightGroupbox("Status", "activity")
 
-HomeLeft:AddLabel("Status: Idle")
+HomeLeft:AddLabel("Status: idle")
 HomeLeft:AddLabel("Ping: -- ms")
 
 HomeRight:AddLabel("Client Info:")
 HomeRight:AddLabel("Version: " .. CONSTANTS.Version.HUB)
 HomeRight:AddLabel("Game: " .. MarketplaceService:GetProductInfo(game.PlaceId).Name)
 HomeRight:AddDivider()
-
-HomeRight:AddButton("Test Notification", function()
-	Library:Notify({
-		Title = "LRX Hub",
-		Description = "Notifications are working correctly!",
-		Time = 4,
-	})
-end)
 
 HomeRight:AddButton("Copy Discord", function()
 	if setclipboard then
@@ -551,11 +475,9 @@ HomeRight:AddButton("Copy Discord", function()
 	end
 end)
 
--- ==============================================================================
--- AUTO-FARM TAB
--- ==============================================================================
-local FarmLeft = AutoFarmTab:AddLeftGroupbox("Auto-Farm Controls", "sword")
-local FarmRight = AutoFarmTab:AddRightGroupbox("Farm Settings", "sliders-horizontal")
+-- //AUTOMATION TAB\\
+local AutomationTab = Window:AddTab("Automation", "workflow", "Automation controls for farming.")
+local FarmLeft = AutomationTab:AddLeftGroupbox("Seed Placer", "sprout")
 
 FarmLeft:AddToggle("AutoFarmMain", {
 	Text = "Enable Auto-Farm",
@@ -568,106 +490,25 @@ FarmLeft:AddToggle("AutoFarmMain", {
 	end,
 })
 
-FarmLeft:AddToggle("FastAttack", {
-	Text = "Fast Attack Mode",
-	Default = GetSaved("FastAttack", true),
-	Tooltip = "Increases attack speed significantly",
+-- //Misc Tab\\
+local MiscTab = Window:AddTab("Misc", "puzzle", "Miscellaneous features and utilities.")
+local MiscLeft = MiscTab:AddLeftGroupbox("Grid Scanner", "grid-3x3")
+
+local ShopTab = Window:AddTab("Shop", "shopping-cart", "Buy items for your farm.")
+local SeedShop = ShopTab:AddLeftGroupbox("Seed Shop", "apple")
+SeedShop:AddToggle("AutoSeedShop", {
+	Text = "Auto Buy Seeds",
+	Default = GetSaved("AutoBuySeeds", false),
+	Tooltip = "Buy all selected seeds",
 	Callback = function(Value)
-		SetSaved("FastAttack", Value)
-		_G.FastAttackEnabled = Value
+		SetSaved("AutoSeedShop", Value)
+		_G.AutoBuySeeds = Value
+		print("AutoBuySeeds:", Value)
 	end,
 })
 
-FarmLeft:AddToggle("AutoEquip", {
-	Text = "Auto-Equip Best Tool",
-	Default = GetSaved("AutoEquip", true),
-	Tooltip = "Automatically equips the best available farming tool",
-	Callback = function(Value)
-		SetSaved("AutoEquip", Value)
-		_G.AutoEquipEnabled = Value
-	end,
-})
-
-FarmLeft:AddDivider()
-
-FarmLeft:AddSlider("AttackRadius", {
-	Text = "Attack Radius",
-	Default = GetSaved("AttackRadius", 15),
-	Min = 5,
-	Max = 50,
-	Rounding = 0,
-	Suffix = " studs",
-	Tooltip = "Maximum distance to target mobs/crops",
-	Callback = function(Value)
-		SetSaved("AttackRadius", Value)
-	end,
-})
-
-FarmLeft:AddDropdown("FarmPriority", {
-	Text = "Target Priority",
-	Values = { "Highest Level", "Closest Mob", "Lowest Health", "Custom" },
-	Default = GetSaved("FarmPriority", "Closest Mob"),
-	Tooltip = "How the farm bot selects targets",
-	Callback = function(Value)
-		SetSaved("FarmPriority", Value)
-	end,
-})
-
-FarmRight:AddSlider("FarmDelay", {
-	Text = "Action Delay",
-	Default = GetSaved("FarmDelay", 0.1),
-	Min = 0.05,
-	Max = 1.0,
-	Rounding = 2,
-	Suffix = "s",
-	Tooltip = "Delay between farming actions",
-	Callback = function(Value)
-		SetSaved("FarmDelay", Value)
-	end,
-})
-
-FarmRight:AddToggle("AutoRejoin", {
-	Text = "Auto-Rejoin on Kick",
-	Default = GetSaved("AutoRejoin", false),
-	Tooltip = "Automatically rejoins the server if kicked",
-	Callback = function(Value)
-		SetSaved("AutoRejoin", Value)
-		_G.AutoRejoinEnabled = Value
-	end,
-})
-
-FarmRight:AddToggle("AntiAFK", {
-	Text = "Anti-AFK",
-	Default = GetSaved("AntiAFK", true),
-	Tooltip = "Prevents being kicked for inactivity",
-	Callback = function(Value)
-		SetSaved("AntiAFK", Value)
-		_G.AntiAFKEnabled = Value
-	end,
-})
-
-FarmRight:AddDivider()
-
-FarmRight:AddButton("Reset Farm Stats", function()
-	Library:Dialog({
-		Title = "Confirm Reset",
-		Description = "Are you sure you want to reset all farm statistics?",
-		Type = "confirm",
-		Callback = function(accepted)
-			if accepted then
-				Library:Notify({
-					Title = "Reset Complete",
-					Description = "All farm statistics cleared.",
-					Time = 3,
-				})
-			end
-		end,
-	})
-end)
-
--- ==============================================================================
--- SETTINGS TAB
--- ==============================================================================
+-- //SETTINGS TAB\\
+local SettingsTab = Window:AddTab("Settings", "settings", "Configure your preferences and manage the hub.")
 local SettingsLeft = SettingsTab:AddLeftGroupbox("General Settings", "settings")
 local SettingsRight = SettingsTab:AddRightGroupbox("Danger Zone", "alert-triangle")
 
