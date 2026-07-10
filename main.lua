@@ -25,7 +25,7 @@ local CONSTANTS = {
 	},
 	Version = {
 		HUB = "v0.0.05",
-		UI = "0.0.1",
+		UI = "0.0.01",
 	},
 	UI = {
 		Targets = { "Obsidian", "ObsidanModal", "LRXUI", "LRXUI_Modal" },
@@ -505,12 +505,6 @@ local Window = Library:CreateWindow({
 	MobileButtonsSide = "Left",
 })
 
-print("Window:", Window)
-print("Children:", #Library.ScreenGui:GetChildren())
-
-for _, v in ipairs(Library.ScreenGui:GetChildren()) do
-	print(v.Name, v.ClassName)
-end
 
 --==============================================================================
 -- #2 //TABS\\
@@ -521,24 +515,43 @@ local HomeTab = Window:AddTab("Home", "house", "Welcome to LRX Hub!")
 local HomeLeft = HomeTab:AddLeftGroupbox("Welcome", "user")
 local HomeRight = HomeTab:AddRightGroupbox("Status", "activity")
 
-HomeLeft:AddLabel("Status: idle")
-HomeLeft:AddLabel("Ping: -- ms")
+local statusLabel = HomeLeft:AddLabel("Status: idle")
+local pingLabel = HomeLeft:AddLabel("Ping: -- ms")
 
 HomeRight:AddLabel("Client Info:")
 HomeRight:AddLabel("Version: " .. CONSTANTS.Version.HUB)
 HomeRight:AddLabel("Game: " .. MarketplaceService:GetProductInfo(game.PlaceId).Name)
 HomeRight:AddDivider()
 
-HomeRight:AddButton("Copy Discord", function()
-	if setclipboard then
-		setclipboard("discord.gg/lrxhub")
-		Library:Notify({
-			Title = "Copied!",
-			Description = "Discord invite copied to clipboard.",
-			Time = 3,
-		})
-	end
+local discordBtn = HomeRight:AddButton("Copy Discord", function()
+    if setclipboard then
+        setclipboard("discord.gg/lrxhub")
+        -- Library:Notify() demo
+        Library:Notify({
+            Title = "Copied!",
+            Description = "Discord invite copied to clipboard.",
+            Time = 3,
+        })
+    end
 end)
+-- Button:AddButton() - sub button demo
+discordBtn:AddButton("Copy Game ID", function()
+    if setclipboard then
+        setclipboard(tostring(game.PlaceId))
+        Library:Notify({ Title = "Game ID Copied", Description = tostring(game.PlaceId), Time = 2 })
+    end
+end)
+
+-- Update status label periodically
+spawn(function()
+    while wait(2) do
+        if statusLabel and statusLabel.SetText then
+            statusLabel:SetText("Status: Running | Players: " .. #Players:GetPlayers())
+        end
+    end
+end)
+
+
 
 -- //AUTOMATION TAB\\
 local AutomationTab = Window:AddTab("Automation", "workflow", "Automation controls for farming.")
