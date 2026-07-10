@@ -25,7 +25,7 @@ local CONSTANTS = {
 	},
 	Version = {
 		HUB = "v0.0.05",
-		UI = "0.0.03",
+		UI = "0.0.02",
 	},
 	UI = {
 		Targets = { "Obsidian", "ObsidanModal", "LRXUI", "LRXUI_Modal" },
