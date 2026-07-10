@@ -8542,6 +8542,7 @@ do
 
 		local Background = Library:MakeOutline(BoxHolder, Library.CornerRadius)
 		Background.Size = UDim2.fromScale(1, 0)
+		Background.AutomaticSize = Enum.AutomaticSize.Y
 		Library:UpdateDPI(Background, {
 			Size = false,
 		})
@@ -8553,7 +8554,8 @@ do
 			TabboxHolder = New("Frame", {
 				BackgroundColor3 = "BackgroundColor",
 				Position = UDim2.fromOffset(2, 2),
-				Size = UDim2.new(1, -4, 1, -4),
+				Size = UDim2.new(1, -4, 0, 0),
+				AutomaticSize = Enum.AutomaticSize.Y,
 				Parent = Background,
 			})
 			New("UICorner", {
@@ -8600,7 +8602,8 @@ do
 			local TabContainer = New("Frame", {
 				BackgroundTransparency = 1,
 				Position = UDim2.fromOffset(0, 35),
-				Size = UDim2.new(1, 0, 1, -35),
+				Size = UDim2.new(1, 0, 0, 0),
+				AutomaticSize = Enum.AutomaticSize.Y,
 				Visible = false,
 				Parent = TabboxHolder,
 			})
@@ -8633,7 +8636,7 @@ do
 				Line.Visible = false
 				TabContainer.Visible = true
 				Tabbox.ActiveTab = SubTab
-				SubTab:Resize()
+				Groupbox:Resize()
 			end
 
 			function SubTab:Hide()
@@ -8642,15 +8645,15 @@ do
 				Line.Visible = true
 				TabContainer.Visible = false
 				Tabbox.ActiveTab = nil
-			end
-
-			function SubTab:Resize()
-				if Tabbox.ActiveTab ~= SubTab then
-					return
-				end
-				Background.Size = UDim2.new(1, 0, 0, List.AbsoluteContentSize.Y + 53 * Library.DPIScale)
 				Groupbox:Resize()
 			end
+
+			-- Auto-resize when content changes
+			List:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+				if Tabbox.ActiveTab == SubTab then
+					Groupbox:Resize()
+				end
+			end)
 
 			if not Tabbox.ActiveTab then
 				SubTab:Show()
