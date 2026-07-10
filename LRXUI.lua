@@ -9672,7 +9672,7 @@ function Library:CreateWindow(WindowInfo)
 			end
 		end
 
-		function Tab:f(Info)
+		function Tab:AddGroupbox(Info)
 			Info = type(Info) == "table" and Info or {}
 
 			local function asNumber(v, fallback)

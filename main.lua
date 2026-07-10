@@ -25,7 +25,7 @@ local CONSTANTS = {
 	},
 	Version = {
 		HUB = "v0.0.05",
-		UI = "0.0.01",
+		UI = "0.0.02",
 	},
 	UI = {
 		Targets = { "Obsidian", "ObsidanModal", "LRXUI", "LRXUI_Modal" },
@@ -505,7 +505,6 @@ local Window = Library:CreateWindow({
 	MobileButtonsSide = "Left",
 })
 
-
 --==============================================================================
 -- #2 //TABS\\
 --==============================================================================
@@ -524,34 +523,32 @@ HomeRight:AddLabel("Game: " .. MarketplaceService:GetProductInfo(game.PlaceId).N
 HomeRight:AddDivider()
 
 local discordBtn = HomeRight:AddButton("Copy Discord", function()
-    if setclipboard then
-        setclipboard("discord.gg/lrxhub")
-        -- Library:Notify() demo
-        Library:Notify({
-            Title = "Copied!",
-            Description = "Discord invite copied to clipboard.",
-            Time = 3,
-        })
-    end
+	if setclipboard then
+		setclipboard("discord.gg/lrxhub")
+		-- Library:Notify() demo
+		Library:Notify({
+			Title = "Copied!",
+			Description = "Discord invite copied to clipboard.",
+			Time = 3,
+		})
+	end
 end)
 -- Button:AddButton() - sub button demo
 discordBtn:AddButton("Copy Game ID", function()
-    if setclipboard then
-        setclipboard(tostring(game.PlaceId))
-        Library:Notify({ Title = "Game ID Copied", Description = tostring(game.PlaceId), Time = 2 })
-    end
+	if setclipboard then
+		setclipboard(tostring(game.PlaceId))
+		Library:Notify({ Title = "Game ID Copied", Description = tostring(game.PlaceId), Time = 2 })
+	end
 end)
 
 -- Update status label periodically
 spawn(function()
-    while wait(2) do
-        if statusLabel and statusLabel.SetText then
-            statusLabel:SetText("Status: Running | Players: " .. #Players:GetPlayers())
-        end
-    end
+	while wait(2) do
+		if statusLabel and statusLabel.SetText then
+			statusLabel:SetText("Status: Running | Players: " .. #Players:GetPlayers())
+		end
+	end
 end)
-
-
 
 -- //AUTOMATION TAB\\
 local AutomationTab = Window:AddTab("Automation", "workflow", "Automation controls for farming.")
