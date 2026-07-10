@@ -1,3 +1,80 @@
+--[[
+================================================================================
+  OBSIDIAN UI LIBRARY — CLEAN EDITION
+================================================================================
+
+  This is a cleaned-up version of the Obsidian UI Library:
+  • 7 dead/legacy duplicate functions removed (~1,500 lines)
+  • Inline game:GetService() calls replaced with cached service references
+  • Public API exposed as Obsidian / UI / Library (all three work)
+
+  No behavior was changed. The UI looks and works exactly the same.
+
+--------------------------------------------------------------------------------
+  RECOMMENDED USAGE (modern naming)
+--------------------------------------------------------------------------------
+
+  -- Load the library (pick whichever name you prefer):
+  local Obsidian = loadfile("Obsidian.lua")()
+  -- or: local UI = loadfile("Obsidian.lua")()
+  -- or: local Library = loadfile("Obsidian.lua")()  -- backward compatible
+
+  -- Create the main window:
+  local Window = Obsidian:CreateWindow({
+      Title = "My Script",
+      Footer = "v1.0",
+      Size = UDim2.fromOffset(600, 400),
+      Center = true,
+      ToggleKeybind = Enum.KeyCode.RightControl,
+  })
+
+  -- Create a tab and groupbox:
+  local Tab = Window:AddTab("Main", "home")
+  local Settings = Tab:AddLeftGroupbox("Settings")
+
+  -- Add elements:
+  local Aimbot = Settings:AddToggle("Aimbot", {
+      Text = "Enable Aimbot",
+      Default = false,
+      Callback = function(state) print("Aimbot:", state) end,
+  })
+
+  local FOV = Settings:AddSlider("FOV", {
+      Text = "Field of View",
+      Default = 90, Min = 10, Max = 120, Rounding = 0, Suffix = "°",
+      Callback = function(val) print("FOV:", val) end,
+  })
+
+  -- Notifications:
+  Obsidian:Notify({ Title = "Loaded", Description = "Ready!", Time = 5 })
+
+  -- Access elements later by their Idx:
+  -- Obsidian.Toggles["Aimbot"]:SetValue(true)
+  -- Obsidian.Options["FOV"]:SetValue(100)
+
+--------------------------------------------------------------------------------
+  API QUICK REFERENCE
+--------------------------------------------------------------------------------
+
+  Window:   CreateWindow(info)  AddTab(name, icon?)  AddKeyTab(name)  SetFooterText(text)
+  Tab:      AddLeftGroupbox(name, icon?, collapsed?)  AddRightGroupbox(...)
+           AddLeftTabbox(name)  AddRightTabbox(name)
+  Groupbox: AddLabel  AddButton  AddToggle  AddCheckbox  AddSlider  AddInput
+           AddDropdown  AddViewport  AddImage  AddDivider  AddSpacer
+           AddDependencyBox  AddDependencyGroupbox
+  Toggle:  SetValue  SetDisabled  SetText  SetVisible  AddKeyPicker  AddColorPicker
+  Slider:  SetValue  SetMin  SetMax  SetDisabled  SetText  SetVisible
+  Input:   SetValue  SetDisabled  SetText  SetVisible  OnChanged
+  Dropdown: SetValue  SetValues  SetDisabled  SetText  SetVisible  (SpecialType: "Player"/"Team")
+  Library: Notify(...)  Confirm(...)  Dialog(...)  SetWatermark(...)  SetFont(...)
+           SetNotifySide(...)  OnUnload(func)  Unload()
+
+  Element access:  Obsidian.Toggles[idx]  Obsidian.Options[idx]
+                   Obsidian.Buttons[idx]  Obsidian.Labels[idx]
+
+================================================================================
+]]
+
 local cloneref = (cloneref or clonereference or function(instance: any)
 	return instance
 end)
@@ -3175,27 +3252,6 @@ local BaseGroupbox = {}
 do
 	local Funcs = {}
 
-	function Funcs:AddDividerx()
-		local Groupbox = self
-		local Container = Groupbox.Container
-
-		local Holder = New("Frame", {
-			BackgroundColor3 = "MainColor",
-			BorderColor3 = "OutlineColor",
-			BorderSizePixel = 1,
-			Size = UDim2.new(1, 0, 0, 2),
-			Parent = Container,
-		})
-
-		Groupbox:Resize()
-
-		table.insert(Groupbox.Elements, {
-			Holder = Holder,
-			Type = "Divider",
-		})
-	end
-
-	-- THIS IS THE NEW, CORRECTED CODE
 	function Funcs:AddDivider()
 		local Groupbox = self
 		local Container = Groupbox.Container
@@ -3356,423 +3412,6 @@ do
 		end
 
 		return Label
-	end
-
-	function Funcs:AddButtonxx(...)
-		local function GetInfo(...)
-			local Info = {}
-
-			local First = select(1, ...)
-			local Second = select(2, ...)
-
-			if typeof(First) == "table" or typeof(Second) == "table" then
-				local Params = typeof(First) == "table" and First or Second
-
-				Info.Text = Params.Text or ""
-				Info.Func = Params.Func or function() end
-				Info.DoubleClick = Params.DoubleClick
-
-				Info.Tooltip = Params.Tooltip
-				Info.DisabledTooltip = Params.DisabledTooltip
-
-				Info.Risky = Params.Risky or false
-				Info.Disabled = Params.Disabled or false
-				Info.Visible = Params.Visible or true
-				Info.Idx = typeof(Second) == "table" and First or nil
-			else
-				Info.Text = First or ""
-				Info.Func = Second or function() end
-				Info.DoubleClick = false
-
-				Info.Tooltip = nil
-				Info.DisabledTooltip = nil
-
-				Info.Risky = false
-				Info.Disabled = false
-				Info.Visible = true
-				Info.Idx = select(3, ...) or nil
-			end
-
-			return Info
-		end
-
-		local Info = GetInfo(...)
-		local Groupbox = self
-		local Container = Groupbox.Container
-		local Registry = Library.Registry
-
-		local function EnsureRegistry(Obj)
-			if not Registry then
-				return nil
-			end
-
-			Registry[Obj] = Registry[Obj] or {}
-			return Registry[Obj]
-		end
-
-		local function SetRegistry(Reg, Prop, Value)
-			if Reg then
-				Reg[Prop] = Value
-			end
-		end
-
-		local function StopBtnTween(Btn)
-			if Btn.Tween then
-				StopTween(Btn.Tween)
-				Btn.Tween = nil
-			end
-			if Btn.LabelTween then
-				StopTween(Btn.LabelTween)
-				Btn.LabelTween = nil
-			end
-			if Btn.StrokeTween then
-				StopTween(Btn.StrokeTween)
-				Btn.StrokeTween = nil
-			end
-			if Btn.AccentTween then
-				StopTween(Btn.AccentTween)
-				Btn.AccentTween = nil
-			end
-		end
-
-		local Holder = New("Frame", {
-			AutomaticSize = Enum.AutomaticSize.Y,
-			BackgroundTransparency = 1,
-			Size = UDim2.new(1, 0, 0, 0),
-			Parent = Container,
-		})
-
-		New("UIListLayout", {
-			FillDirection = Enum.FillDirection.Horizontal,
-			HorizontalFlex = Enum.UIFlexAlignment.Fill,
-			Padding = UDim.new(0, 6),
-			Parent = Holder,
-		})
-
-		local function CreateButton(Btn)
-			local Base = New("TextButton", {
-				Active = not Btn.Disabled,
-				AutoButtonColor = false,
-				BackgroundColor3 = "MainColor",
-				BackgroundTransparency = Btn.Disabled and 0.80 or 0.38,
-				Size = UDim2.new(1, 0, 0, 20),
-				Text = "",
-				Visible = Btn.Visible,
-				Parent = Holder,
-			})
-
-			New("UICorner", {
-				CornerRadius = UDim.new(0, 4),
-				Parent = Base,
-			})
-
-			New("UISizeConstraint", {
-				MinSize = Vector2.new(0, 20),
-				Parent = Base,
-			})
-
-			local Stroke = New("UIStroke", {
-				Color = "OutlineColor",
-				Transparency = Btn.Disabled and 0.70 or 0.25,
-				Parent = Base,
-			})
-
-			local Accent = New("Frame", {
-				AnchorPoint = Vector2.new(0, 0.5),
-				BackgroundColor3 = "AccentColor",
-				BackgroundTransparency = Btn.Disabled and 0.92 or 0.45,
-				BorderSizePixel = 0,
-				Position = UDim2.new(0, 4, 0.5, 0),
-				Size = UDim2.fromOffset(2, 10),
-				ZIndex = 2,
-				Parent = Base,
-			})
-			New("UICorner", {
-				CornerRadius = UDim.new(1, 0),
-				Parent = Accent,
-			})
-
-			local Label = New("TextLabel", {
-				AutomaticSize = Enum.AutomaticSize.Y,
-				BackgroundTransparency = 1,
-				Position = UDim2.new(0, 10, 0, 3),
-				Size = UDim2.new(1, -16, 0, 0),
-				Text = Btn.Text,
-				TextColor3 = Btn.Risky and Library.Scheme.Red or Library.Scheme.FontColor,
-				TextSize = 14,
-				TextTransparency = Btn.Disabled and 0.8 or 0.4,
-				TextWrapped = true,
-				TextXAlignment = Enum.TextXAlignment.Left,
-				TextYAlignment = Enum.TextYAlignment.Top,
-				Parent = Base,
-			})
-
-			local function UpdateHeight()
-				local h = math.max(Label.AbsoluteSize.Y + 6, 20)
-				Base.Size = UDim2.new(1, 0, 0, h)
-				Groupbox:Resize()
-			end
-
-			Label:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateHeight)
-			task.defer(UpdateHeight)
-
-			Btn.BaseReg = EnsureRegistry(Base)
-			Btn.StrokeReg = EnsureRegistry(Stroke)
-			Btn.AccentReg = EnsureRegistry(Accent)
-			Btn.LabelReg = EnsureRegistry(Label)
-
-			SetRegistry(Btn.BaseReg, "BackgroundColor3", Btn.Disabled and "BackgroundColor" or "MainColor")
-			SetRegistry(Btn.StrokeReg, "Color", "OutlineColor")
-			SetRegistry(Btn.AccentReg, "BackgroundColor3", "AccentColor")
-			SetRegistry(Btn.LabelReg, "TextColor3", Btn.Risky and "Red" or "FontColor")
-
-			return Base, Stroke, Accent, Label
-		end
-
-		local function ApplyVisual(Btn, Instant)
-			if Library.Unloaded then
-				return
-			end
-
-			StopBtnTween(Btn)
-
-			local Hovering = Btn.Hovering and not Btn.Disabled and not Btn.Locked
-
-			local TargetBgColor = Btn.Disabled and Library.Scheme.BackgroundColor or Library.Scheme.MainColor
-			local TargetBgTransparency = Btn.Disabled and 0.80 or (Hovering and 0.22 or 0.38)
-			local TargetTextTransparency = Btn.Disabled and 0.8 or (Hovering and 0 or 0.4)
-			local TargetStrokeTransparency = Btn.Disabled and 0.70 or (Hovering and 0.10 or 0.25)
-			local TargetAccentTransparency = Btn.Disabled and 0.92 or (Hovering and 0.10 or 0.45)
-
-			Btn.Base.Active = not Btn.Disabled
-			Btn.Base.BackgroundColor3 = TargetBgColor
-			Btn.Stroke.Color = Library.Scheme.OutlineColor
-
-			if Btn.Accent then
-				Btn.Accent.BackgroundTransparency = TargetAccentTransparency
-			end
-
-			if not Btn.Locked then
-				Btn.Label.TextColor3 = Btn.Risky and Library.Scheme.Red or Library.Scheme.FontColor
-				SetRegistry(Btn.LabelReg, "TextColor3", Btn.Risky and "Red" or "FontColor")
-			end
-
-			SetRegistry(Btn.BaseReg, "BackgroundColor3", Btn.Disabled and "BackgroundColor" or "MainColor")
-			SetRegistry(Btn.StrokeReg, "Color", "OutlineColor")
-
-			if Instant or Btn.Disabled then
-				Btn.Base.BackgroundTransparency = TargetBgTransparency
-				Btn.Label.TextTransparency = TargetTextTransparency
-				Btn.Stroke.Transparency = TargetStrokeTransparency
-				return
-			end
-
-			Btn.Tween = TweenService:Create(Btn.Base, Library.TweenInfo, {
-				BackgroundTransparency = TargetBgTransparency,
-			})
-			Btn.LabelTween = TweenService:Create(Btn.Label, Library.TweenInfo, {
-				TextTransparency = TargetTextTransparency,
-			})
-			Btn.StrokeTween = TweenService:Create(Btn.Stroke, Library.TweenInfo, {
-				Transparency = TargetStrokeTransparency,
-			})
-
-			Btn.Tween:Play()
-			Btn.LabelTween:Play()
-			Btn.StrokeTween:Play()
-
-			if Btn.Accent then
-				Btn.AccentTween = TweenService:Create(Btn.Accent, Library.TweenInfo, {
-					BackgroundTransparency = TargetAccentTransparency,
-				})
-				Btn.AccentTween:Play()
-			end
-		end
-
-		local function InitEvents(Btn)
-			Btn.Base.MouseEnter:Connect(function()
-				Btn.Hovering = true
-				ApplyVisual(Btn, false)
-			end)
-
-			Btn.Base.MouseLeave:Connect(function()
-				Btn.Hovering = false
-				if Btn.Locked then
-					return
-				end
-				ApplyVisual(Btn, false)
-			end)
-
-			Btn.Base.MouseButton1Click:Connect(function()
-				if Btn.Disabled or Btn.Locked then
-					return
-				end
-
-				if Btn.DoubleClick then
-					Btn.Locked = true
-					StopBtnTween(Btn)
-
-					Btn.Label.Text = "Are you sure?"
-					Btn.Label.TextColor3 = Library.Scheme.AccentColor
-					SetRegistry(Btn.LabelReg, "TextColor3", "AccentColor")
-
-					local Clicked = WaitForEvent(Btn.Base.MouseButton1Click, 0.5)
-
-					Btn.Label.Text = Btn.Text
-					Btn.Locked = false
-					ApplyVisual(Btn, true)
-
-					if Clicked then
-						Library:SafeCallback(Btn.Func)
-					end
-
-					RunService.RenderStepped:Wait()
-					return
-				end
-
-				Library:SafeCallback(Btn.Func)
-			end)
-		end
-
-		local Button = {
-			Text = Info.Text,
-			Func = Info.Func,
-			DoubleClick = Info.DoubleClick,
-
-			Tooltip = Info.Tooltip,
-			DisabledTooltip = Info.DisabledTooltip,
-			TooltipTable = nil,
-
-			Risky = Info.Risky,
-			Disabled = Info.Disabled,
-			Visible = Info.Visible,
-
-			Tween = nil,
-			LabelTween = nil,
-			StrokeTween = nil,
-			AccentTween = nil,
-			Hovering = false,
-			Locked = false,
-			Type = "Button",
-		}
-
-		Button.Base, Button.Stroke, Button.Accent, Button.Label = CreateButton(Button)
-		InitEvents(Button)
-
-		function Button:AddButton(...)
-			local SubInfo = GetInfo(...)
-
-			local SubButton = {
-				Text = SubInfo.Text,
-				Func = SubInfo.Func,
-				DoubleClick = SubInfo.DoubleClick,
-
-				Tooltip = SubInfo.Tooltip,
-				DisabledTooltip = SubInfo.DisabledTooltip,
-				TooltipTable = nil,
-
-				Risky = SubInfo.Risky,
-				Disabled = SubInfo.Disabled,
-				Visible = SubInfo.Visible,
-
-				Tween = nil,
-				LabelTween = nil,
-				StrokeTween = nil,
-				AccentTween = nil,
-				Hovering = false,
-				Locked = false,
-				Type = "SubButton",
-			}
-
-			Button.SubButton = SubButton
-			SubButton.Base, SubButton.Stroke, SubButton.Accent, SubButton.Label = CreateButton(SubButton)
-			InitEvents(SubButton)
-
-			function SubButton:UpdateColors()
-				ApplyVisual(SubButton, true)
-			end
-
-			function SubButton:SetDisabled(Disabled: boolean)
-				SubButton.Disabled = Disabled
-
-				if SubButton.TooltipTable then
-					SubButton.TooltipTable.Disabled = SubButton.Disabled
-				end
-
-				ApplyVisual(SubButton, true)
-			end
-
-			function SubButton:SetVisible(Visible: boolean)
-				SubButton.Visible = Visible
-				SubButton.Base.Visible = SubButton.Visible
-				Groupbox:Resize()
-			end
-
-			function SubButton:SetText(Text: string)
-				SubButton.Text = Text
-				SubButton.Label.Text = Text
-			end
-
-			if typeof(SubButton.Tooltip) == "string" or typeof(SubButton.DisabledTooltip) == "string" then
-				SubButton.TooltipTable =
-					Library:AddTooltip(SubButton.Tooltip, SubButton.DisabledTooltip, SubButton.Base)
-				SubButton.TooltipTable.Disabled = SubButton.Disabled
-			end
-
-			SubButton:UpdateColors()
-
-			if SubInfo.Idx then
-				Buttons[SubInfo.Idx] = SubButton
-			else
-				table.insert(Buttons, SubButton)
-			end
-
-			return SubButton
-		end
-
-		function Button:UpdateColors()
-			ApplyVisual(Button, true)
-		end
-
-		function Button:SetDisabled(Disabled: boolean)
-			Button.Disabled = Disabled
-
-			if Button.TooltipTable then
-				Button.TooltipTable.Disabled = Button.Disabled
-			end
-
-			ApplyVisual(Button, true)
-		end
-
-		function Button:SetVisible(Visible: boolean)
-			Button.Visible = Visible
-			Holder.Visible = Button.Visible
-			Groupbox:Resize()
-		end
-
-		function Button:SetText(Text: string)
-			Button.Text = Text
-			Button.Label.Text = Text
-		end
-
-		if typeof(Button.Tooltip) == "string" or typeof(Button.DisabledTooltip) == "string" then
-			Button.TooltipTable = Library:AddTooltip(Button.Tooltip, Button.DisabledTooltip, Button.Base)
-			Button.TooltipTable.Disabled = Button.Disabled
-		end
-
-		Button:UpdateColors()
-		Groupbox:Resize()
-
-		Button.Holder = Holder
-		table.insert(Groupbox.Elements, Button)
-
-		if Info.Idx then
-			Buttons[Info.Idx] = Button
-		else
-			table.insert(Buttons, Button)
-		end
-
-		return Button
 	end
 
 	function Funcs:AddButton(...)
@@ -4065,303 +3704,6 @@ do
 			Button.Text = Text
 			Button.Base.Text = Text
 			-- AbsoluteSize signal will fire and trigger Groupbox:Resize() automatically
-		end
-
-		if typeof(Button.Tooltip) == "string" or typeof(Button.DisabledTooltip) == "string" then
-			Button.TooltipTable = Library:AddTooltip(Button.Tooltip, Button.DisabledTooltip, Button.Base)
-			Button.TooltipTable.Disabled = Button.Disabled
-		end
-
-		if Button.Risky then
-			Button.Base.TextColor3 = Library.Scheme.Red
-			Library.Registry[Button.Base].TextColor3 = "Red"
-		end
-
-		Button:UpdateColors()
-		Groupbox:Resize()
-
-		Button.Holder = Holder
-		table.insert(Groupbox.Elements, Button)
-
-		if Info.Idx then
-			Buttons[Info.Idx] = Button
-		else
-			table.insert(Buttons, Button)
-		end
-
-		return Button
-	end
-
-	function Funcs:AddButton_original(...)
-		local function GetInfo(...)
-			local Info = {}
-
-			local First = select(1, ...)
-			local Second = select(2, ...)
-
-			if typeof(First) == "table" or typeof(Second) == "table" then
-				local Params = typeof(First) == "table" and First or Second
-
-				Info.Text = Params.Text or ""
-				Info.Func = Params.Func or function() end
-				Info.DoubleClick = Params.DoubleClick
-
-				Info.Tooltip = Params.Tooltip
-				Info.DisabledTooltip = Params.DisabledTooltip
-
-				Info.Risky = Params.Risky or false
-				Info.Disabled = Params.Disabled or false
-				Info.Visible = Params.Visible or true
-				Info.Idx = typeof(Second) == "table" and First or nil
-			else
-				Info.Text = First or ""
-				Info.Func = Second or function() end
-				Info.DoubleClick = false
-
-				Info.Tooltip = nil
-				Info.DisabledTooltip = nil
-
-				Info.Risky = false
-				Info.Disabled = false
-				Info.Visible = true
-				Info.Idx = select(3, ...) or nil
-			end
-
-			return Info
-		end
-		local Info = GetInfo(...)
-
-		local Groupbox = self
-		local Container = Groupbox.Container
-
-		local Button = {
-			Text = Info.Text,
-			Func = Info.Func,
-			DoubleClick = Info.DoubleClick,
-
-			Tooltip = Info.Tooltip,
-			DisabledTooltip = Info.DisabledTooltip,
-			TooltipTable = nil,
-
-			Risky = Info.Risky,
-			Disabled = Info.Disabled,
-			Visible = Info.Visible,
-
-			Tween = nil,
-			Type = "Button",
-		}
-
-		local Holder = New("Frame", {
-			BackgroundTransparency = 1,
-			Size = UDim2.new(1, 0, 0, 21),
-			Parent = Container,
-		})
-
-		New("UIListLayout", {
-			FillDirection = Enum.FillDirection.Horizontal,
-			HorizontalFlex = Enum.UIFlexAlignment.Fill,
-			Padding = UDim.new(0, 9),
-			Parent = Holder,
-		})
-
-		local function CreateButton(Button)
-			local Base = New("TextButton", {
-				Active = not Button.Disabled,
-				BackgroundColor3 = Button.Disabled and "BackgroundColor" or "MainColor",
-				Size = UDim2.fromScale(1, 1),
-				Text = Button.Text,
-				TextSize = 14,
-				TextTransparency = 0.4,
-				Visible = Button.Visible,
-				Parent = Holder,
-			})
-
-			local Stroke = New("UIStroke", {
-				Color = "OutlineColor",
-				Transparency = Button.Disabled and 0.5 or 0,
-				Parent = Base,
-			})
-
-			return Base, Stroke
-		end
-
-		local function InitEvents(Button)
-			Button.Base.MouseEnter:Connect(function()
-				if Button.Disabled then
-					return
-				end
-
-				Button.Tween = TweenService:Create(Button.Base, Library.TweenInfo, {
-					TextTransparency = 0,
-				})
-				Button.Tween:Play()
-			end)
-			Button.Base.MouseLeave:Connect(function()
-				if Button.Disabled then
-					return
-				end
-
-				Button.Tween = TweenService:Create(Button.Base, Library.TweenInfo, {
-					TextTransparency = 0.4,
-				})
-				Button.Tween:Play()
-			end)
-
-			Button.Base.MouseButton1Click:Connect(function()
-				if Button.Disabled or Button.Locked then
-					return
-				end
-
-				if Button.DoubleClick then
-					Button.Locked = true
-
-					Button.Base.Text = "Are you sure?"
-					Button.Base.TextColor3 = Library.Scheme.AccentColor
-					Library.Registry[Button.Base].TextColor3 = "AccentColor"
-
-					local Clicked = WaitForEvent(Button.Base.MouseButton1Click, 0.5)
-
-					Button.Base.Text = Button.Text
-					Button.Base.TextColor3 = Button.Risky and Library.Scheme.Red or Library.Scheme.FontColor
-					Library.Registry[Button.Base].TextColor3 = Button.Risky and "Red" or "FontColor"
-
-					if Clicked then
-						Library:SafeCallback(Button.Func)
-					end
-
-					RunService.RenderStepped:Wait() --// Mouse Button fires without waiting (i hate roblox)
-					Button.Locked = false
-					return
-				end
-
-				Library:SafeCallback(Button.Func)
-			end)
-		end
-
-		Button.Base, Button.Stroke = CreateButton(Button)
-		InitEvents(Button)
-
-		function Button:AddButton(...)
-			local Info = GetInfo(...)
-
-			local SubButton = {
-				Text = Info.Text,
-				Func = Info.Func,
-				DoubleClick = Info.DoubleClick,
-
-				Tooltip = Info.Tooltip,
-				DisabledTooltip = Info.DisabledTooltip,
-				TooltipTable = nil,
-
-				Risky = Info.Risky,
-				Disabled = Info.Disabled,
-				Visible = Info.Visible,
-
-				Tween = nil,
-				Type = "SubButton",
-			}
-
-			Button.SubButton = SubButton
-			SubButton.Base, SubButton.Stroke = CreateButton(SubButton)
-			InitEvents(SubButton)
-
-			function SubButton:UpdateColors()
-				if Library.Unloaded then
-					return
-				end
-
-				StopTween(SubButton.Tween)
-
-				SubButton.Base.BackgroundColor3 = SubButton.Disabled and Library.Scheme.BackgroundColor
-					or Library.Scheme.MainColor
-				SubButton.Base.TextTransparency = SubButton.Disabled and 0.8 or 0.4
-				SubButton.Stroke.Transparency = SubButton.Disabled and 0.5 or 0
-
-				Library.Registry[SubButton.Base].BackgroundColor3 = SubButton.Disabled and "BackgroundColor"
-					or "MainColor"
-			end
-
-			function SubButton:SetDisabled(Disabled: boolean)
-				SubButton.Disabled = Disabled
-
-				if SubButton.TooltipTable then
-					SubButton.TooltipTable.Disabled = SubButton.Disabled
-				end
-
-				SubButton.Base.Active = not SubButton.Disabled
-				SubButton:UpdateColors()
-			end
-
-			function SubButton:SetVisible(Visible: boolean)
-				SubButton.Visible = Visible
-
-				SubButton.Base.Visible = SubButton.Visible
-				Groupbox:Resize()
-			end
-
-			function SubButton:SetText(Text: string)
-				SubButton.Text = Text
-				SubButton.Base.Text = Text
-			end
-
-			if typeof(SubButton.Tooltip) == "string" or typeof(SubButton.DisabledTooltip) == "string" then
-				SubButton.TooltipTable =
-					Library:AddTooltip(SubButton.Tooltip, SubButton.DisabledTooltip, SubButton.Base)
-				SubButton.TooltipTable.Disabled = SubButton.Disabled
-			end
-
-			if SubButton.Risky then
-				SubButton.Base.TextColor3 = Library.Scheme.Red
-				Library.Registry[SubButton.Base].TextColor3 = "Red"
-			end
-
-			SubButton:UpdateColors()
-
-			if Info.Idx then
-				Buttons[Info.Idx] = SubButton
-			else
-				table.insert(Buttons, SubButton)
-			end
-
-			return SubButton
-		end
-
-		function Button:UpdateColors()
-			if Library.Unloaded then
-				return
-			end
-
-			StopTween(Button.Tween)
-
-			Button.Base.BackgroundColor3 = Button.Disabled and Library.Scheme.BackgroundColor
-				or Library.Scheme.MainColor
-			Button.Base.TextTransparency = Button.Disabled and 0.8 or 0.4
-			Button.Stroke.Transparency = Button.Disabled and 0.5 or 0
-
-			Library.Registry[Button.Base].BackgroundColor3 = Button.Disabled and "BackgroundColor" or "MainColor"
-		end
-
-		function Button:SetDisabled(Disabled: boolean)
-			Button.Disabled = Disabled
-
-			if Button.TooltipTable then
-				Button.TooltipTable.Disabled = Button.Disabled
-			end
-
-			Button.Base.Active = not Button.Disabled
-			Button:UpdateColors()
-		end
-
-		function Button:SetVisible(Visible: boolean)
-			Button.Visible = Visible
-
-			Holder.Visible = Button.Visible
-			Groupbox:Resize()
-		end
-
-		function Button:SetText(Text: string)
-			Button.Text = Text
-			Button.Base.Text = Text
 		end
 
 		if typeof(Button.Tooltip) == "string" or typeof(Button.DisabledTooltip) == "string" then
@@ -4865,385 +4207,6 @@ do
 		Toggles[Idx] = Toggle
 
 		return Toggle
-	end
-
-	function Funcs:AddToggle_org(Idx, Info)
-		if Library.ForceCheckbox then
-			return Funcs.AddCheckbox(self, Idx, Info)
-		end
-
-		Info = Library:Validate(Info, Templates.Toggle)
-
-		local Groupbox = self
-		local Container = Groupbox.Container
-
-		local Toggle = {
-			Text = Info.Text,
-			Value = Info.Default,
-
-			Tooltip = Info.Tooltip,
-			DisabledTooltip = Info.DisabledTooltip,
-			TooltipTable = nil,
-
-			Callback = Info.Callback,
-			Changed = Info.Changed,
-
-			Risky = Info.Risky,
-			Disabled = Info.Disabled,
-			Visible = Info.Visible,
-			Addons = {},
-
-			Type = "Toggle",
-		}
-
-		local Button = New("TextButton", {
-			Active = not Toggle.Disabled,
-			BackgroundTransparency = 1,
-			Size = UDim2.new(1, 0, 0, 18),
-			Text = "",
-			Visible = Toggle.Visible,
-			Parent = Container,
-		})
-
-		local Label = New("TextLabel", {
-			BackgroundTransparency = 1,
-			Size = UDim2.new(1, -40, 1, 0),
-			Text = Toggle.Text,
-			TextSize = 14,
-			TextTransparency = 0.4,
-			TextXAlignment = Enum.TextXAlignment.Left,
-			Parent = Button,
-		})
-
-		New("UIListLayout", {
-			FillDirection = Enum.FillDirection.Horizontal,
-			HorizontalAlignment = Enum.HorizontalAlignment.Right,
-			Padding = UDim.new(0, 6),
-			Parent = Label,
-		})
-
-		local Switch = New("Frame", {
-			AnchorPoint = Vector2.new(1, 0),
-			BackgroundColor3 = "MainColor",
-			Position = UDim2.fromScale(1, 0),
-			Size = UDim2.fromOffset(32, 18),
-			Parent = Button,
-		})
-		New("UICorner", {
-			CornerRadius = UDim.new(1, 0),
-			Parent = Switch,
-		})
-		New("UIPadding", {
-			PaddingBottom = UDim.new(0, 2),
-			PaddingLeft = UDim.new(0, 2),
-			PaddingRight = UDim.new(0, 2),
-			PaddingTop = UDim.new(0, 2),
-			Parent = Switch,
-		})
-		local SwitchStroke = New("UIStroke", {
-			Color = "OutlineColor",
-			Parent = Switch,
-		})
-
-		local Ball = New("Frame", {
-			BackgroundColor3 = "FontColor",
-			Size = UDim2.fromScale(1, 1),
-			SizeConstraint = Enum.SizeConstraint.RelativeYY,
-			Parent = Switch,
-		})
-		New("UICorner", {
-			CornerRadius = UDim.new(1, 0),
-			Parent = Ball,
-		})
-
-		function Toggle:UpdateColors()
-			Toggle:Display()
-		end
-
-		function Toggle:Display()
-			if Library.Unloaded then
-				return
-			end
-
-			local Offset = Toggle.Value and 1 or 0
-
-			Switch.BackgroundTransparency = Toggle.Disabled and 0.75 or 0
-			SwitchStroke.Transparency = Toggle.Disabled and 0.75 or 0
-
-			Switch.BackgroundColor3 = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.MainColor
-			SwitchStroke.Color = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.OutlineColor
-
-			Library.Registry[Switch].BackgroundColor3 = Toggle.Value and "AccentColor" or "MainColor"
-			Library.Registry[SwitchStroke].Color = Toggle.Value and "AccentColor" or "OutlineColor"
-
-			if Toggle.Disabled then
-				Label.TextTransparency = 0.8
-				Ball.AnchorPoint = Vector2.new(Offset, 0)
-				Ball.Position = UDim2.fromScale(Offset, 0)
-
-				Ball.BackgroundColor3 = Library:GetDarkerColor(Library.Scheme.FontColor)
-				Library.Registry[Ball].BackgroundColor3 = function()
-					return Library:GetDarkerColor(Library.Scheme.FontColor)
-				end
-
-				return
-			end
-
-			TweenService:Create(Label, Library.TweenInfo, {
-				TextTransparency = Toggle.Value and 0 or 0.4,
-			}):Play()
-			TweenService:Create(Ball, Library.TweenInfo, {
-				AnchorPoint = Vector2.new(Offset, 0),
-				Position = UDim2.fromScale(Offset, 0),
-			}):Play()
-
-			Ball.BackgroundColor3 = Library.Scheme.FontColor
-			Library.Registry[Ball].BackgroundColor3 = "FontColor"
-		end
-
-		function Toggle:OnChanged(Func)
-			Toggle.Changed = Func
-		end
-
-		function Toggle:SetValue(Value)
-			if Toggle.Disabled then
-				return
-			end
-
-			Toggle.Value = Value
-			Toggle:Display()
-
-			for _, Addon in pairs(Toggle.Addons) do
-				if Addon.Type == "KeyPicker" and Addon.SyncToggleState then
-					Addon.Toggled = Toggle.Value
-					Addon:Update()
-				end
-			end
-
-			Library:SafeCallback(Toggle.Callback, Toggle.Value)
-			Library:SafeCallback(Toggle.Changed, Toggle.Value)
-			Library:UpdateDependencyBoxes()
-		end
-
-		function Toggle:SetDisabled(Disabled: boolean)
-			Toggle.Disabled = Disabled
-
-			if Toggle.TooltipTable then
-				Toggle.TooltipTable.Disabled = Toggle.Disabled
-			end
-
-			for _, Addon in pairs(Toggle.Addons) do
-				if Addon.Type == "KeyPicker" and Addon.SyncToggleState then
-					Addon:Update()
-				end
-			end
-
-			Button.Active = not Toggle.Disabled
-			Toggle:Display()
-		end
-
-		function Toggle:SetVisible(Visible: boolean)
-			Toggle.Visible = Visible
-
-			Button.Visible = Toggle.Visible
-			Groupbox:Resize()
-		end
-
-		function Toggle:SetText(Text: string)
-			Toggle.Text = Text
-			Label.Text = Text
-		end
-
-		Button.MouseButton1Click:Connect(function()
-			if Toggle.Disabled then
-				return
-			end
-
-			Toggle:SetValue(not Toggle.Value)
-		end)
-
-		if typeof(Toggle.Tooltip) == "string" or typeof(Toggle.DisabledTooltip) == "string" then
-			Toggle.TooltipTable = Library:AddTooltip(Toggle.Tooltip, Toggle.DisabledTooltip, Button)
-			Toggle.TooltipTable.Disabled = Toggle.Disabled
-		end
-
-		if Toggle.Risky then
-			Label.TextColor3 = Library.Scheme.Red
-			Library.Registry[Label].TextColor3 = "Red"
-		end
-
-		Toggle:Display()
-		Groupbox:Resize()
-
-		Toggle.TextLabel = Label
-		Toggle.Container = Container
-		setmetatable(Toggle, BaseAddons)
-
-		Toggle.Holder = Button
-		table.insert(Groupbox.Elements, Toggle)
-
-		Toggles[Idx] = Toggle
-
-		return Toggle
-	end
-
-	function Funcs:AddInput_old(Idx, Info)
-		Info = Library:Validate(Info, Templates.Input)
-
-		local Groupbox = self
-		local Container = Groupbox.Container
-
-		local Input = {
-			Text = Info.Text,
-			Value = Info.Default,
-			Finished = Info.Finished,
-			Numeric = Info.Numeric,
-			ClearTextOnFocus = Info.ClearTextOnFocus,
-			Placeholder = Info.Placeholder,
-			AllowEmpty = Info.AllowEmpty,
-			EmptyReset = Info.EmptyReset,
-
-			Tooltip = Info.Tooltip,
-			DisabledTooltip = Info.DisabledTooltip,
-			TooltipTable = nil,
-
-			Callback = Info.Callback,
-			Changed = Info.Changed,
-
-			Disabled = Info.Disabled,
-			Visible = Info.Visible,
-
-			Type = "Input",
-		}
-
-		local Holder = New("Frame", {
-			BackgroundTransparency = 1,
-			Size = UDim2.new(1, 0, 0, 39),
-			Visible = Input.Visible,
-			Parent = Container,
-		})
-
-		local Label = New("TextLabel", {
-			BackgroundTransparency = 1,
-			Size = UDim2.new(1, 0, 0, 14),
-			Text = Input.Text,
-			TextSize = 14,
-			TextXAlignment = Enum.TextXAlignment.Left,
-			Parent = Holder,
-		})
-
-		local Box = New("TextBox", {
-			AnchorPoint = Vector2.new(0, 1),
-			BackgroundColor3 = "MainColor",
-			BorderColor3 = "OutlineColor",
-			BorderSizePixel = 1,
-			ClearTextOnFocus = not Input.Disabled and Input.ClearTextOnFocus,
-			PlaceholderText = Input.Placeholder,
-			Position = UDim2.fromScale(0, 1),
-			Size = UDim2.new(1, 0, 0, 21),
-			Text = Input.Value,
-			TextEditable = not Input.Disabled,
-			TextScaled = true,
-			TextXAlignment = Enum.TextXAlignment.Left,
-			Parent = Holder,
-		})
-
-		New("UIPadding", {
-			PaddingBottom = UDim.new(0, 3),
-			PaddingLeft = UDim.new(0, 8),
-			PaddingRight = UDim.new(0, 8),
-			PaddingTop = UDim.new(0, 4),
-			Parent = Box,
-		})
-
-		function Input:UpdateColors()
-			if Library.Unloaded then
-				return
-			end
-
-			Label.TextTransparency = Input.Disabled and 0.8 or 0
-			Box.TextTransparency = Input.Disabled and 0.8 or 0
-		end
-
-		function Input:OnChanged(Func)
-			Input.Changed = Func
-		end
-
-		function Input:SetValue(Text)
-			if not Input.AllowEmpty and Trim(Text) == "" then
-				Text = Input.EmptyReset
-			end
-
-			if Info.MaxLength and #Text > Info.MaxLength then
-				Text = Text:sub(1, Info.MaxLength)
-			end
-
-			if Input.Numeric then
-				if #Text > 0 and not tonumber(Text) then
-					Text = Input.Value
-				end
-			end
-
-			Input.Value = Text
-			Box.Text = Text
-
-			if not Input.Disabled then
-				Library:SafeCallback(Input.Callback, Input.Value)
-				Library:SafeCallback(Input.Changed, Input.Value)
-			end
-		end
-
-		function Input:SetDisabled(Disabled: boolean)
-			Input.Disabled = Disabled
-
-			if Input.TooltipTable then
-				Input.TooltipTable.Disabled = Input.Disabled
-			end
-
-			Box.ClearTextOnFocus = not Input.Disabled and Input.ClearTextOnFocus
-			Box.TextEditable = not Input.Disabled
-			Input:UpdateColors()
-		end
-
-		function Input:SetVisible(Visible: boolean)
-			Input.Visible = Visible
-
-			Holder.Visible = Input.Visible
-			Groupbox:Resize()
-		end
-
-		function Input:SetText(Text: string)
-			Input.Text = Text
-			Label.Text = Text
-		end
-
-		if Input.Finished then
-			Box.FocusLost:Connect(function(Enter)
-				if not Enter then
-					return
-				end
-
-				Input:SetValue(Box.Text)
-			end)
-		else
-			Box:GetPropertyChangedSignal("Text"):Connect(function()
-				Input:SetValue(Box.Text)
-			end)
-		end
-
-		if typeof(Input.Tooltip) == "string" or typeof(Input.DisabledTooltip) == "string" then
-			Input.TooltipTable = Library:AddTooltip(Input.Tooltip, Input.DisabledTooltip, Box)
-			Input.TooltipTable.Disabled = Input.Disabled
-		end
-
-		Groupbox:Resize()
-
-		Input.Holder = Holder
-		table.insert(Groupbox.Elements, Input)
-
-		Options[Idx] = Input
-
-		return Input
 	end
 
 	function Funcs:AddInput(Idx, Info)
@@ -9713,7 +8676,6 @@ function Library:CreateWindow(WindowInfo)
 				collapsed = Info.StartCollapsed and true or false
 			end
 
-			local TweenService = game:GetService("TweenService")
 			local tweenInfo = TweenInfo.new(0.18, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
 			local activeTween
 
@@ -9736,10 +8698,6 @@ function Library:CreateWindow(WindowInfo)
 
 			local function setArrow()
 				ToggleIcon.Text = collapsed and ">" or "v"
-			end
-
-			function Groupbox:Resize_old()
-				self:Resize(false)
 			end
 
 			function Groupbox:Resize(animated)
@@ -9778,7 +8736,6 @@ function Library:CreateWindow(WindowInfo)
 				end
 			end
 
-			local UserInputService = game:GetService("UserInputService")
 			local touchInputObj, touchStartPos
 			local MAX_TAP_MOVE = 4
 			local connections = {}
@@ -9853,188 +8810,6 @@ function Library:CreateWindow(WindowInfo)
 			GroupboxContainer.Visible = not collapsed
 			Groupbox:Resize(false)
 			Tab.Groupboxes[boxName] = Groupbox
-
-			return Groupbox
-		end
-
-		function Tab:AddGroupbox_org(Info)
-			local BoxHolder = New("Frame", {
-				AutomaticSize = Enum.AutomaticSize.Y,
-				BackgroundTransparency = 1,
-				Size = UDim2.fromScale(1, 0),
-				Parent = Info.Side == 1 and TabLeft or TabRight,
-			})
-			New("UIListLayout", {
-				Padding = UDim.new(0, 6),
-				Parent = BoxHolder,
-			})
-
-			local Background = Library:MakeOutline(BoxHolder, WindowInfo.CornerRadius)
-			Background.Size = UDim2.fromScale(1, 0)
-			Library:UpdateDPI(Background, { Size = false })
-
-			local GroupboxHolder, GroupboxLabel, GroupboxContainer, GroupboxList, ToggleIcon, HeaderFrame
-
-			do
-				GroupboxHolder = New("Frame", {
-					BackgroundColor3 = "BackgroundColor",
-					Position = UDim2.fromOffset(2, 2),
-					Size = UDim2.new(1, -4, 1, -4),
-					Parent = Background,
-				})
-				New("UICorner", {
-					CornerRadius = UDim.new(0, WindowInfo.CornerRadius - 1),
-					Parent = GroupboxHolder,
-				})
-				Library:MakeLine(GroupboxHolder, {
-					Position = UDim2.fromOffset(0, 34),
-					Size = UDim2.new(1, 0, 0, 1),
-				})
-
-				HeaderFrame = New("Frame", {
-					BackgroundTransparency = 1,
-					Size = UDim2.new(1, 0, 0, 34),
-					Parent = GroupboxHolder,
-				})
-
-				local BoxIcon = Library:GetIcon(Info.IconName)
-				if BoxIcon then
-					New("ImageLabel", {
-						Image = BoxIcon.Url,
-						ImageColor3 = "AccentColor",
-						ImageRectOffset = BoxIcon.ImageRectOffset,
-						ImageRectSize = BoxIcon.ImageRectSize,
-						Position = UDim2.fromOffset(6, 6),
-						Size = UDim2.fromOffset(22, 22),
-						Parent = HeaderFrame,
-					})
-				end
-
-				GroupboxLabel = New("TextLabel", {
-					BackgroundTransparency = 1,
-					Position = UDim2.fromOffset(BoxIcon and 24 or 0, 0),
-					Size = UDim2.new(1, 0, 1, 0),
-					Text = Info.Name,
-					TextSize = 15,
-					TextXAlignment = Enum.TextXAlignment.Left,
-					Parent = HeaderFrame,
-				})
-				New("UIPadding", {
-					PaddingLeft = UDim.new(0, 12),
-					PaddingRight = UDim.new(0, 28),
-					Parent = GroupboxLabel,
-				})
-
-				ToggleIcon = New("TextLabel", {
-					BackgroundTransparency = 1,
-					Size = UDim2.fromOffset(20, 20),
-					Position = UDim2.new(1, -24, 0, 7),
-					TextColor3 = Color3.fromRGB(200, 200, 200),
-					TextSize = 14,
-					Font = Enum.Font.Code,
-					Parent = HeaderFrame,
-				})
-
-				GroupboxContainer = New("Frame", {
-					BackgroundTransparency = 1,
-					Position = UDim2.fromOffset(0, 35),
-					Size = UDim2.new(1, 0, 1, -35),
-					Parent = GroupboxHolder,
-				})
-
-				GroupboxList = New("UIListLayout", {
-					Padding = UDim.new(0, 8),
-					Parent = GroupboxContainer,
-				})
-				New("UIPadding", {
-					PaddingBottom = UDim.new(0, 7),
-					PaddingLeft = UDim.new(0, 7),
-					PaddingRight = UDim.new(0, 7),
-					PaddingTop = UDim.new(0, 7),
-					Parent = GroupboxContainer,
-				})
-			end
-
-			local Groupbox = {
-				BoxHolder = BoxHolder,
-				Holder = Background,
-				Container = GroupboxContainer,
-				ToggleIcon = ToggleIcon,
-
-				Tab = Tab,
-				DependencyBoxes = {},
-				Elements = {},
-			}
-
-			local collapsed = true
-			if Info.StartCollapsed ~= nil then
-				collapsed = Info.StartCollapsed
-			end
-
-			GroupboxContainer.Visible = not collapsed
-			ToggleIcon.Text = collapsed and ">" or "˅"
-
-			function Groupbox:Resize_old()
-				if not collapsed then
-					Background.Size = UDim2.new(1, 0, 0, (GroupboxList.AbsoluteContentSize.Y + 53) * Library.DPIScale)
-				else
-					Background.Size = UDim2.new(1, 0, 0, 34)
-				end
-			end
-
-			function Groupbox:Resize()
-				if not collapsed then
-					local totalHeight = GroupboxList.AbsoluteContentSize.Y + (53 * Library.DPIScale)
-					Background.Size = UDim2.new(1, 0, 0, totalHeight)
-				else
-					Background.Size = UDim2.new(1, 0, 0, 34 * Library.DPIScale)
-				end
-			end
-
-			local function Toggle()
-				collapsed = not collapsed
-				GroupboxContainer.Visible = not collapsed
-				ToggleIcon.Text = collapsed and ">" or "˅"
-				Groupbox:Resize()
-			end
-
-			local touchInputObj = nil
-			local touchStartPos = nil
-			local MAX_TAP_MOVE = 4
-
-			HeaderFrame.InputBegan:Connect(function(input)
-				if input.UserInputType == Enum.UserInputType.MouseButton1 then
-					Toggle()
-				elseif input.UserInputType == Enum.UserInputType.Touch then
-					touchInputObj = input
-					touchStartPos = input.Position
-				end
-			end)
-
-			game:GetService("UserInputService").InputChanged:Connect(function(input)
-				if input ~= touchInputObj then
-					return
-				end
-				local delta = input.Position - touchStartPos
-				if math.abs(delta.X) > MAX_TAP_MOVE or math.abs(delta.Y) > MAX_TAP_MOVE then
-					touchInputObj = nil
-					touchStartPos = nil
-				end
-			end)
-
-			game:GetService("UserInputService").InputEnded:Connect(function(input)
-				if input ~= touchInputObj then
-					return
-				end
-				Toggle()
-				touchInputObj = nil
-				touchStartPos = nil
-			end)
-
-			setmetatable(Groupbox, BaseGroupbox)
-
-			Groupbox:Resize()
-			Tab.Groupboxes[Info.Name] = Groupbox
 
 			return Groupbox
 		end
@@ -10671,5 +9446,11 @@ Library:GiveSignal(Players.PlayerRemoving:Connect(OnPlayerChange))
 Library:GiveSignal(Teams.ChildAdded:Connect(OnTeamChange))
 Library:GiveSignal(Teams.ChildRemoved:Connect(OnTeamChange))
 
+-- Expose the library under multiple names for convenience:
+--   Obsidian  — the library's proper name (recommended for new scripts)
+--   UI        — short alias for quick access
+--   Library   — backward-compatible alias (existing scripts keep working)
+getgenv().Obsidian = Library
+getgenv().UI = Library
 getgenv().Library = Library
 return Library
