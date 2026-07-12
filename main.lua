@@ -2,10 +2,19 @@ local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local MarketplaceService = game:GetService("MarketplaceService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+
 --==============================================================================
---
+-- BACKEND CONFIG - CHANGE TO YOUR VERCEL URL
+--==============================================================================
+local API_BASE = "https://lrx-hub-backend.vercel.app" -- NO trailing slash
+
+--==============================================================================
+-- DEV MODE
 --==============================================================================
 local DEV_MODE = false
+local SKIP_KEYCHECK = false -- Set true to bypass key system (for testing only)
 
 local CONSTANTS = {
 	Config = {
@@ -29,7 +38,10 @@ local CONSTANTS = {
 		Targets = { "Obsidian", "ObsidanModal", "LRXUI", "LRXUI_Modal" },
 	},
 }
--- PHASE 1b: PRODUCTION LOGGER
+
+--==============================================================================
+-- LOGGER
+--==============================================================================
 local Logger = {
 	Debug = function(tag, msg)
 		if DEV_MODE then
@@ -46,7 +58,521 @@ local Logger = {
 		error("[LRX Loader] " .. tostring(msg))
 	end,
 }
--- PHASE 2: HELPER FUNCTIONS
+
+--==============================================================================
+-- BACKEND API FUNCTIONS
+--==============================================================================
+local Backend = {}
+
+local function GenerateHWID()
+	local hwid = ""
+	pcall(function()
+		if gethwid then
+			hwid = gethwid()
+		elseif syn and syn.get_hwid then
+			hwid = syn.get_hwid()
+		elseif KRNL_LOADED and KRNL_HWID then
+			hwid = KRNL_HWID
+		end
+	end)
+	if hwid == "" then
+		local seed = tostring(Players.LocalPlayer.UserId) .. "_" .. tostring(game.PlaceId)
+		local hash = 0
+		for i = 1, #seed do
+			hash = ((hash * 31) + string.byte(seed, i)) % 2147483647
+		end
+		hwid = "FALLBACK_" .. tostring(hash)
+	end
+	return hwid
+end
+
+local HWID = GenerateHWID()
+
+-- URL encode helper (replaces HttpService:UrlEncode which doesn't exist)
+local function UrlEncode(str)
+	if not str then
+		return ""
+	end
+	return str:gsub("([^%w _%%%-%.])", function(c)
+		return string.format("%%%02X", string.byte(c))
+	end):gsub(" ", "+")
+end
+
+local function ApiPost(endpoint, body)
+	local url = API_BASE .. endpoint
+	local jsonBody = HttpService:JSONEncode(body)
+	local success, response = pcall(function()
+		return game:HttpPost(url, jsonBody, false, {
+			["Content-Type"] = "application/json",
+		})
+	end)
+	if not success then
+		success, response = pcall(function()
+			return game:HttpGet(url .. "?data=" .. UrlEncode(jsonBody), true)
+		end)
+	end
+	if success and response then
+		local ok, data = pcall(function()
+			return HttpService:JSONDecode(response)
+		end)
+		if ok then
+			return data
+		end
+	end
+	return { success = false, error = "Request failed" }
+end
+
+local function ApiGet(endpoint)
+	local url = API_BASE .. endpoint
+	local success, response = pcall(function()
+		return game:HttpGet(url, true)
+	end)
+	if success and response then
+		local ok, data = pcall(function()
+			return HttpService:JSONDecode(response)
+		end)
+		if ok then
+			return data
+		end
+	end
+	return nil
+end
+
+function Backend.CheckVersion()
+	local data = ApiGet("/api/version")
+	if not data then
+		return { update = false }
+	end
+	return {
+		update = data.force_update or (CONSTANTS.Version.HUB ~= data.version),
+		version = data.version,
+		download = data.download,
+		force = data.force_update,
+		changelog = data.changelog or "",
+	}
+end
+
+function Backend.VerifyKey(key)
+	if not key or key == "" then
+		return { success = false, error = "No key provided" }
+	end
+
+	local data = ApiPost("/api/verify", {
+		key = key,
+		userid = tostring(Players.LocalPlayer.UserId),
+		username = Players.LocalPlayer.Name,
+		executor = identifyexecutor and identifyexecutor() or "Unknown",
+		hwid = HWID,
+		version = CONSTANTS.Version.HUB,
+	})
+
+	if data and data.valid then
+		return {
+			success = true,
+			plan = data.plan or "free",
+			expires_at = data.expires_at,
+			message = data.message,
+		}
+	end
+	return { success = false, error = data and (data.reason or data.error) or "Invalid key" }
+end
+
+function Backend.TrackLaunch(key)
+	local placeName = "Unknown"
+	pcall(function()
+		placeName = MarketplaceService:GetProductInfo(game.PlaceId).Name
+	end)
+	ApiPost("/api/launch", {
+		key = key,
+		hwid = HWID,
+		username = Players.LocalPlayer.Name,
+		user_id = Players.LocalPlayer.UserId,
+		place_id = game.PlaceId,
+		place_name = placeName,
+		executor = identifyexecutor and identifyexecutor() or "Unknown",
+	})
+end
+
+function Backend.StartHeartbeat(key)
+	task.spawn(function()
+		while _G.LRX_Authenticated do
+			task.wait(30)
+			if not _G.LRX_Authenticated then
+				break
+			end
+			pcall(function()
+				ApiPost("/api/heartbeat", { key = key, hwid = HWID })
+			end)
+		end
+	end)
+end
+
+function Backend.GetAnnouncements()
+	local data = ApiGet("/api/announcement")
+	if data and data.announcements then
+		return data.announcements
+	end
+	return {}
+end
+
+--==============================================================================
+-- KEY SYSTEM UI
+--==============================================================================
+local function CreateKeySystem()
+	local screenGui = Instance.new("ScreenGui")
+	screenGui.Name = "LRX_KeySystem"
+	screenGui.ResetOnSpawn = false
+	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+	pcall(function()
+		screenGui.Parent = CoreGui
+	end)
+	if not screenGui.Parent then
+		screenGui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+	end
+
+	-- Main frame
+	local mainFrame = Instance.new("Frame")
+	mainFrame.Name = "MainFrame"
+	mainFrame.Size = UDim2.fromOffset(360, 220)
+	mainFrame.Position = UDim2.fromScale(0.5, 0.5)
+	mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+	mainFrame.BackgroundColor3 = Color3.fromRGB(17, 17, 17)
+	mainFrame.BorderSizePixel = 0
+	mainFrame.Parent = screenGui
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 10)
+	corner.Parent = mainFrame
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(40, 40, 40)
+	stroke.Thickness = 1
+	stroke.Parent = mainFrame
+
+	-- Title
+	local title = Instance.new("TextLabel")
+	title.Name = "Title"
+	title.Size = UDim2.new(1, 0, 0, 40)
+	title.Position = UDim2.fromOffset(0, 10)
+	title.BackgroundTransparency = 1
+	title.Text = "LRX Hub"
+	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.TextSize = 22
+	title.Font = Enum.Font.BuilderSansBold
+	title.Parent = mainFrame
+
+	local subtitle = Instance.new("TextLabel")
+	subtitle.Name = "Subtitle"
+	subtitle.Size = UDim2.new(1, 0, 0, 20)
+	subtitle.Position = UDim2.fromOffset(0, 38)
+	subtitle.BackgroundTransparency = 1
+	subtitle.Text = "Key Authentication"
+	subtitle.TextColor3 = Color3.fromRGB(150, 150, 150)
+	subtitle.TextSize = 12
+	subtitle.Font = Enum.Font.BuilderSans
+	subtitle.Parent = mainFrame
+
+	-- Key input
+	local inputFrame = Instance.new("Frame")
+	inputFrame.Name = "InputFrame"
+	inputFrame.Size = UDim2.new(1, -40, 0, 36)
+	inputFrame.Position = UDim2.fromOffset(20, 75)
+	inputFrame.BackgroundColor3 = Color3.fromRGB(26, 26, 26)
+	inputFrame.BorderSizePixel = 0
+	inputFrame.Parent = mainFrame
+
+	local inputCorner = Instance.new("UICorner")
+	inputCorner.CornerRadius = UDim.new(0, 6)
+	inputCorner.Parent = inputFrame
+
+	local inputStroke = Instance.new("UIStroke")
+	inputStroke.Color = Color3.fromRGB(50, 50, 50)
+	inputStroke.Thickness = 1
+	inputStroke.Parent = inputFrame
+
+	local keyInput = Instance.new("TextBox")
+	keyInput.Name = "KeyInput"
+	keyInput.Size = UDim2.new(1, -40, 1, 0)
+	keyInput.Position = UDim2.fromOffset(10, 0)
+	keyInput.BackgroundTransparency = 1
+	keyInput.Text = ""
+	keyInput.PlaceholderText = "Enter LRX Key..."
+	keyInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+	keyInput.PlaceholderColor3 = Color3.fromRGB(100, 100, 100)
+	keyInput.TextSize = 14
+	keyInput.Font = Enum.Font.BuilderSans
+	keyInput.ClearTextOnFocus = false
+	keyInput.Parent = inputFrame
+
+	-- Paste button
+	local pasteBtn = Instance.new("TextButton")
+	pasteBtn.Name = "PasteBtn"
+	pasteBtn.Size = UDim2.fromOffset(30, 30)
+	pasteBtn.Position = UDim2.new(1, -35, 0.5, 0)
+	pasteBtn.AnchorPoint = Vector2.new(0, 0.5)
+	pasteBtn.BackgroundTransparency = 1
+	pasteBtn.Text = "📋"
+	pasteBtn.TextSize = 14
+	pasteBtn.Parent = inputFrame
+
+	pasteBtn.MouseButton1Click:Connect(function()
+		local clipboard = ""
+		pcall(function()
+			if getclipboard then
+				clipboard = getclipboard()
+			end
+		end)
+		if clipboard and clipboard ~= "" then
+			keyInput.Text = clipboard
+		end
+	end)
+
+	-- Error label
+	local errorLabel = Instance.new("TextLabel")
+	errorLabel.Name = "ErrorLabel"
+	errorLabel.Size = UDim2.new(1, -40, 0, 18)
+	errorLabel.Position = UDim2.fromOffset(20, 115)
+	errorLabel.BackgroundTransparency = 1
+	errorLabel.Text = ""
+	errorLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+	errorLabel.TextSize = 11
+	errorLabel.Font = Enum.Font.BuilderSans
+	errorLabel.TextWrapped = true
+	errorLabel.Parent = mainFrame
+
+	-- Login button
+	local loginBtn = Instance.new("TextButton")
+	loginBtn.Name = "LoginBtn"
+	loginBtn.Size = UDim2.new(1, -40, 0, 36)
+	loginBtn.Position = UDim2.fromOffset(20, 145)
+	loginBtn.BackgroundColor3 = Color3.fromRGB(245, 158, 11)
+	loginBtn.BorderSizePixel = 0
+	loginBtn.Text = "Login"
+	loginBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+	loginBtn.TextSize = 14
+	loginBtn.Font = Enum.Font.BuilderSansBold
+	loginBtn.Parent = mainFrame
+
+	local btnCorner = Instance.new("UICorner")
+	btnCorner.CornerRadius = UDim.new(0, 6)
+	btnCorner.Parent = loginBtn
+
+	-- Get key button
+	local getKeyBtn = Instance.new("TextButton")
+	getKeyBtn.Name = "GetKeyBtn"
+	getKeyBtn.Size = UDim2.new(1, -40, 0, 28)
+	getKeyBtn.Position = UDim2.fromOffset(20, 188)
+	getKeyBtn.BackgroundTransparency = 1
+	getKeyBtn.Text = "Get Key  |  Discord"
+	getKeyBtn.TextColor3 = Color3.fromRGB(150, 150, 150)
+	getKeyBtn.TextSize = 11
+	getKeyBtn.Font = Enum.Font.BuilderSans
+	getKeyBtn.Parent = mainFrame
+
+	-- Loading overlay
+	local loadingFrame = Instance.new("Frame")
+	loadingFrame.Name = "Loading"
+	loadingFrame.Size = UDim2.fromScale(1, 1)
+	loadingFrame.BackgroundColor3 = Color3.fromRGB(17, 17, 17)
+	loadingFrame.BackgroundTransparency = 0.3
+	loadingFrame.Visible = false
+	loadingFrame.Parent = mainFrame
+
+	local loadingCorner = Instance.new("UICorner")
+	loadingCorner.CornerRadius = UDim.new(0, 10)
+	loadingCorner.Parent = loadingFrame
+
+	local loadingText = Instance.new("TextLabel")
+	loadingText.Size = UDim2.fromScale(1, 1)
+	loadingText.BackgroundTransparency = 1
+	loadingText.Text = "Verifying..."
+	loadingText.TextColor3 = Color3.fromRGB(255, 255, 255)
+	loadingText.TextSize = 14
+	loadingText.Font = Enum.Font.BuilderSansBold
+	loadingText.Parent = loadingFrame
+
+	-- Make draggable
+	local dragging = false
+	local dragStart, startPos
+
+	mainFrame.InputBegan:Connect(function(input)
+		if
+			input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch
+		then
+			dragging = true
+			dragStart = input.Position
+			startPos = mainFrame.Position
+		end
+	end)
+
+	UserInputService.InputChanged:Connect(function(input)
+		if
+			dragging
+			and (
+				input.UserInputType == Enum.UserInputType.MouseMovement
+				or input.UserInputType == Enum.UserInputType.Touch
+			)
+		then
+			local delta = input.Position - dragStart
+			mainFrame.Position =
+				UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end)
+
+	UserInputService.InputEnded:Connect(function(input)
+		if
+			input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch
+		then
+			dragging = false
+		end
+	end)
+
+	-- Button hover effects
+	local function btnHover(btn, normalColor, hoverColor)
+		btn.MouseEnter:Connect(function()
+			TweenService:Create(btn, TweenInfo.new(0.15), { BackgroundColor3 = hoverColor }):Play()
+		end)
+		btn.MouseLeave:Connect(function()
+			TweenService:Create(btn, TweenInfo.new(0.15), { BackgroundColor3 = normalColor }):Play()
+		end)
+	end
+
+	btnHover(loginBtn, Color3.fromRGB(245, 158, 11), Color3.fromRGB(217, 119, 6))
+
+	-- Get key button click
+	getKeyBtn.MouseButton1Click:Connect(function()
+		if setclipboard then
+			setclipboard("discord.gg/lrxhub")
+		end
+		pcall(function()
+			game:GetService("StarterGui"):SetCore("SendNotification", {
+				Title = "Discord",
+				Text = "discord.gg/lrxhub copied!",
+				Duration = 3,
+			})
+		end)
+	end)
+
+	return {
+		ScreenGui = screenGui,
+		MainFrame = mainFrame,
+		KeyInput = keyInput,
+		LoginBtn = loginBtn,
+		ErrorLabel = errorLabel,
+		LoadingFrame = loadingFrame,
+		Destroy = function()
+			screenGui:Destroy()
+		end,
+	}
+end
+
+--==============================================================================
+-- KEY AUTHENTICATION FLOW
+--==============================================================================
+local function RunKeySystem()
+	if SKIP_KEYCHECK then
+		Logger.Info("KeySystem", "Key check skipped (SKIP_KEYCHECK = true)")
+		return true, nil
+	end
+
+	-- Check saved key
+	local savedKey = ""
+	pcall(function()
+		if isfile and isfile("LRX_Hub_Key.txt") then
+			savedKey = readfile("LRX_Hub_Key.txt")
+		end
+	end)
+
+	-- Try auto-login with saved key
+	if savedKey and savedKey ~= "" then
+		Logger.Info("KeySystem", "Found saved key, verifying...")
+		local result = Backend.VerifyKey(savedKey)
+		if result.success then
+			Logger.Info("KeySystem", "Auto-login successful!")
+			_G.LRX_Key = savedKey
+			_G.LRX_Authenticated = true
+			_G.LRX_Plan = result.plan
+			Backend.TrackLaunch(savedKey)
+			Backend.StartHeartbeat(savedKey)
+			return true, result
+		end
+	end
+
+	-- Show key UI
+	local keyUI = CreateKeySystem()
+	local authenticated = false
+	local authResult = nil
+
+	keyUI.LoginBtn.MouseButton1Click:Connect(function()
+		local key = keyUI.KeyInput.Text:match("^%s*(.-)%s*$") -- trim
+		if key == "" then
+			keyUI.ErrorLabel.Text = "Please enter a key"
+			return
+		end
+
+		keyUI.ErrorLabel.Text = ""
+		keyUI.LoadingFrame.Visible = true
+
+		-- Check version first
+		local versionInfo = Backend.CheckVersion()
+		if versionInfo.force then
+			keyUI.LoadingFrame.Visible = false
+			keyUI.ErrorLabel.Text = "FORCE UPDATE REQUIRED"
+			return
+		end
+
+		-- Verify key
+		local result = Backend.VerifyKey(key)
+		keyUI.LoadingFrame.Visible = false
+
+		if result.success then
+			-- Save key
+			pcall(function()
+				if writefile then
+					writefile("LRX_Hub_Key.txt", key)
+				end
+			end)
+
+			_G.LRX_Key = key
+			_G.LRX_Authenticated = true
+			_G.LRX_Plan = result.plan
+
+			-- Track and heartbeat
+			Backend.TrackLaunch(key)
+			Backend.StartHeartbeat(key)
+
+			authenticated = true
+			authResult = result
+
+			-- Show success and close
+			keyUI.ErrorLabel.TextColor3 = Color3.fromRGB(80, 255, 80)
+			keyUI.ErrorLabel.Text = "Success! Loading..."
+
+			task.wait(0.5)
+			keyUI:Destroy()
+		else
+			keyUI.ErrorLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+			keyUI.ErrorLabel.Text = result.error or "Invalid key"
+		end
+	end)
+
+	-- Wait for authentication
+	while not authenticated do
+		task.wait(0.1)
+		if not keyUI.ScreenGui or not keyUI.ScreenGui.Parent then
+			return false, nil
+		end
+	end
+
+	return true, authResult
+end
+
+--==============================================================================
+-- HELPER FUNCTIONS
+--==============================================================================
 local function ReadFile(path)
 	if not isfile or not isfile(path) then
 		return nil
@@ -89,7 +615,7 @@ local function Download(url)
 	end
 	return nil
 end
--- Validates that a version string is not an error page, HTML, or garbage.
+
 local function IsValidVersion(str)
 	if type(str) ~= "string" then
 		return false
@@ -100,11 +626,9 @@ local function IsValidVersion(str)
 	if not str:match("%S") then
 		return false
 	end
-	-- Reject HTML responses
 	if str:find("<!DOCTYPE", 1, true) or str:find("<html", 1, true) then
 		return false
 	end
-	-- Reject common error pages
 	local lower = str:lower()
 	if lower:find("not found") or lower:find("404") then
 		return false
@@ -114,171 +638,96 @@ local function IsValidVersion(str)
 	end
 	return true
 end
--- Validates that a downloaded library source is not an HTTP error page.
+
+-- FIXED: Proper single-line string pattern
 local function IsValidLibrarySource(str)
 	if type(str) ~= "string" then
 		return false
 	end
 	if #str <= 100 then
-		return false, "Source is too short (" .. #str .. " chars)"
+		return false, "Source too short"
 	end
-	-- Reject HTML responses
 	if str:find("<!DOCTYPE", 1, true) or str:find("<html", 1, true) then
-		return false, "Download returned HTML instead of Lua (likely an error page)"
+		return false, "Download returned HTML"
 	end
-	-- Reject HTTP error codes at start
 	local firstLine = str:match("^([^\n]+)")
 	if firstLine then
 		if firstLine:find("^%d%d%d[%s:]") then
-			return false, "Download returned HTTP error response: " .. firstLine
-		end
-		if firstLine:lower():find("error") and #firstLine < 100 then
-			return false, "Download returned error page: " .. firstLine
-		end
-	end
-	-- Must look like Lua code
-	local start = str:match("^%s*([^\n]+)")
-	if start then
-		local lower = start:lower()
-		-- Common Lua start patterns
-		local validStarts = {
-			"local ",
-			"return",
-			"function",
-			"--",
-			"[[",
-			"(",
-			"{",
-			"do",
-			"if ",
-			"for ",
-			"while ",
-			"repeat",
-		}
-		local looksLikeLua = false
-		for _, pattern in ipairs(validStarts) do
-			if lower:find(pattern, 1, true) == 1 then
-				looksLikeLua = true
-				break
-			end
-		end
-		if not looksLikeLua then
-			return false, "Download does not look like Lua code. First line: " .. start
+			return false, "HTTP error: " .. firstLine
 		end
 	end
 	return true
 end
--- Reads the cache once and validates both files before returning them.
+
 local function ReadCache()
 	local ui = ReadFile(CONSTANTS.Paths.CACHE_FILE)
-	if not ui then
+	if not ui or #ui < 100 then
 		return nil
 	end
-	if #ui < 100 then
-		Logger.Warn("Cache", "Cached UI is too small (" .. #ui .. " bytes), treating as invalid")
-		return nil
-	end
-
 	local version = ReadFile(CONSTANTS.Paths.VERSION_FILE)
-	if not version then
-		Logger.Warn("Cache", "Version file missing")
+	if not version or #version == 0 then
 		return nil
 	end
-	if #version == 0 then
-		Logger.Warn("Cache", "Version file is empty")
-		return nil
-	end
-	if not version:match("%S") then
-		Logger.Warn("Cache", "Version file contains only whitespace")
-		return nil
-	end
-
-	return {
-		UI = ui,
-		Version = version,
-	}
+	return { UI = ui, Version = version }
 end
+
 local function WriteCache(ui, version)
-	local ok1 = true
-	local ok2 = true
+	local ok1, ok2 = true, true
 	if ui then
 		ok1 = WriteFile(CONSTANTS.Paths.CACHE_FILE, ui)
-		if not ok1 then
-			Logger.Warn("Cache", "Failed to write LRXUI.lua")
-		end
 	end
 	if version then
 		ok2 = WriteFile(CONSTANTS.Paths.VERSION_FILE, version)
-		if not ok2 then
-			Logger.Warn("Cache", "Failed to write version file")
-		end
 	end
 	return ok1 and ok2
 end
--- Downloads the latest package.
+
 local function DownloadLatest()
 	Logger.Info("Cache", "Downloading latest package...")
-
 	local ui = Download(CONSTANTS.URLs.UI)
 	if not ui or #ui <= 100 then
-		Logger.Warn("Cache", "Failed to download LRXUI.lua or file too short")
+		Logger.Warn("Cache", "Failed to download LRXUI.lua")
 		return nil
 	end
-
 	local uiOk, uiErr = IsValidLibrarySource(ui)
 	if not uiOk then
-		Logger.Warn("Cache", "LRXUI.lua download invalid: " .. tostring(uiErr))
+		Logger.Warn("Cache", "LRXUI.lua invalid: " .. tostring(uiErr))
 		return nil
 	end
-
 	local version = Download(CONSTANTS.URLs.VERSION)
 	if not IsValidVersion(version) then
-		Logger.Warn("Cache", "Version file invalid, using 'unknown'")
 		version = "unknown"
 	end
-
 	Logger.Info("Cache", "Download complete.")
-	return {
-		UI = ui,
-		Version = version,
-	}
+	return { UI = ui, Version = version }
 end
--- Validates and loads a library source in one step.
--- Returns (true, libraryTable) on success, (false, errorMessage) on failure.
--- This eliminates double compilation by producing the library table immediately.
+
 local function ValidateAndLoad(source)
-	Logger.Info("Cache", "Validating library...")
 	if not source or type(source) ~= "string" then
-		return false, "Source is nil or not a string"
+		return false, "Source is nil"
 	end
 	if #source <= 100 then
-		return false, "Source is too short (" .. #source .. " chars)"
+		return false, "Source too short"
 	end
-
-	Logger.Info("Cache", "Compiling...")
 	local chunk, compileError = loadstring(source)
 	if not chunk then
 		return false, "Syntax error: " .. tostring(compileError)
 	end
-
-	Logger.Info("Cache", "Executing test run...")
 	local success, result = xpcall(chunk, debug.traceback)
 	if not success then
 		return false, "Runtime error: " .. tostring(result)
 	end
-
 	if type(result) ~= "table" then
-		return false, "Did not return a library table. Got: " .. type(result)
+		return false, "Did not return table. Got: " .. type(result)
 	end
-
-	Logger.Info("Cache", "Validation passed. Library loaded.")
 	return true, result
 end
--- PHASE 3: CLEANUP
--- Shared UI destruction helper used by both Cleanup() and Close All.
+
+--==============================================================================
+-- CLEANUP
+--==============================================================================
 local function DestroyHubUI()
 	local targets = CONSTANTS.UI.Targets
-
 	local function DestroyIn(parent)
 		if not parent then
 			return
@@ -291,7 +740,6 @@ local function DestroyHubUI()
 			end
 		end
 	end
-
 	local localPlayer = Players.LocalPlayer
 	if localPlayer and localPlayer:FindFirstChild("PlayerGui") then
 		DestroyIn(localPlayer.PlayerGui)
@@ -301,7 +749,6 @@ end
 
 local function Cleanup()
 	Logger.Info("Loader", "Running cleanup...")
-
 	pcall(function()
 		if getgenv and getgenv().Library then
 			pcall(function()
@@ -311,117 +758,102 @@ local function Cleanup()
 			end)
 			getgenv().Library = nil
 		end
-
 		_G.LRX_Hub_UI = nil
 		_G.LRX_Connections = {}
 		_G.LRX_KillSwitch = false
 		_G.AutoFarmEnabled = nil
-
+		_G.LRX_Authenticated = false
 		DestroyHubUI()
 	end)
-
 	task.wait(0.15)
 	Logger.Info("Loader", "Cleanup complete.")
 end
+
 Cleanup()
--- PHASE 4: CACHE SETUP
+
+--==============================================================================
+-- KEY AUTHENTICATION
+--==============================================================================
+Logger.Info("KeySystem", "Starting key authentication...")
+local authSuccess, authData = RunKeySystem()
+
+if not authSuccess then
+	Logger.Error("KeySystem", "Authentication failed or cancelled.")
+	return
+end
+
+Logger.Info("KeySystem", "Authenticated! Plan: " .. tostring(_G.LRX_Plan or "free"))
+
+--==============================================================================
+-- CACHE SETUP
+--==============================================================================
 EnsureCacheFolders()
--- PHASE 5 & 6: DEV MODE / RELEASE MODE
+
+--==============================================================================
+-- LOAD LIBRARY
+--==============================================================================
 local Library = nil
 
 if DEV_MODE then
 	Logger.Info("Loader", "DEV_MODE enabled.")
-	Logger.Info("Loader", "Loading local LRXUI.lua...")
-
 	local devSource = ReadFile(CONSTANTS.Paths.CACHE_FILE)
 	if not devSource then
-		Logger.Error(
-			"DEV_MODE requires a local LRXUI.lua at '"
-				.. CONSTANTS.Paths.CACHE_FILE
-				.. "'. Please place your local file there and re-execute."
-		)
+		Logger.Error("DEV_MODE requires local LRXUI.lua at '" .. CONSTANTS.Paths.CACHE_FILE .. "'")
 	end
-
 	local valid, result = ValidateAndLoad(devSource)
 	if not valid then
 		Logger.Error("DEV_MODE validation failed: " .. tostring(result))
 		return
 	end
-
 	Library = result
-	Logger.Info("Loader", "Local library validated and loaded. (GitHub ignored, cache untouched)")
+	Logger.Info("Loader", "Local library loaded.")
 else
-	Logger.Info("Loader", "Release mode.")
 	Logger.Info("Cache", "Checking cache...")
-
 	local cache = ReadCache()
 	local librarySource = nil
 
 	if not cache then
-		Logger.Info("Cache", "Cache missing or corrupted.")
-		Logger.Info("Cache", "Downloading fresh package...")
-
+		Logger.Info("Cache", "Cache missing. Downloading...")
 		local latest = DownloadLatest()
 		if not latest then
-			Logger.Error("Failed to download LRXUI. No local cache available.")
+			Logger.Error("Failed to download LRXUI. No cache available.")
 			return
 		end
-
 		local valid, result = ValidateAndLoad(latest.UI)
 		if not valid then
 			Logger.Error("Validation failed: " .. tostring(result))
 			return
 		end
-
-		Logger.Info("Cache", "Updating cache...")
-		local writeOk = WriteCache(latest.UI, latest.Version)
-		if not writeOk then
-			Logger.Warn("Cache", "Cache write failed. Library loaded but cache may be stale on next run.")
-		end
-
+		WriteCache(latest.UI, latest.Version)
 		Library = result
 		librarySource = latest.UI
-
-		Logger.Info("Cache", "Cache created successfully.")
+		Logger.Info("Cache", "Cache created.")
 	else
-		Logger.Info("Cache", "Cache found.")
-		Logger.Info("Cache", "Cached version: " .. tostring(cache.Version))
-		Logger.Info("Cache", "Expected version: " .. CONSTANTS.Version.UI)
-
+		Logger.Info("Cache", "Cache found. Version: " .. tostring(cache.Version))
 		if cache.Version == CONSTANTS.Version.UI then
-			Logger.Info("Cache", "Cache is up to date.")
+			Logger.Info("Cache", "Cache up to date.")
 			librarySource = cache.UI
 		else
-			Logger.Info("Cache", "Version mismatch.")
-			Logger.Info("Cache", "Downloading latest package...")
-
+			Logger.Info("Cache", "Version mismatch. Downloading...")
 			local latest = DownloadLatest()
 			if not latest then
-				Logger.Warn("Cache", "Download failed. Falling back to existing cache.")
+				Logger.Warn("Cache", "Download failed. Using cache fallback.")
 				librarySource = cache.UI
 			else
 				local valid, result = ValidateAndLoad(latest.UI)
 				if not valid then
-					Logger.Warn(
-						"Cache",
-						"Validation failed: " .. tostring(result) .. ". Falling back to existing cache."
-					)
+					Logger.Warn("Cache", "Validation failed. Using cache fallback.")
 					librarySource = cache.UI
 				else
-					Logger.Info("Cache", "Updating cache...")
-					local writeOk = WriteCache(latest.UI, latest.Version)
-					if not writeOk then
-						Logger.Warn("Cache", "Cache write failed. Library loaded but cache may be stale on next run.")
-					end
+					WriteCache(latest.UI, latest.Version)
 					Library = result
 					librarySource = latest.UI
-					Logger.Info("Cache", "Cache updated successfully.")
+					Logger.Info("Cache", "Cache updated.")
 				end
 			end
 		end
 	end
 
-	-- If we only have source (fallback cases), compile and load it now.
 	if not Library and librarySource then
 		local valid, result = ValidateAndLoad(librarySource)
 		if not valid then
@@ -431,14 +863,17 @@ else
 		Library = result
 	end
 end
--- PHASE 7: LIBRARY LOADING
+
 if not Library then
 	Logger.Error("No library source available.")
 	return
 end
 
 getgenv().Library = Library
--- PHASE 8: CONFIG PERSISTENCE
+
+--==============================================================================
+-- CONFIG PERSISTENCE
+--==============================================================================
 local SavedConfig = {}
 pcall(function()
 	if readfile and isfile and isfile(CONSTANTS.Config.FILE) then
@@ -463,8 +898,6 @@ end
 
 local function SetSaved(key, value)
 	SavedConfig[key] = value
-	-- Always save when the AutoSaveConfig toggle itself changes so the preference persists.
-	-- Otherwise respect the user's AutoSaveConfig setting.
 	if key == "AutoSaveConfig" or (SavedConfig["AutoSaveConfig"] ~= false) then
 		SaveConfig()
 	end
@@ -472,17 +905,9 @@ end
 
 _G.LRX_Connections = _G.LRX_Connections or {}
 _G.LRX_KillSwitch = false
---==============================================================================
---
---==============================================================================
-
---
---
---
---
 
 --==============================================================================
--- #1 //WindowSetup\
+-- BUILD UI
 --==============================================================================
 local Window = Library:CreateWindow({
 	Title = "LRX_Hub",
@@ -504,10 +929,10 @@ local Window = Library:CreateWindow({
 })
 
 --==============================================================================
--- #2 //TABS\\
+-- TABS
 --==============================================================================
 
--- //HOME TAB\\
+-- HOME TAB
 local HomeTab = Window:AddTab("Home", "house", "Welcome to LRX Hub!")
 local HomeLeft = HomeTab:AddLeftGroupbox("Welcome", "user")
 local HomeRight = HomeTab:AddRightGroupbox("Status", "activity")
@@ -517,13 +942,13 @@ local pingLabel = HomeLeft:AddLabel("Ping: -- ms")
 
 HomeRight:AddLabel("Client Info:")
 HomeRight:AddLabel("Version: " .. CONSTANTS.Version.HUB)
+HomeRight:AddLabel("Plan: " .. tostring(_G.LRX_Plan or "Free"))
 HomeRight:AddLabel("Game: " .. MarketplaceService:GetProductInfo(game.PlaceId).Name)
 HomeRight:AddDivider()
 
 local discordBtn = HomeRight:AddButton("Copy Discord", function()
 	if setclipboard then
 		setclipboard("discord.gg/lrxhub")
-		-- Library:Notify() demo
 		Library:Notify({
 			Title = "Copied!",
 			Description = "Discord invite copied to clipboard.",
@@ -531,7 +956,7 @@ local discordBtn = HomeRight:AddButton("Copy Discord", function()
 		})
 	end
 end)
--- Button:AddButton() - sub button demo
+
 discordBtn:AddButton("Copy Game ID", function()
 	if setclipboard then
 		setclipboard(tostring(game.PlaceId))
@@ -539,7 +964,6 @@ discordBtn:AddButton("Copy Game ID", function()
 	end
 end)
 
--- Update status label periodically
 spawn(function()
 	while wait(2) do
 		if statusLabel and statusLabel.SetText then
@@ -548,7 +972,7 @@ spawn(function()
 	end
 end)
 
--- //AUTOMATION TAB\\
+-- AUTOMATION TAB
 local AutomationTab = Window:AddTab("Automation", "workflow", "Automation controls for farming.")
 local FarmLeft = AutomationTab:AddLeftGroupbox("Seed Placer", "sprout")
 
@@ -563,10 +987,11 @@ FarmLeft:AddToggle("AutoFarmMain", {
 	end,
 })
 
--- //Misc Tab\\
+-- MISC TAB
 local MiscTab = Window:AddTab("Misc", "puzzle", "Miscellaneous features and utilities.")
 local MiscLeft = MiscTab:AddLeftGroupbox("Grid Scanner", "grid-3x3")
 
+-- SHOP TAB
 local ShopTab = Window:AddTab("Shop", "shopping-cart", "Buy items for your farm.")
 local SeedShop = ShopTab:AddLeftGroupbox("Seed Shop", "apple")
 SeedShop:AddToggle("AutoSeedShop", {
@@ -580,7 +1005,7 @@ SeedShop:AddToggle("AutoSeedShop", {
 	end,
 })
 
--- //SETTINGS TAB\\
+-- SETTINGS TAB
 local SettingsTab = Window:AddTab("Settings", "settings", "Configure your preferences and manage the hub.")
 local SettingsLeft = SettingsTab:AddLeftGroupbox("General Settings", "settings")
 local SettingsRight = SettingsTab:AddRightGroupbox("Danger Zone", "alert-triangle")
@@ -619,6 +1044,11 @@ SettingsLeft:AddButton("Export Config", function()
 	end)
 end)
 
+-- Show key info in settings
+SettingsLeft:AddDivider()
+SettingsLeft:AddLabel("Key: " .. tostring(_G.LRX_Key and _G.LRX_Key:sub(1, 8) .. "****" or "N/A"))
+SettingsLeft:AddLabel("HWID: " .. HWID:sub(1, 12) .. "...")
+
 SettingsRight:AddLabel("⚠️ Close All stops automation & UI.")
 SettingsRight:AddLabel("Your settings are saved automatically.")
 SettingsRight:AddDivider()
@@ -626,6 +1056,7 @@ SettingsRight:AddDivider()
 SettingsRight:AddButton("Close All / Stop Everything", function()
 	_G.AutoFarmEnabled = false
 	_G.LRX_KillSwitch = true
+	_G.LRX_Authenticated = false
 
 	if _G.LRX_Connections then
 		for _, conn in ipairs(_G.LRX_Connections) do
@@ -671,6 +1102,7 @@ SettingsRight:AddButton("Reset All Settings", function()
 				pcall(function()
 					if delfile then
 						delfile(CONSTANTS.Config.FILE)
+						delfile("LRX_Hub_Key.txt")
 					end
 				end)
 				SavedConfig = {}
@@ -688,4 +1120,23 @@ SettingsRight:AddButton("Reset All Settings", function()
 	})
 end)
 
+-- Show announcements (wrapped in pcall + delay to not block UI)
+task.delay(2, function()
+	pcall(function()
+		local announcements = Backend.GetAnnouncements()
+		if announcements and #announcements > 0 then
+			for _, ann in ipairs(announcements) do
+				if ann.active then
+					Library:Notify({
+						Title = "📢 " .. (ann.title or "Announcement"),
+						Description = ann.content or "",
+						Time = 8,
+					})
+				end
+			end
+		end
+	end)
+end)
+
 Logger.Info("Hub", "Main script loaded successfully!")
+Logger.Info("Hub", "Plan: " .. tostring(_G.LRX_Plan or "Free"))
