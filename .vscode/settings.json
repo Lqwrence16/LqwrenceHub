@@ -1,3 +1,15 @@
 {
-    "git.enableSmartCommit": false
+    "git.enableSmartCommit": false,
+
+    "[lua]": {
+        "editor.defaultFormatter": "JohnnyMorganz.stylua",
+        "editor.formatOnSave": true
+    },
+
+    "[luau]": {
+        "editor.defaultFormatter": "JohnnyMorganz.stylua",
+        "editor.formatOnSave": true
+    },
+
+    "editor.formatOnSave": true
 }

@@ -1,3 +1,9 @@
+--[[
+	LRXUI
+	A custom Roblox UI library (rebranded/refactored).
+	Asset images are still fetched from the original public asset host at runtime.
+]]
+
 local cloneref = (cloneref or clonereference or function(instance: any)
 	return instance
 end)
@@ -94,18 +100,18 @@ local Library = {
 	DPIRegistry = {},
 }
 
-local ObsidianImageManager = {
+local LRXAssetManager = {
 	Assets = {
 		TransparencyTexture = {
 			RobloxId = 139785960036434,
-			Path = "Obsidian/assets/TransparencyTexture.png",
+			Path = "LRX/assets/TransparencyTexture.png",
 
 			Id = nil,
 		},
 
 		SaturationMap = {
 			RobloxId = 4155801252,
-			Path = "Obsidian/assets/SaturationMap.png",
+			Path = "LRX/assets/SaturationMap.png",
 
 			Id = nil,
 		},
@@ -137,12 +143,12 @@ do
 		return TraversedPath
 	end
 
-	function ObsidianImageManager.GetAsset(AssetName: string)
-		if not ObsidianImageManager.Assets[AssetName] then
+	function LRXAssetManager.GetAsset(AssetName: string)
+		if not LRXAssetManager.Assets[AssetName] then
 			return nil
 		end
 
-		local AssetData = ObsidianImageManager.Assets[AssetName]
+		local AssetData = LRXAssetManager.Assets[AssetName]
 		if AssetData.Id then
 			return AssetData.Id
 		end
@@ -161,7 +167,7 @@ do
 		return AssetID
 	end
 
-	function ObsidianImageManager.DownloadAsset(AssetPath: string)
+	function LRXAssetManager.DownloadAsset(AssetPath: string)
 		if not getcustomasset or not writefile or not isfile then
 			return
 		end
@@ -172,12 +178,12 @@ do
 			return
 		end
 
-		local URLPath = AssetPath:gsub("Obsidian/", "")
+		local URLPath = AssetPath:gsub("LRX/", "")
 		writefile(AssetPath, game:HttpGet(`{BaseURL}{URLPath}`))
 	end
 
-	for _, Data in ObsidianImageManager.Assets do
-		ObsidianImageManager.DownloadAsset(Data.Path)
+	for _, Data in LRXAssetManager.Assets do
+		LRXAssetManager.DownloadAsset(Data.Path)
 	end
 end
 
@@ -1065,7 +1071,7 @@ local function ParentUI(UI: Instance, _SkipHiddenUI: boolean?)
 end
 
 local ScreenGui = New("ScreenGui", {
-	Name = "Obsidian",
+	Name = "LRXUI",
 	DisplayOrder = 2147483647,
 	ResetOnSpawn = false,
 })
@@ -1077,7 +1083,7 @@ ScreenGui.DescendantRemoving:Connect(function(Instance)
 end)
 
 local ModalScreenGui = New("ScreenGui", {
-	Name = "ObsidanModal",
+	Name = "LRXUIModal",
 	DisplayOrder = 2147483647,
 	ResetOnSpawn = false,
 })
@@ -2800,7 +2806,7 @@ do
 		})
 
 		local HolderTransparency = New("ImageLabel", {
-			Image = ObsidianImageManager.GetAsset("TransparencyTexture"),
+			Image = LRXAssetManager.GetAsset("TransparencyTexture"),
 			ImageTransparency = (1 - ColorPicker.Transparency),
 			ScaleType = Enum.ScaleType.Tile,
 			Size = UDim2.fromScale(1, 1),
@@ -2853,7 +2859,7 @@ do
 		--// Sat Map
 		local SatVipMap = New("ImageButton", {
 			BackgroundColor3 = ColorPicker.Value,
-			Image = ObsidianImageManager.GetAsset("SaturationMap"),
+			Image = LRXAssetManager.GetAsset("SaturationMap"),
 			Size = UDim2.fromOffset(200, 200),
 			Parent = ColorHolder,
 		})
@@ -2899,7 +2905,7 @@ do
 		local TransparencySelector, TransparencyColor, TransparencyCursor
 		if Info.Transparency then
 			TransparencySelector = New("ImageButton", {
-				Image = ObsidianImageManager.GetAsset("TransparencyTexture"),
+				Image = LRXAssetManager.GetAsset("TransparencyTexture"),
 				ScaleType = Enum.ScaleType.Tile,
 				Size = UDim2.fromOffset(16, 200),
 				TileSize = UDim2.fromOffset(8, 8),
@@ -10672,4 +10678,5 @@ Library:GiveSignal(Teams.ChildAdded:Connect(OnTeamChange))
 Library:GiveSignal(Teams.ChildRemoved:Connect(OnTeamChange))
 
 getgenv().Library = Library
+getgenv().LRXLibrary = Library
 return Library
